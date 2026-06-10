@@ -8,7 +8,7 @@ import { headers } from "next/headers"
 import { revalidatePath } from "next/cache"
 import { put } from "@vercel/blob"
 import { generateContractPdf } from "@/lib/contract-pdf"
-import { sendWelcomeEmail } from "@/lib/email"
+import { sendWelcomeEmail, sendAdminNotificationEmail } from "@/lib/email"
 import { formatSlot } from "@/lib/slots"
 
 async function getUserId() {
@@ -161,6 +161,24 @@ export async function createEnrollment(input: EnrollmentInput) {
     })
   } catch (err) {
     console.log("[v0] Welcome email failed:", err)
+  }
+
+  // Notify the academy that a new sign-up has arrived (best-effort).
+  try {
+    await sendAdminNotificationEmail({
+      parentName: input.parentName,
+      parentEmail: input.parentEmail,
+      parentMobile: input.parentMobile,
+      childName: input.childName,
+      childAge: input.childAge,
+      packageName: input.packageName,
+      packagePrice: input.packagePrice,
+      clubName: input.club,
+      slotLabel,
+      referenceNumber,
+    })
+  } catch (err) {
+    console.log("[v0] Admin notification email failed:", err)
   }
 
   revalidatePath("/dashboard")

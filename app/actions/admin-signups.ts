@@ -8,6 +8,7 @@ import { generateContractPdf } from "@/lib/contract-pdf"
 import { sendWelcomeEmail } from "@/lib/email"
 import { formatSlot } from "@/lib/slots"
 import { put } from "@vercel/blob"
+import { revalidatePath } from "next/cache"
 
 export type AdminSignup = {
   id: number
@@ -16,15 +17,42 @@ export type AdminSignup = {
   parentEmail: string
   parentMobile: string
   childName: string
+  childDob: string | null
   childAge: number | null
   packageName: string
   club: string | null
+  slotWeekday: number | null
+  slotHour: number | null
   slotLabel: string | null
+  emergencyContactName: string | null
+  emergencyContactPhone: string | null
+  debitAccountHolder: string | null
+  debitBankName: string | null
+  debitAccountNumber: string | null
+  debitAccountType: string | null
+  debitDay: number | null
   agreedTerms: boolean
   consentMedia: boolean
   contractUrl: string | null
+  status: string
   signedAt: string | null
   createdAt: string | null
+}
+
+export type UpdateSignupInput = {
+  parentName: string
+  parentEmail: string
+  parentMobile: string
+  childName: string
+  childDob: string
+  childAge: number
+  packageName: string
+  club: string
+  slotWeekday: number | null
+  slotHour: number | null
+  emergencyContactName: string
+  emergencyContactPhone: string
+  status: string
 }
 
 export async function getAllSignups(): Promise<AdminSignup[]> {
@@ -37,16 +65,61 @@ export async function getAllSignups(): Promise<AdminSignup[]> {
     parentEmail: r.parentEmail,
     parentMobile: r.parentMobile,
     childName: r.childName,
+    childDob: r.childDob ?? null,
     childAge: r.childAge ?? null,
     packageName: r.packageName,
     club: r.club ?? null,
+    slotWeekday: r.slotWeekday ?? null,
+    slotHour: r.slotHour ?? null,
     slotLabel: r.slotWeekday != null && r.slotHour != null ? formatSlot(r.slotWeekday, r.slotHour) : null,
+    emergencyContactName: r.emergencyContactName ?? null,
+    emergencyContactPhone: r.emergencyContactPhone ?? null,
+    debitAccountHolder: r.debitAccountHolder ?? null,
+    debitBankName: r.debitBankName ?? null,
+    debitAccountNumber: r.debitAccountNumber ?? null,
+    debitAccountType: r.debitAccountType ?? null,
+    debitDay: r.debitDay ?? null,
     agreedTerms: r.agreedTerms,
     consentMedia: r.consentMedia,
     contractUrl: r.contractUrl ?? null,
+    status: r.status,
     signedAt: r.signedAt ? r.signedAt.toISOString() : null,
     createdAt: r.createdAt ? r.createdAt.toISOString() : null,
   }))
+}
+
+/** Admin updates contact / enrollment details for a sign-up. */
+export async function updateSignup(
+  id: number,
+  input: UpdateSignupInput,
+): Promise<{ ok: boolean; error?: string }> {
+  await requireAdmin()
+  try {
+    await db
+      .update(enrollments)
+      .set({
+        parentName: input.parentName.trim(),
+        parentEmail: input.parentEmail.trim(),
+        parentMobile: input.parentMobile.trim(),
+        childName: input.childName.trim(),
+        childDob: input.childDob,
+        childAge: input.childAge,
+        packageName: input.packageName.trim(),
+        club: input.club.trim(),
+        slotWeekday: input.slotWeekday ?? undefined,
+        slotHour: input.slotHour ?? undefined,
+        emergencyContactName: input.emergencyContactName.trim() || undefined,
+        emergencyContactPhone: input.emergencyContactPhone.trim() || undefined,
+        status: input.status,
+        updatedAt: new Date(),
+      })
+      .where(eq(enrollments.id, id))
+    revalidatePath("/admin")
+    return { ok: true }
+  } catch (err) {
+    console.log("[v0] updateSignup error:", err)
+    return { ok: false, error: err instanceof Error ? err.message : "Update failed" }
+  }
 }
 
 async function loadEnrollment(id: number) {
