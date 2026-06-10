@@ -15,11 +15,18 @@ export const auth = betterAuth({
     autoSignIn: true,
   },
   trustedOrigins: [
+    // Local development
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    // v0 preview sandbox domains (e.g. https://vm-xxxx.vusercontent.net)
+    "https://*.vusercontent.net",
     ...(process.env.V0_RUNTIME_URL ? [process.env.V0_RUNTIME_URL] : []),
     ...(process.env.VERCEL_URL ? [`https://${process.env.VERCEL_URL}`] : []),
     ...(process.env.VERCEL_PROJECT_PRODUCTION_URL
       ? [`https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`]
       : []),
+    // Vercel preview deployments
+    "https://*.vercel.app",
   ],
   session: {
     expiresIn: 60 * 60 * 24 * 7, // 7 days
