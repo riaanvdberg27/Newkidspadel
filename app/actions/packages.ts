@@ -1,7 +1,7 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
-import { asc, eq } from "drizzle-orm"
+import { and, asc, eq } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { packages, packageSlots } from "@/lib/db/schema"
 import { requireAdmin } from "@/lib/admin-auth"
@@ -22,7 +22,7 @@ export type PublicPackage = {
   sortOrder: number
 }
 
-export type CustomSlot = Pick<PackageSlot, "id" | "packageId" | "weekday" | "hour" | "capacity">
+export type CustomSlot = Pick<PackageSlot, "id" | "packageId" | "weekday" | "hour" | "capacity" | "ageGroup">
 
 function toPublic(row: typeof packages.$inferSelect): PublicPackage {
   return {
@@ -52,13 +52,15 @@ export async function getPublishedPackages(): Promise<PublicPackage[]> {
 }
 
 /** Custom slots for a package — usable in the enrollment wizard (no auth guard). */
-export async function getPublicPackageSlots(packageId: number): Promise<CustomSlot[]> {
+export async function getPublicPackageSlots(packageId: number, ageGroup?: string): Promise<CustomSlot[]> {
+  const conditions = [eq(packageSlots.packageId, packageId)]
+  if (ageGroup) conditions.push(eq(packageSlots.ageGroup, ageGroup))
   const rows = await db
     .select()
     .from(packageSlots)
-    .where(eq(packageSlots.packageId, packageId))
+    .where(and(...conditions))
     .orderBy(asc(packageSlots.weekday), asc(packageSlots.hour))
-  return rows.map((r) => ({ id: r.id, packageId: r.packageId, weekday: r.weekday, hour: r.hour, capacity: r.capacity }))
+  return rows.map((r) => ({ id: r.id, packageId: r.packageId, weekday: r.weekday, hour: r.hour, capacity: r.capacity, ageGroup: r.ageGroup }))
 }
 
 /** All packages (incl. unpublished) for the admin dashboard. */
@@ -68,15 +70,15 @@ export async function getAllPackagesAdmin(): Promise<PublicPackage[]> {
   return rows.map(toPublic)
 }
 
-/** Custom slots for a single package. */
+/** Custom slots for a single package (admin). */
 export async function getPackageSlots(packageId: number): Promise<CustomSlot[]> {
   await requireAdmin()
   const rows = await db
     .select()
     .from(packageSlots)
     .where(eq(packageSlots.packageId, packageId))
-    .orderBy(asc(packageSlots.weekday), asc(packageSlots.hour))
-  return rows.map((r) => ({ id: r.id, packageId: r.packageId, weekday: r.weekday, hour: r.hour, capacity: r.capacity }))
+    .orderBy(asc(packageSlots.ageGroup), asc(packageSlots.weekday), asc(packageSlots.hour))
+  return rows.map((r) => ({ id: r.id, packageId: r.packageId, weekday: r.weekday, hour: r.hour, capacity: r.capacity, ageGroup: r.ageGroup }))
 }
 
 export type PackageInput = {
@@ -91,7 +93,7 @@ export type PackageInput = {
   published: boolean
   slotType: string
   sortOrder: number
-  customSlots?: { weekday: number; hour: number; capacity: number }[]
+  customSlots?: { weekday: number; hour: number; capacity: number; ageGroup: string }[]
 }
 
 function clean(input: PackageInput) {
@@ -121,7 +123,7 @@ export async function createPackage(input: PackageInput) {
   const [row] = await db.insert(packages).values(values).returning({ id: packages.id })
   if (values.slotType === "custom" && input.customSlots?.length) {
     await db.insert(packageSlots).values(
-      input.customSlots.map((s) => ({ packageId: row.id, weekday: s.weekday, hour: s.hour, capacity: s.capacity })),
+      input.customSlots.map((s) => ({ packageId: row.id, weekday: s.weekday, hour: s.hour, capacity: s.capacity, ageGroup: s.ageGroup })),
     )
   }
   revalidatePaths()
@@ -136,7 +138,7 @@ export async function updatePackage(id: number, input: PackageInput) {
   await db.delete(packageSlots).where(eq(packageSlots.packageId, id))
   if (values.slotType === "custom" && input.customSlots?.length) {
     await db.insert(packageSlots).values(
-      input.customSlots.map((s) => ({ packageId: id, weekday: s.weekday, hour: s.hour, capacity: s.capacity })),
+      input.customSlots.map((s) => ({ packageId: id, weekday: s.weekday, hour: s.hour, capacity: s.capacity, ageGroup: s.ageGroup })),
     )
   }
   revalidatePaths()

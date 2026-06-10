@@ -4,12 +4,14 @@ import Image from "next/image"
 import Link from "next/link"
 import { useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { Check } from "lucide-react"
+// lucide-react icons used in this file
+import { Check, ChevronRight } from "lucide-react"
 import { formatSlot } from "@/lib/slots"
 import type { Club } from "@/lib/db/schema"
 import type { PublicPackage } from "@/app/actions/packages"
 import { SlotPicker, type SelectedSlot } from "@/components/slot-picker"
 import { PackageSlotPicker } from "@/components/package-slot-picker"
+import { DobPicker } from "@/components/dob-picker"
 import type { AgeGroup } from "@/lib/db/schema"
 import { SignaturePad } from "@/components/signature-pad"
 import { CONSENT_TERMS_LABEL, CONSENT_MEDIA_LABEL, TERMS_TITLE, TERMS_SECTIONS } from "@/lib/terms"
@@ -60,7 +62,7 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
   const [clubId, setClubId] = useState<number | null>(null)
   const [slot, setSlot] = useState<SelectedSlot | null>(null)
   const [ageGroup, setAgeGroup] = useState<AgeGroup | null>(null)
-  const [child, setChild] = useState({ name: "", dob: "", age: "" })
+  const [child, setChild] = useState({ name: "", dob: "" })
   const [parent, setParent] = useState({ name: "", email: "", mobile: "", password: "" })
   const [emergency, setEmergency] = useState({ name: "", phone: "" })
   const [debit, setDebit] = useState<DebitOrder>({
@@ -123,7 +125,7 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
         parentMobile: parent.mobile,
         childName: child.name,
         childDob: child.dob,
-        childAge: Number(child.age),
+        childAge: child.dob ? Math.floor((Date.now() - new Date(child.dob).getTime()) / (1000 * 60 * 60 * 24 * 365.25)) : 0,
         packageName: selectedPackage.name,
         packagePrice: selectedPackage.price,
         club: selectedClub?.name ?? "",
@@ -161,7 +163,8 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Selected Package</p>
           <p className="font-bold text-navy">
-            {selectedPackage.name} — R{selectedPackage.price}/month
+            {selectedPackage.name} — R{selectedPackage.price.toLocaleString()}
+            {selectedPackage.period === "once-off" ? " (once off)" : "/month"}
           </p>
         </div>
         <button
@@ -169,7 +172,7 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
             setSelectedPackage(null)
             setStep(0)
           }}
-          className="rounded-md border border-border px-4 py-2 text-sm font-semibold text-navy transition-colors hover:bg-muted"
+          className="rounded-2xl border border-border px-4 py-2 text-sm font-bold text-navy transition-colors hover:bg-muted"
         >
           Change Package
         </button>
@@ -199,25 +202,13 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
           <div>
             <h2 className="text-xl font-bold text-navy">Your Child&apos;s Details</h2>
             <p className="mt-1 text-sm text-muted-foreground">Tell us who will be joining the academy</p>
-            <div className="mt-6 grid gap-4 sm:grid-cols-2">
+            <div className="mt-6 space-y-5">
               <Field label="Child's Full Name" value={child.name} onChange={(v) => setChild({ ...child, name: v })} />
-              <Field
-                label="Date of Birth"
-                type="date"
-                value={child.dob}
-                onChange={(v) => {
-                  setChild({ ...child, dob: v })
-                }}
-              />
-              <Field
-                label="Age"
-                type="number"
-                value={child.age}
-                onChange={(v) => {
-                  setChild({ ...child, age: v })
-                }}
-                placeholder="Ages 5-17"
-              />
+
+              <div>
+                <p className="mb-2 text-sm font-semibold text-navy">Date of Birth</p>
+                <DobPicker value={child.dob} onChange={(v) => setChild({ ...child, dob: v })} />
+              </div>
             </div>
 
             {/* Age-group category selector */}
@@ -233,15 +224,15 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
                     type="button"
                     onClick={() => {
                       setAgeGroup(ag)
-                      setSlot(null) // reset slot if age group changes
+                      setSlot(null)
                     }}
-                    className={`rounded-card border p-4 text-center transition-colors ${
+                    className={`rounded-2xl border-2 p-4 text-center transition-all ${
                       ageGroup === ag
-                        ? "border-lime bg-lime/10"
+                        ? "border-lime bg-lime/10 scale-105 shadow-md"
                         : "border-border bg-card hover:border-lime/50"
                     }`}
                   >
-                    <span className="block text-lg font-extrabold text-navy">{ag}</span>
+                    <span className="block text-2xl font-black text-navy">{ag}</span>
                     <span className="mt-0.5 block text-xs text-muted-foreground">years old</span>
                   </button>
                 ))}
@@ -250,7 +241,7 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
 
             <StepNav
               onNext={() => setStep(1)}
-              nextDisabled={!child.name || !child.dob || !child.age || !ageGroup}
+              nextDisabled={!child.name || !child.dob || !ageGroup}
             />
           </div>
         ) : step === 1 ? (
@@ -284,7 +275,7 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
                 <p className="mb-3 text-xs text-muted-foreground">
                   This package runs at fixed times. Pick a slot below.
                 </p>
-                <PackageSlotPicker packageId={selectedPackage.id} selected={slot} onSelect={setSlot} />
+                <PackageSlotPicker packageId={selectedPackage.id} ageGroup={ageGroup ?? "5-8"} selected={slot} onSelect={setSlot} />
               </div>
             ) : clubId && ageGroup ? (
               <div className="mt-6">
@@ -432,7 +423,7 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
               <Row label="Package" value={`${selectedPackage.name} (R${selectedPackage.price}/month)`} />
               <Row label="Club" value={selectedClub?.name ?? ""} />
               <Row label="Time Slot" value={slot ? formatSlot(slot.weekday, slot.hour) : ""} />
-              <Row label="Child" value={`${child.name} (age ${child.age})`} />
+              <Row label="Child" value={`${child.name} (born ${child.dob})`} />
               <Row label="Parent" value={parent.name} />
               <Row label="Email" value={parent.email} />
               <Row label="Mobile" value={parent.mobile} />
@@ -491,14 +482,14 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
             <div className="mt-8 flex items-center justify-between gap-4">
               <button
                 onClick={() => setStep(4)}
-                className="rounded-md border border-border px-5 py-2.5 font-semibold text-navy transition-colors hover:bg-muted"
+                className="rounded-2xl border-2 border-border px-5 py-3 font-bold text-navy transition-all hover:bg-muted active:scale-95"
               >
                 Back
               </button>
               <button
                 onClick={handleSubmit}
                 disabled={submitting || !agreedTerms || !signatureData}
-                className="rounded-md bg-lime px-6 py-2.5 font-bold text-lime-foreground transition-colors hover:bg-lime/90 disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-2xl bg-lime px-6 py-3 font-black text-lime-foreground shadow-sm transition-all hover:scale-105 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-40 active:scale-95"
               >
                 {submitting ? "Creating account…" : "Create Account & Enroll"}
               </button>
@@ -526,44 +517,69 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
 }
 
 function PackagePicker({ packages, onSelect }: { packages: PublicPackage[]; onSelect: (p: PublicPackage) => void }) {
+  const CARD_COLORS = [
+    "from-navy to-[#0d3070]",
+    "from-[#1a4a1a] to-[#2d6e2d]",
+    "from-[#3a1a5c] to-[#5a2d8c]",
+    "from-[#1a3a4a] to-[#0a2a3a]",
+  ]
+
   return (
     <section className="mx-auto max-w-3xl px-4 py-12">
-      <h2 className="text-center text-2xl font-extrabold text-navy">Choose a Monthly Package to Begin</h2>
+      <h2 className="text-center text-2xl font-black text-navy">Choose Your Package</h2>
       <p className="mt-2 text-center text-sm text-muted-foreground">
-        Select one of our monthly package deals below to start your enrollment.
+        Pick the plan that suits your child — swipe or scroll to explore
       </p>
-      <div className="mt-8 grid gap-6 md:grid-cols-2">
-        {packages.map((pkg) => (
-          <button
-            key={pkg.id}
-            onClick={() => onSelect(pkg)}
-            className={`relative flex flex-col rounded-card border bg-card p-6 text-left shadow-sm transition-transform hover:-translate-y-1 hover:shadow-lg ${
-              pkg.popular ? "border-lime" : "border-border"
-            }`}
-          >
-            {pkg.popular && (
-              <span className="absolute right-4 top-4 rounded-full bg-lime px-3 py-1 text-xs font-bold text-lime-foreground">
-                Most Popular
-              </span>
-            )}
-            <h3 className="text-lg font-bold text-navy">
-              <span className={pkg.popular ? "pr-24" : undefined}>{pkg.name}</span>
-            </h3>
-            <p className="mt-1 text-2xl font-extrabold text-lime">R{pkg.price}/month</p>
-            <p className="mt-1 text-sm text-muted-foreground">{pkg.tagline}</p>
-            <ul className="mt-4 flex-1 space-y-2">
-              {pkg.features.map((f) => (
-                <li key={f} className="flex items-start gap-2 text-sm">
-                  <Check className="mt-0.5 h-4 w-4 flex-shrink-0 text-lime" />
-                  {f}
-                </li>
-              ))}
-            </ul>
-            <span className="mt-6 inline-flex items-center justify-center rounded-md bg-lime px-4 py-2.5 text-sm font-bold text-lime-foreground">
-              Select &amp; Continue
-            </span>
-          </button>
-        ))}
+      <div className="mt-8 grid gap-5 sm:grid-cols-2">
+        {packages.map((pkg, i) => {
+          const gradient = CARD_COLORS[i % CARD_COLORS.length]
+          return (
+            <button
+              key={pkg.id}
+              onClick={() => onSelect(pkg)}
+              className="group block w-full overflow-hidden rounded-2xl shadow-xl transition-all duration-300 hover:-translate-y-2 hover:shadow-2xl text-left"
+            >
+              {/* Coloured header */}
+              <div className={`relative bg-gradient-to-br ${gradient} p-5 text-white overflow-hidden`}>
+                <div className="absolute -right-6 -top-6 h-20 w-20 rounded-full bg-white/5" />
+                {pkg.popular && (
+                  <span className="mb-2 inline-block rounded-full bg-lime px-3 py-0.5 text-xs font-black text-navy">
+                    Most Popular
+                  </span>
+                )}
+                <h3 className="text-lg font-black leading-tight">{pkg.name}</h3>
+                {pkg.tagline && <p className="mt-1 text-xs text-white/70">{pkg.tagline}</p>}
+                <div className="mt-3 flex items-end gap-2">
+                  <span className="text-4xl font-black text-lime">R{pkg.price.toLocaleString()}</span>
+                  {pkg.period === "once-off" ? (
+                    <span className="mb-1 rounded-full bg-white/20 px-2 py-0.5 text-xs font-bold">once off</span>
+                  ) : (
+                    <span className="mb-1 text-sm text-white/60">/month</span>
+                  )}
+                </div>
+              </div>
+              {/* White body */}
+              <div className="bg-card p-5">
+                {pkg.features.length > 0 && (
+                  <ul className="space-y-2">
+                    {pkg.features.slice(0, 4).map((f) => (
+                      <li key={f} className="flex items-start gap-2 text-sm">
+                        <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-lime/20">
+                          <Check className="h-2.5 w-2.5 text-lime-foreground" />
+                        </span>
+                        <span>{f}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <span className="mt-5 flex items-center justify-center gap-1.5 rounded-xl bg-lime py-3 text-sm font-black text-lime-foreground transition-all group-hover:bg-navy group-hover:text-white">
+                  Select &amp; Continue
+                  <ChevronRight className="h-4 w-4" />
+                </span>
+              </div>
+            </button>
+          )
+        })}
       </div>
     </section>
   )
@@ -585,7 +601,7 @@ function StepNav({
       {onBack ? (
         <button
           onClick={onBack}
-          className="rounded-md border border-border px-5 py-2.5 font-semibold text-navy transition-colors hover:bg-muted"
+          className="rounded-2xl border-2 border-border px-5 py-3 font-bold text-navy transition-all hover:bg-muted active:scale-95"
         >
           Back
         </button>
@@ -595,7 +611,7 @@ function StepNav({
       <button
         onClick={onNext}
         disabled={nextDisabled}
-        className="rounded-md bg-lime px-6 py-2.5 font-bold text-lime-foreground transition-colors hover:bg-lime/90 disabled:cursor-not-allowed disabled:opacity-50"
+        className="rounded-2xl bg-lime px-6 py-3 font-black text-lime-foreground shadow-sm transition-all hover:scale-105 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-40 active:scale-95"
       >
         {nextLabel}
       </button>

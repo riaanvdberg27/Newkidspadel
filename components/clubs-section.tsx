@@ -5,73 +5,83 @@ import { getPublishedClubs } from "@/app/actions/clubs"
 export async function ClubsSection({ heading = true }: { heading?: boolean }) {
   const clubs = await getPublishedClubs()
 
-  if (clubs.length === 0) {
-    return (
-      <section className="mx-auto max-w-6xl px-4 py-16">
-        {heading && <h2 className="text-center text-3xl font-extrabold text-navy">Our Affiliated Clubs</h2>}
-        <p className="mt-6 text-center text-muted-foreground">New clubs are coming soon. Check back shortly!</p>
-      </section>
-    )
-  }
-
   return (
-    <section className="mx-auto max-w-6xl px-4 py-16">
-      {heading && (
-        <>
-          <h2 className="text-center text-3xl font-extrabold text-navy">Our Affiliated Clubs</h2>
-          <p className="mt-3 text-center text-muted-foreground">Choose one of our affiliated clubs near you</p>
-        </>
-      )}
-      <div className="mt-10 space-y-6">
-        {clubs.map((club) => {
-          const features = Array.isArray(club.features) ? (club.features as string[]) : []
-          return (
-            <article
-              key={club.id}
-              className="grid overflow-hidden rounded-card border border-border bg-card shadow-sm md:grid-cols-[240px_1fr]"
-            >
-              <div className="flex items-center justify-center bg-navy p-6">
-                {club.image ? (
-                  <Image
-                    src={club.image || "/placeholder.svg"}
-                    alt={`${club.name} logo`}
-                    width={180}
-                    height={120}
-                    className="h-auto w-auto max-h-28 object-contain"
-                  />
-                ) : (
-                  <span className="text-center text-lg font-bold text-lime">{club.name}</span>
-                )}
-              </div>
-              <div className="p-6">
-                <h3 className="text-xl font-bold text-navy">{club.name}</h3>
-                <p className="font-semibold text-lime">{club.location}</p>
-                {club.description && <p className="mt-2 text-sm text-muted-foreground">{club.description}</p>}
-                <ul className="mt-4 space-y-2 text-sm">
-                  <li className="flex items-center gap-2">
-                    <MapPin className="h-4 w-4 flex-shrink-0 text-lime" />
-                    {club.address}
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <Phone className="h-4 w-4 flex-shrink-0 text-lime" />
-                    {club.phone}
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <Clock className="h-4 w-4 flex-shrink-0 text-lime" />
-                    {club.hours}
-                  </li>
-                </ul>
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {features.map((f) => (
-                    <span key={f} className="rounded-full bg-lime/15 px-3 py-1 text-xs font-semibold text-navy">
-                      {f}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            </article>
-          )
-        })}
+    <section className="bg-navy py-16">
+      <div className="mx-auto max-w-6xl px-4">
+        {heading && (
+          <div className="text-center mb-10">
+            <span className="inline-block rounded-full bg-lime/20 px-4 py-1.5 text-sm font-bold text-lime mb-3">
+              Find Your Club
+            </span>
+            <h2 className="text-3xl font-black text-white sm:text-4xl">Our Affiliated Clubs</h2>
+            <p className="mt-2 text-navy-foreground/70 text-sm">Choose a location near you</p>
+          </div>
+        )}
+
+        {clubs.length === 0 ? (
+          <p className="text-center text-navy-foreground/60">New clubs coming soon!</p>
+        ) : (
+          <div className="space-y-4">
+            {clubs.map((club) => {
+              const features = Array.isArray(club.features) ? (club.features as string[]) : []
+              const imgSrc = club.imageUrl || club.image
+              return (
+                <article
+                  key={club.id}
+                  className="overflow-hidden rounded-2xl bg-white shadow-xl"
+                >
+                  <div className="grid sm:grid-cols-[200px_1fr]">
+                    {/* Club image / logo */}
+                    <div className="relative flex h-40 items-center justify-center bg-navy/90 sm:h-auto">
+                      {imgSrc ? (
+                        <Image
+                          src={imgSrc}
+                          alt={`${club.name}`}
+                          fill
+                          className="object-cover"
+                        />
+                      ) : (
+                        <span className="text-center text-xl font-black text-lime px-4">
+                          {club.name}
+                        </span>
+                      )}
+                    </div>
+                    <div className="p-5">
+                      <h3 className="text-xl font-black text-navy">{club.name}</h3>
+                      <p className="font-bold text-lime text-sm">{club.location}</p>
+                      {club.description && (
+                        <p className="mt-2 text-sm text-muted-foreground leading-relaxed">{club.description}</p>
+                      )}
+                      <ul className="mt-3 space-y-1.5 text-sm">
+                        <li className="flex items-center gap-2 text-foreground/80">
+                          <MapPin className="h-4 w-4 shrink-0 text-lime" />
+                          {club.address}
+                        </li>
+                        <li className="flex items-center gap-2 text-foreground/80">
+                          <Phone className="h-4 w-4 shrink-0 text-lime" />
+                          {club.phone}
+                        </li>
+                        <li className="flex items-center gap-2 text-foreground/80">
+                          <Clock className="h-4 w-4 shrink-0 text-lime" />
+                          {club.hours}
+                        </li>
+                      </ul>
+                      {features.length > 0 && (
+                        <div className="mt-3 flex flex-wrap gap-1.5">
+                          {features.map((f) => (
+                            <span key={f} className="rounded-full bg-lime/15 px-3 py-1 text-xs font-bold text-navy">
+                              {f}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </article>
+              )
+            })}
+          </div>
+        )}
       </div>
     </section>
   )

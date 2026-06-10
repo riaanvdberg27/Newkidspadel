@@ -9,10 +9,12 @@ import type { CustomSlot } from "@/app/actions/packages"
 
 export function PackageSlotPicker({
   packageId,
+  ageGroup,
   selected,
   onSelect,
 }: {
   packageId: number
+  ageGroup: string
   selected: SelectedSlot | null
   onSelect: (slot: SelectedSlot) => void
 }) {
@@ -22,11 +24,11 @@ export function PackageSlotPicker({
   useEffect(() => {
     let active = true
     setLoading(true)
-    getPublicPackageSlots(packageId)
+    getPublicPackageSlots(packageId, ageGroup)
       .then((data) => { if (active) setSlots(data) })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
-  }, [packageId])
+  }, [packageId, ageGroup])
 
   if (loading) {
     return (

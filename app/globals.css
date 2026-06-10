@@ -17,29 +17,31 @@
   --color-border: var(--border);
 
   --radius-card: var(--radius);
+  --radius-xl: 1.25rem;
+  --radius-2xl: 1.75rem;
 }
 
 :root {
-  --background: #f4f7f9;
+  --background: #f0f6f0;
   --foreground: #06121f;
 
-  /* Brand navy (hero / cards / footer) */
+  /* Brand navy */
   --navy: #0a2347;
   --navy-foreground: #ffffff;
 
-  /* Brand lime green (accents / buttons) */
+  /* Brand lime green */
   --lime: #8cc63f;
   --lime-foreground: #0a2347;
 
   --card: #ffffff;
   --card-foreground: #06121f;
 
-  --muted: #eef2f5;
-  --muted-foreground: #5b6b7b;
+  --muted: #e8f0e8;
+  --muted-foreground: #4a6050;
 
-  --border: #e2e8ed;
+  --border: #d4e4d4;
 
-  --radius: 0.75rem;
+  --radius: 1rem;
 }
 
 @layer base {
@@ -47,4 +49,39 @@
     background-color: var(--background);
     color: var(--foreground);
   }
+
+  /* Smooth scrolling for mobile */
+  html {
+    scroll-behavior: smooth;
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+/* Package carousel snap scroll */
+.package-carousel {
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+}
+.package-carousel > * {
+  scroll-snap-align: center;
+}
+
+/* Bounce animation for CTA buttons */
+@keyframes wiggle {
+  0%, 100% { transform: rotate(-2deg) scale(1.02); }
+  50% { transform: rotate(2deg) scale(1.02); }
+}
+.btn-wiggle:hover {
+  animation: wiggle 0.3s ease-in-out;
+}
+
+/* Fun striped accent */
+.stripe-accent {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    transparent,
+    transparent 6px,
+    rgba(140, 198, 63, 0.15) 6px,
+    rgba(140, 198, 63, 0.15) 12px
+  );
 }
