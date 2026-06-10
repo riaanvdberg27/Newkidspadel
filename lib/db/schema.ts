@@ -98,6 +98,9 @@ export const clubs = pgTable("clubs", {
   updatedAt: timestamp("updatedAt").notNull().defaultNow(),
 })
 
+export const AGE_GROUPS = ["5-8", "9-13", "14-18"] as const
+export type AgeGroup = (typeof AGE_GROUPS)[number]
+
 export const clubSlots = pgTable(
   "club_slots",
   {
@@ -108,11 +111,13 @@ export const clubSlots = pgTable(
     // 8 - 18 (24h)
     hour: integer("hour").notNull(),
     capacity: integer("capacity").notNull().default(0),
+    // Age group this slot is available for
+    ageGroup: text("ageGroup").notNull().default("5-8"),
     createdAt: timestamp("createdAt").notNull().defaultNow(),
     updatedAt: timestamp("updatedAt").notNull().defaultNow(),
   },
   (t) => ({
-    uniqueSlot: unique("club_slots_unique").on(t.clubId, t.weekday, t.hour),
+    uniqueSlot: unique("club_slots_unique").on(t.clubId, t.weekday, t.hour, t.ageGroup),
   }),
 )
 
@@ -134,6 +139,7 @@ export const enrollments = pgTable("enrollments", {
   clubId: integer("clubId"),
   slotWeekday: integer("slotWeekday"),
   slotHour: integer("slotHour"),
+  slotAgeGroup: text("slotAgeGroup"),
   // Debit order
   debitAccountHolder: text("debitAccountHolder"),
   debitBankName: text("debitBankName"),

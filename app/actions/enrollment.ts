@@ -36,6 +36,7 @@ export type EnrollmentInput = {
   clubId: number | null
   slotWeekday: number | null
   slotHour: number | null
+  slotAgeGroup: string | null
   debitAccountHolder: string
   debitBankName: string
   debitAccountNumber: string
@@ -76,6 +77,7 @@ export async function createEnrollment(input: EnrollmentInput) {
       clubId: input.clubId ?? undefined,
       slotWeekday: input.slotWeekday ?? undefined,
       slotHour: input.slotHour ?? undefined,
+      slotAgeGroup: input.slotAgeGroup ?? undefined,
       debitAccountHolder: input.debitAccountHolder,
       debitBankName: input.debitBankName,
       debitAccountNumber: input.debitAccountNumber,

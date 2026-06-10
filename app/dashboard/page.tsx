@@ -92,6 +92,7 @@ export default async function DashboardPage() {
                       clubId={e.clubId}
                       weekday={e.slotWeekday}
                       hour={e.slotHour}
+                      ageGroup={(e.slotAgeGroup as import("@/lib/db/schema").AgeGroup) ?? null}
                     />
                     <Detail icon={User} label="Age" value={`${e.childAge} years`} />
                     <Detail icon={Mail} label="Email" value={e.parentEmail} />

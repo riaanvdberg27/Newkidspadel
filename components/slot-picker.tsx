@@ -4,15 +4,18 @@ import { useEffect, useState } from "react"
 import { Loader2 } from "lucide-react"
 import { getClubAvailability } from "@/app/actions/clubs"
 import { formatHour, WEEKDAYS, type SlotAvailability } from "@/lib/slots"
+import type { AgeGroup } from "@/lib/db/schema"
 
 export type SelectedSlot = { weekday: number; hour: number }
 
 export function SlotPicker({
   clubId,
+  ageGroup,
   selected,
   onSelect,
 }: {
   clubId: number
+  ageGroup: AgeGroup
   selected: SelectedSlot | null
   onSelect: (slot: SelectedSlot) => void
 }) {
@@ -22,7 +25,8 @@ export function SlotPicker({
   useEffect(() => {
     let active = true
     setLoading(true)
-    getClubAvailability(clubId)
+    setSlots(null)
+    getClubAvailability(clubId, ageGroup)
       .then((data) => {
         if (active) setSlots(data)
       })
@@ -32,7 +36,7 @@ export function SlotPicker({
     return () => {
       active = false
     }
-  }, [clubId])
+  }, [clubId, ageGroup])
 
   if (loading) {
     return (
@@ -47,12 +51,12 @@ export function SlotPicker({
   if (offered.length === 0) {
     return (
       <p className="rounded-md border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
-        No time slots have been set up for this club yet. Please choose another club or contact us.
+        No time slots have been set up for this age group at this club yet. Please choose another club or contact us.
       </p>
     )
   }
 
-  // Group by weekday (only weekdays that have offered slots)
+  // Group by weekday
   const byWeekday = new Map<number, SlotAvailability[]>()
   for (const s of offered) {
     if (!byWeekday.has(s.weekday)) byWeekday.set(s.weekday, [])
