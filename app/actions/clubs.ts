@@ -3,7 +3,7 @@
 import { db } from "@/lib/db"
 import { clubs, clubSlots, enrollments } from "@/lib/db/schema"
 import { and, asc, eq, sql } from "drizzle-orm"
-import type { Club, ClubSlot } from "@/lib/db/schema"
+import type { Club, ClubSlot, AgeGroup } from "@/lib/db/schema"
 import type { SlotAvailability } from "@/lib/slots"
 
 /** All published clubs for the public site. */
@@ -18,27 +18,16 @@ export async function getClubById(id: number): Promise<Club | null> {
 }
 
 /**
- * Slots for a club with how many places are already booked and how many remain.
- * Existing bookings always remain valid; only `remaining` is affected by capacity changes.
+ * Slots for a club + age group with live remaining count.
+ * Bookings that share the same slot AND ageGroup count against capacity.
  */
-export async function getClubAvailability(clubId: number): Promise<SlotAvailability[]> {
+export async function getClubAvailability(clubId: number, ageGroup: AgeGroup): Promise<SlotAvailability[]> {
   const slots = await db
     .select()
     .from(clubSlots)
-    .where(eq(clubSlots.clubId, clubId))
+    .where(and(eq(clubSlots.clubId, clubId), eq(clubSlots.ageGroup, ageGroup)))
     .orderBy(asc(clubSlots.weekday), asc(clubSlots.hour))
 
-  const bookedRows = await db
-    .select({
-      weekday: enrollments.slotWeekday,
-      hour: enrollments.slotHour,
-      count: sql<number>`cast(count(*) as int)`,
-    })
-    .from(enrollments)
-    .where(and(eq(enrollments.clubId, clubId), eq(enrollments.status, "active")))
-    .groupBy(enrollments.slotWeekday, enrollments.slotHour)
-
-  // status defaults to "pending"; count any enrollment that holds a slot regardless of status
   const allBooked = await db
     .select({
       weekday: enrollments.slotWeekday,
@@ -46,7 +35,12 @@ export async function getClubAvailability(clubId: number): Promise<SlotAvailabil
       count: sql<number>`cast(count(*) as int)`,
     })
     .from(enrollments)
-    .where(eq(enrollments.clubId, clubId))
+    .where(
+      and(
+        eq(enrollments.clubId, clubId),
+        eq(enrollments.slotAgeGroup, ageGroup),
+      ),
+    )
     .groupBy(enrollments.slotWeekday, enrollments.slotHour)
 
   const bookedMap = new Map<string, number>()
@@ -54,8 +48,6 @@ export async function getClubAvailability(clubId: number): Promise<SlotAvailabil
     if (r.weekday == null || r.hour == null) continue
     bookedMap.set(`${r.weekday}-${r.hour}`, r.count)
   }
-  // (bookedRows kept for potential future status filtering)
-  void bookedRows
 
   return slots.map((s: ClubSlot) => {
     const booked = bookedMap.get(`${s.weekday}-${s.hour}`) ?? 0

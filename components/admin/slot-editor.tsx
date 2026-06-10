@@ -4,13 +4,18 @@ import { useEffect, useState, useTransition } from "react"
 import { Loader2, Check } from "lucide-react"
 import { getClubSlots, setSlotCapacity } from "@/app/actions/admin"
 import { SLOT_HOURS, WEEKDAYS, formatHour } from "@/lib/slots"
-import type { ClubSlot } from "@/lib/db/schema"
+import { AGE_GROUPS, type AgeGroup, type ClubSlot } from "@/lib/db/schema"
 
-// Weekdays shown in the editor (Mon-Sun order)
+// Mon–Sun order
 const WEEKDAY_ORDER = [1, 2, 3, 4, 5, 6, 0]
 
-export function SlotEditor({ clubId }: { clubId: number }) {
-  // capacity keyed by "weekday-hour"
+const AGE_GROUP_LABELS: Record<AgeGroup, string> = {
+  "5-8": "Ages 5 – 8",
+  "9-13": "Ages 9 – 13",
+  "14-18": "Ages 14 – 18",
+}
+
+function AgeGroupGrid({ clubId, ageGroup }: { clubId: number; ageGroup: AgeGroup }) {
   const [grid, setGrid] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(true)
   const [savedKey, setSavedKey] = useState<string | null>(null)
@@ -19,7 +24,7 @@ export function SlotEditor({ clubId }: { clubId: number }) {
   useEffect(() => {
     let active = true
     setLoading(true)
-    getClubSlots(clubId)
+    getClubSlots(clubId, ageGroup)
       .then((slots: ClubSlot[]) => {
         if (!active) return
         const next: Record<string, number> = {}
@@ -30,16 +35,16 @@ export function SlotEditor({ clubId }: { clubId: number }) {
     return () => {
       active = false
     }
-  }, [clubId])
+  }, [clubId, ageGroup])
 
   function updateCell(weekday: number, hour: number, value: number) {
     const key = `${weekday}-${hour}`
     const capacity = Math.max(0, Math.min(99, Math.floor(value || 0)))
     setGrid((g) => ({ ...g, [key]: capacity }))
     startTransition(async () => {
-      await setSlotCapacity({ clubId, weekday, hour, capacity })
+      await setSlotCapacity({ clubId, weekday, hour, capacity, ageGroup })
       setSavedKey(key)
-      setTimeout(() => setSavedKey((k) => (k === key ? null : k)), 1200)
+      setTimeout(() => setSavedKey((k) => (k === key ? null : k)), 1400)
     })
   }
 
@@ -54,8 +59,9 @@ export function SlotEditor({ clubId }: { clubId: number }) {
   return (
     <div>
       <p className="text-sm text-muted-foreground">
-        Set the number of available places for each hour (08:00–18:00) on each day. Enter 0 to close a time. Changes
-        save automatically. Existing bookings are never removed.
+        Set available places per time slot for{" "}
+        <span className="font-semibold text-navy">{AGE_GROUP_LABELS[ageGroup]}</span>. Enter{" "}
+        <span className="font-semibold">0</span> to close a time slot. Changes save automatically.
       </p>
 
       <div className="mt-4 overflow-x-auto">
@@ -89,7 +95,9 @@ export function SlotEditor({ clubId }: { clubId: number }) {
                           value={value}
                           onChange={(e) => updateCell(wd, hour, Number(e.target.value))}
                           className={`w-14 rounded-md border bg-card px-2 py-1.5 text-center outline-none focus:border-lime ${
-                            value > 0 ? "border-lime/60 font-semibold text-navy" : "border-border text-muted-foreground"
+                            value > 0
+                              ? "border-lime/60 font-semibold text-navy"
+                              : "border-border text-muted-foreground"
                           }`}
                         />
                         {savedKey === key && (
@@ -110,6 +118,36 @@ export function SlotEditor({ clubId }: { clubId: number }) {
           <Loader2 className="h-3 w-3 animate-spin" /> Saving…
         </p>
       )}
+    </div>
+  )
+}
+
+export function SlotEditor({ clubId }: { clubId: number }) {
+  const [activeGroup, setActiveGroup] = useState<AgeGroup>("5-8")
+
+  return (
+    <div>
+      {/* Age-group tab bar */}
+      <div className="flex gap-1 rounded-lg border border-border bg-muted p-1">
+        {AGE_GROUPS.map((ag) => (
+          <button
+            key={ag}
+            type="button"
+            onClick={() => setActiveGroup(ag)}
+            className={`flex-1 rounded-md py-2 text-sm font-bold transition-colors ${
+              activeGroup === ag
+                ? "bg-navy text-navy-foreground shadow-sm"
+                : "text-muted-foreground hover:text-navy"
+            }`}
+          >
+            {AGE_GROUP_LABELS[ag]}
+          </button>
+        ))}
+      </div>
+
+      <div className="mt-5">
+        <AgeGroupGrid key={`${clubId}-${activeGroup}`} clubId={clubId} ageGroup={activeGroup} />
+      </div>
     </div>
   )
 }

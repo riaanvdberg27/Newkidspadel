@@ -1,7 +1,7 @@
 "use server"
 
 import { db } from "@/lib/db"
-import { clubs, clubSlots } from "@/lib/db/schema"
+import { clubs, clubSlots, AGE_GROUPS, type AgeGroup } from "@/lib/db/schema"
 import { and, asc, eq } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
@@ -44,6 +44,7 @@ export type ClubInput = {
   hours: string
   features: string[]
   image: string | null
+  imageUrl: string | null
   published: boolean
 }
 
@@ -60,6 +61,7 @@ export async function createClub(input: ClubInput) {
       hours: input.hours,
       features: input.features,
       image: input.image || null,
+      imageUrl: input.imageUrl || null,
       published: input.published,
     })
     .returning({ id: clubs.id })
@@ -81,6 +83,7 @@ export async function updateClub(id: number, input: ClubInput) {
       hours: input.hours,
       features: input.features,
       image: input.image || null,
+      imageUrl: input.imageUrl || null,
       published: input.published,
       updatedAt: new Date(),
     })
@@ -99,13 +102,13 @@ export async function deleteClub(id: number) {
   return { success: true }
 }
 
-/** Full slot grid (weekday x hour) for a club, including hours with 0 capacity. */
-export async function getClubSlots(clubId: number): Promise<ClubSlot[]> {
+/** Full slot grid (weekday x hour) for a club filtered by age group, including hours with 0 capacity. */
+export async function getClubSlots(clubId: number, ageGroup: AgeGroup): Promise<ClubSlot[]> {
   await requireAdmin()
   return db
     .select()
     .from(clubSlots)
-    .where(eq(clubSlots.clubId, clubId))
+    .where(and(eq(clubSlots.clubId, clubId), eq(clubSlots.ageGroup, ageGroup)))
     .orderBy(asc(clubSlots.weekday), asc(clubSlots.hour))
 }
 
@@ -115,18 +118,23 @@ export async function getAllClubsAdmin() {
   return db.select().from(clubs).orderBy(asc(clubs.id))
 }
 
-/** Upsert a single slot's capacity. Capacity 0 removes the slot. */
+/** Upsert a single slot's capacity per age group. Capacity 0 removes the slot. */
 export async function setSlotCapacity(input: {
   clubId: number
   weekday: number
   hour: number
   capacity: number
+  ageGroup: AgeGroup
 }) {
   await requireAdmin()
   const capacity = Math.max(0, Math.floor(input.capacity))
 
   if (!SLOT_HOURS.includes(input.hour as (typeof SLOT_HOURS)[number])) {
     throw new Error("Invalid hour")
+  }
+
+  if (!AGE_GROUPS.includes(input.ageGroup as AgeGroup)) {
+    throw new Error("Invalid age group")
   }
 
   const existing = await db
@@ -137,6 +145,7 @@ export async function setSlotCapacity(input: {
         eq(clubSlots.clubId, input.clubId),
         eq(clubSlots.weekday, input.weekday),
         eq(clubSlots.hour, input.hour),
+        eq(clubSlots.ageGroup, input.ageGroup),
       ),
     )
     .limit(1)
@@ -152,6 +161,7 @@ export async function setSlotCapacity(input: {
       weekday: input.weekday,
       hour: input.hour,
       capacity,
+      ageGroup: input.ageGroup,
     })
   }
 

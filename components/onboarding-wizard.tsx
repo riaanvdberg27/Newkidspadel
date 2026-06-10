@@ -9,12 +9,14 @@ import { formatSlot } from "@/lib/slots"
 import type { Club } from "@/lib/db/schema"
 import type { PublicPackage } from "@/app/actions/packages"
 import { SlotPicker, type SelectedSlot } from "@/components/slot-picker"
+import { PackageSlotPicker } from "@/components/package-slot-picker"
+import type { AgeGroup } from "@/lib/db/schema"
 import { SignaturePad } from "@/components/signature-pad"
 import { CONSENT_TERMS_LABEL, CONSENT_MEDIA_LABEL, TERMS_TITLE, TERMS_SECTIONS } from "@/lib/terms"
 import { authClient } from "@/lib/auth-client"
 import { createEnrollment } from "@/app/actions/enrollment"
 
-const STEPS = ["Club & Schedule", "Child", "Parent Account", "Debit Order", "Preferences", "Review"]
+const STEPS = ["Child", "Club & Schedule", "Parent Account", "Debit Order", "Preferences", "Review"]
 
 const BANKS = [
   "Absa",
@@ -57,6 +59,7 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
   // Step data
   const [clubId, setClubId] = useState<number | null>(null)
   const [slot, setSlot] = useState<SelectedSlot | null>(null)
+  const [ageGroup, setAgeGroup] = useState<AgeGroup | null>(null)
   const [child, setChild] = useState({ name: "", dob: "", age: "" })
   const [parent, setParent] = useState({ name: "", email: "", mobile: "", password: "" })
   const [emergency, setEmergency] = useState({ name: "", phone: "" })
@@ -127,6 +130,7 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
         clubId: clubId,
         slotWeekday: slot?.weekday ?? null,
         slotHour: slot?.hour ?? null,
+        slotAgeGroup: ageGroup,
         debitAccountHolder: debit.accountHolder,
         debitBankName: debit.bankName,
         debitAccountNumber: debit.accountNumber,
@@ -191,9 +195,72 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
 
       <div className="mt-10">
         {step === 0 ? (
+          /* ── Step 0: Child details + age group ── */
+          <div>
+            <h2 className="text-xl font-bold text-navy">Your Child&apos;s Details</h2>
+            <p className="mt-1 text-sm text-muted-foreground">Tell us who will be joining the academy</p>
+            <div className="mt-6 grid gap-4 sm:grid-cols-2">
+              <Field label="Child's Full Name" value={child.name} onChange={(v) => setChild({ ...child, name: v })} />
+              <Field
+                label="Date of Birth"
+                type="date"
+                value={child.dob}
+                onChange={(v) => {
+                  setChild({ ...child, dob: v })
+                }}
+              />
+              <Field
+                label="Age"
+                type="number"
+                value={child.age}
+                onChange={(v) => {
+                  setChild({ ...child, age: v })
+                }}
+                placeholder="Ages 5-17"
+              />
+            </div>
+
+            {/* Age-group category selector */}
+            <div className="mt-6">
+              <p className="text-sm font-semibold text-navy">Age Category</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Select the age group that best fits your child — this determines which time slots are available.
+              </p>
+              <div className="mt-3 grid grid-cols-3 gap-3">
+                {(["5-8", "9-13", "14-18"] as const).map((ag) => (
+                  <button
+                    key={ag}
+                    type="button"
+                    onClick={() => {
+                      setAgeGroup(ag)
+                      setSlot(null) // reset slot if age group changes
+                    }}
+                    className={`rounded-card border p-4 text-center transition-colors ${
+                      ageGroup === ag
+                        ? "border-lime bg-lime/10"
+                        : "border-border bg-card hover:border-lime/50"
+                    }`}
+                  >
+                    <span className="block text-lg font-extrabold text-navy">{ag}</span>
+                    <span className="mt-0.5 block text-xs text-muted-foreground">years old</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <StepNav
+              onNext={() => setStep(1)}
+              nextDisabled={!child.name || !child.dob || !child.age || !ageGroup}
+            />
+          </div>
+        ) : step === 1 ? (
+          /* ── Step 1: Club + time slot (filtered by age group) ── */
           <div>
             <h2 className="text-xl font-bold text-navy">Choose Your Club &amp; Schedule</h2>
-            <p className="mt-1 text-sm text-muted-foreground">Select the affiliated club nearest to you</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Showing slots available for ages{" "}
+              <span className="font-semibold text-navy">{ageGroup}</span>
+            </p>
             <div className="mt-6 space-y-3">
               {clubs.map((c) => (
                 <button
@@ -211,37 +278,24 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
                 </button>
               ))}
             </div>
-            {clubId && (
+            {clubId && selectedPackage?.slotType === "custom" ? (
               <div className="mt-6">
                 <p className="block text-sm font-semibold text-navy">Available Time Slots</p>
                 <p className="mb-3 text-xs text-muted-foreground">
-                  Pick a day and time. Only times with open places are selectable.
+                  This package runs at fixed times. Pick a slot below.
                 </p>
-                <SlotPicker clubId={clubId} selected={slot} onSelect={setSlot} />
+                <PackageSlotPicker packageId={selectedPackage.id} selected={slot} onSelect={setSlot} />
               </div>
-            )}
-            <StepNav onNext={() => setStep(1)} nextDisabled={!clubId || !slot} />
-          </div>
-        ) : step === 1 ? (
-          <div>
-            <h2 className="text-xl font-bold text-navy">Your Child&apos;s Details</h2>
-            <p className="mt-1 text-sm text-muted-foreground">Tell us who will be joining the academy</p>
-            <div className="mt-6 grid gap-4 sm:grid-cols-2">
-              <Field label="Child's Full Name" value={child.name} onChange={(v) => setChild({ ...child, name: v })} />
-              <Field label="Date of Birth" type="date" value={child.dob} onChange={(v) => setChild({ ...child, dob: v })} />
-              <Field
-                label="Age"
-                type="number"
-                value={child.age}
-                onChange={(v) => setChild({ ...child, age: v })}
-                placeholder="Ages 5-17"
-              />
-            </div>
-            <StepNav
-              onBack={() => setStep(0)}
-              onNext={() => setStep(2)}
-              nextDisabled={!child.name || !child.dob || !child.age}
-            />
+            ) : clubId && ageGroup ? (
+              <div className="mt-6">
+                <p className="block text-sm font-semibold text-navy">Available Time Slots</p>
+                <p className="mb-3 text-xs text-muted-foreground">
+                  Only times with open places for ages {ageGroup} are shown.
+                </p>
+                <SlotPicker clubId={clubId} ageGroup={ageGroup} selected={slot} onSelect={setSlot} />
+              </div>
+            ) : null}
+            <StepNav onBack={() => setStep(0)} onNext={() => setStep(2)} nextDisabled={!clubId || !slot} />
           </div>
         ) : step === 2 ? (
           <div>

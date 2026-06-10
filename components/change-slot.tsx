@@ -6,17 +6,20 @@ import { CalendarClock, Check } from "lucide-react"
 import { SlotPicker, type SelectedSlot } from "@/components/slot-picker"
 import { formatSlot } from "@/lib/slots"
 import { updateEnrollmentSlot } from "@/app/actions/enrollment"
+import type { AgeGroup } from "@/lib/db/schema"
 
 export function ChangeSlot({
   enrollmentId,
   clubId,
   weekday,
   hour,
+  ageGroup,
 }: {
   enrollmentId: number
   clubId: number | null
   weekday: number | null
   hour: number | null
+  ageGroup: AgeGroup | null
 }) {
   const router = useRouter()
   const [editing, setEditing] = useState(false)
@@ -74,7 +77,11 @@ export function ChangeSlot({
 
       {editing && (
         <div className="mt-3 rounded-md border border-border bg-muted/30 p-3">
-          <SlotPicker clubId={clubId} selected={slot} onSelect={setSlot} />
+          {ageGroup ? (
+            <SlotPicker clubId={clubId} ageGroup={ageGroup} selected={slot} onSelect={setSlot} />
+          ) : (
+            <p className="text-sm text-muted-foreground">Age group not set — cannot filter slots.</p>
+          )}
           {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
           <button
             onClick={save}

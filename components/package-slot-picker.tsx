@@ -2,41 +2,31 @@
 
 import { useEffect, useState } from "react"
 import { Loader2 } from "lucide-react"
-import { getClubAvailability } from "@/app/actions/clubs"
-import { formatHour, WEEKDAYS, type SlotAvailability } from "@/lib/slots"
-import type { AgeGroup } from "@/lib/db/schema"
+import { getPublicPackageSlots } from "@/app/actions/packages"
+import { formatHour, WEEKDAYS } from "@/lib/slots"
+import type { SelectedSlot } from "@/components/slot-picker"
+import type { CustomSlot } from "@/app/actions/packages"
 
-export type SelectedSlot = { weekday: number; hour: number }
-
-export function SlotPicker({
-  clubId,
-  ageGroup,
+export function PackageSlotPicker({
+  packageId,
   selected,
   onSelect,
 }: {
-  clubId: number
-  ageGroup: AgeGroup
+  packageId: number
   selected: SelectedSlot | null
   onSelect: (slot: SelectedSlot) => void
 }) {
-  const [slots, setSlots] = useState<SlotAvailability[] | null>(null)
+  const [slots, setSlots] = useState<CustomSlot[] | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     let active = true
     setLoading(true)
-    setSlots(null)
-    getClubAvailability(clubId, ageGroup)
-      .then((data) => {
-        if (active) setSlots(data)
-      })
-      .finally(() => {
-        if (active) setLoading(false)
-      })
-    return () => {
-      active = false
-    }
-  }, [clubId, ageGroup])
+    getPublicPackageSlots(packageId)
+      .then((data) => { if (active) setSlots(data) })
+      .finally(() => { if (active) setLoading(false) })
+    return () => { active = false }
+  }, [packageId])
 
   if (loading) {
     return (
@@ -51,13 +41,12 @@ export function SlotPicker({
   if (offered.length === 0) {
     return (
       <p className="rounded-md border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
-        No time slots have been set up for this age group at this club yet. Please choose another club or contact us.
+        No time slots have been set up for this package yet. Please contact us.
       </p>
     )
   }
 
-  // Group by weekday
-  const byWeekday = new Map<number, SlotAvailability[]>()
+  const byWeekday = new Map<number, CustomSlot[]>()
   for (const s of offered) {
     if (!byWeekday.has(s.weekday)) byWeekday.set(s.weekday, [])
     byWeekday.get(s.weekday)!.push(s)
@@ -76,25 +65,19 @@ export function SlotPicker({
               .sort((a, b) => a.hour - b.hour)
               .map((s) => {
                 const isSelected = selected?.weekday === s.weekday && selected?.hour === s.hour
-                const full = s.remaining <= 0
                 return (
                   <button
-                    key={s.id}
+                    key={`${s.weekday}-${s.hour}`}
                     type="button"
-                    disabled={full}
                     onClick={() => onSelect({ weekday: s.weekday, hour: s.hour })}
                     className={`rounded-md border px-3 py-2 text-left text-sm transition-colors ${
                       isSelected
                         ? "border-lime bg-lime/15 text-navy"
-                        : full
-                          ? "cursor-not-allowed border-border bg-muted text-muted-foreground opacity-60"
-                          : "border-border bg-card text-navy hover:border-lime/60"
+                        : "border-border bg-card text-navy hover:border-lime/60"
                     }`}
                   >
                     <span className="font-semibold">{formatHour(s.hour)}</span>
-                    <span className="ml-2 text-xs text-muted-foreground">
-                      {full ? "Full" : `${s.remaining} left`}
-                    </span>
+                    <span className="ml-2 text-xs text-muted-foreground">{s.capacity} spots</span>
                   </button>
                 )
               })}
