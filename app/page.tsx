@@ -6,6 +6,9 @@ import { OfferingsSection } from "@/components/offerings-section"
 import { ClubsSection } from "@/components/clubs-section"
 import { getPublishedPackages } from "@/app/actions/packages"
 
+// Always render fresh — clubs and packages change in the admin and must reflect immediately
+export const dynamic = "force-dynamic"
+
 export default async function HomePage() {
   const packages = await getPublishedPackages()
   return (

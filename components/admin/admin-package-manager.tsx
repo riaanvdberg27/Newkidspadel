@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
-import { Pencil, Trash2, Plus, X, Check, GripVertical } from "lucide-react"
+import { Pencil, Trash2, Plus, Check } from "lucide-react"
 import {
   createPackage,
   updatePackage,
@@ -12,9 +12,16 @@ import {
   type PackageInput,
   type CustomSlot,
 } from "@/app/actions/packages"
+import { AGE_GROUPS, type AgeGroup } from "@/lib/db/schema"
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 const HOURS = [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]
+
+const AGE_GROUP_LABELS: Record<AgeGroup, string> = {
+  "5-8": "Ages 5 – 8",
+  "9-13": "Ages 9 – 13",
+  "14-18": "Ages 14 – 18",
+}
 
 const EMPTY: PackageInput = {
   slug: "",
@@ -203,10 +210,11 @@ export function AdminPackageManager({ initialPackages }: { initialPackages: Publ
 // Package form
 // ---------------------------------------------------------------------------
 
-type SlotKey = `${number}-${number}`
+// Key is "ageGroup-weekday-hour"
+type SlotKey = `${string}-${number}-${number}`
 
-function slotKey(weekday: number, hour: number): SlotKey {
-  return `${weekday}-${hour}`
+function slotKey(ageGroup: string, weekday: number, hour: number): SlotKey {
+  return `${ageGroup}-${weekday}-${hour}`
 }
 
 function PackageForm({
@@ -233,18 +241,19 @@ function PackageForm({
   const [published, setPublished] = useState(pkg?.published ?? true)
   const [slotType, setSlotType] = useState(pkg?.slotType ?? "standard")
   const [sortOrder, setSortOrder] = useState(String(pkg?.sortOrder ?? 0))
+  const [activeAgeGroup, setActiveAgeGroup] = useState<AgeGroup>("5-8")
 
-  // Custom slots: map of "weekday-hour" -> capacity
+  // Custom slots: map of "ageGroup-weekday-hour" -> capacity
   const [customSlots, setCustomSlots] = useState<Record<SlotKey, number>>(() => {
     const m: Record<SlotKey, number> = {}
     for (const s of initialSlots) {
-      m[slotKey(s.weekday, s.hour)] = s.capacity
+      m[slotKey(s.ageGroup, s.weekday, s.hour)] = s.capacity
     }
     return m
   })
 
-  function toggleSlot(weekday: number, hour: number) {
-    const k = slotKey(weekday, hour)
+  function toggleSlot(ageGroup: string, weekday: number, hour: number) {
+    const k = slotKey(ageGroup, weekday, hour)
     setCustomSlots((prev) => {
       const next = { ...prev }
       if (k in next) delete next[k]
@@ -253,16 +262,25 @@ function PackageForm({
     })
   }
 
-  function setCapacity(weekday: number, hour: number, cap: number) {
-    const k = slotKey(weekday, hour)
+  function setCapacity(ageGroup: string, weekday: number, hour: number, cap: number) {
+    const k = slotKey(ageGroup, weekday, hour)
     setCustomSlots((prev) => ({ ...prev, [k]: Math.max(1, Math.round(cap)) }))
   }
+
+  // Count slots active for current age group
+  const activeCount = Object.keys(customSlots).filter((k) => k.startsWith(`${activeAgeGroup}-`)).length
 
   function submit(e: React.FormEvent) {
     e.preventDefault()
     const customSlotList = Object.entries(customSlots).map(([k, capacity]) => {
-      const [w, h] = k.split("-").map(Number)
-      return { weekday: w, hour: h, capacity }
+      // key format: "ageGroup-weekday-hour" where ageGroup can contain "-"
+      // e.g. "5-8-1-9" → ageGroup=5-8, weekday=1, hour=9
+      // Split from the right: last two segments are hour and weekday
+      const parts = k.split("-")
+      const hour = Number(parts[parts.length - 1])
+      const weekday = Number(parts[parts.length - 2])
+      const ag = parts.slice(0, parts.length - 2).join("-")
+      return { ageGroup: ag, weekday, hour, capacity }
     })
     onSubmit({
       slug,
@@ -336,7 +354,6 @@ function PackageForm({
         />
       </Field>
 
-      {/* Bulleted features */}
       <Field label="Features (one per line — each gets a tick mark on the homepage)">
         <textarea
           value={featuresText}
@@ -347,13 +364,12 @@ function PackageForm({
         />
       </Field>
 
-      {/* Free-text description */}
-      <Field label="Additional description (free text — displayed as a prose block below the features)">
+      <Field label="Additional description (free text — displayed below features)">
         <textarea
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           rows={3}
-          placeholder="Add any extra detail, terms, or notes that don't fit neatly into bullet points."
+          placeholder="Add any extra detail, terms, or notes."
           className="mt-2 w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-lime"
         />
       </Field>
@@ -386,16 +402,46 @@ function PackageForm({
         </div>
       </Field>
 
-      {/* Custom slots weekly grid */}
+      {/* Custom slots — tabbed by age group */}
       {slotType === "custom" && (
-        <div>
-          <p className="text-sm font-semibold text-navy">
-            Select which slots are available for this package and set each slot&apos;s capacity.
+        <div className="rounded-lg border border-border bg-muted/30 p-4">
+          <p className="mb-3 text-sm font-semibold text-navy">
+            Set available slots per age group
           </p>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            Click a cell to toggle it on/off. Adjust capacity with the number input that appears.
+          <p className="mb-4 text-xs text-muted-foreground">
+            Select which days &amp; times are available for each age group. Click a cell to toggle it on/off, then adjust the capacity number.
           </p>
-          <div className="mt-3 overflow-x-auto rounded-md border border-border">
+
+          {/* Age group tab bar */}
+          <div className="flex gap-1 rounded-lg border border-border bg-muted p-1">
+            {AGE_GROUPS.map((ag) => {
+              const count = Object.keys(customSlots).filter((k) => k.startsWith(`${ag}-`)).length
+              return (
+                <button
+                  key={ag}
+                  type="button"
+                  onClick={() => setActiveAgeGroup(ag)}
+                  className={`flex-1 rounded-md py-2 text-xs font-bold transition-colors ${
+                    activeAgeGroup === ag
+                      ? "bg-navy text-navy-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-navy"
+                  }`}
+                >
+                  {AGE_GROUP_LABELS[ag]}
+                  {count > 0 && (
+                    <span className={`ml-1.5 rounded-full px-1.5 py-0.5 text-[10px] font-black ${
+                      activeAgeGroup === ag ? "bg-lime text-navy" : "bg-lime/30 text-navy"
+                    }`}>
+                      {count}
+                    </span>
+                  )}
+                </button>
+              )
+            })}
+          </div>
+
+          {/* Slot grid for active age group */}
+          <div className="mt-4 overflow-x-auto rounded-md border border-border">
             <table className="min-w-full text-xs">
               <thead>
                 <tr className="border-b border-border bg-muted/50">
@@ -414,7 +460,7 @@ function PackageForm({
                       {String(hour).padStart(2, "0")}:00
                     </td>
                     {WEEKDAYS.map((_, wd) => {
-                      const k = slotKey(wd, hour)
+                      const k = slotKey(activeAgeGroup, wd, hour)
                       const active = k in customSlots
                       const cap = customSlots[k] ?? 10
                       return (
@@ -423,7 +469,7 @@ function PackageForm({
                             <div className="flex flex-col items-center gap-1">
                               <button
                                 type="button"
-                                onClick={() => toggleSlot(wd, hour)}
+                                onClick={() => toggleSlot(activeAgeGroup, wd, hour)}
                                 className="rounded bg-lime px-2 py-0.5 text-xs font-bold text-lime-foreground"
                               >
                                 ON
@@ -433,15 +479,15 @@ function PackageForm({
                                 min={1}
                                 max={99}
                                 value={cap}
-                                onChange={(e) => setCapacity(wd, hour, Number(e.target.value))}
-                                aria-label={`Capacity for ${WEEKDAYS[wd]} ${hour}:00`}
+                                onChange={(e) => setCapacity(activeAgeGroup, wd, hour, Number(e.target.value))}
+                                aria-label={`Capacity for ${WEEKDAYS[wd]} ${hour}:00 (${activeAgeGroup})`}
                                 className="w-12 rounded border border-border bg-background px-1 py-0.5 text-center text-xs outline-none focus:border-lime"
                               />
                             </div>
                           ) : (
                             <button
                               type="button"
-                              onClick={() => toggleSlot(wd, hour)}
+                              onClick={() => toggleSlot(activeAgeGroup, wd, hour)}
                               className="rounded border border-dashed border-border px-2 py-0.5 text-xs text-muted-foreground hover:border-lime hover:text-navy"
                             >
                               +
@@ -456,7 +502,9 @@ function PackageForm({
             </table>
           </div>
           <p className="mt-2 text-xs text-muted-foreground">
-            {Object.keys(customSlots).length} slot{Object.keys(customSlots).length !== 1 ? "s" : ""} selected
+            {activeCount} slot{activeCount !== 1 ? "s" : ""} selected for {AGE_GROUP_LABELS[activeAgeGroup]}
+            {" · "}
+            {Object.keys(customSlots).length} total across all age groups
           </p>
         </div>
       )}
@@ -545,19 +593,19 @@ function Modal({
 }) {
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 pt-10">
-      <div className="w-full max-w-2xl rounded-card bg-card shadow-xl">
-        <div className="flex items-center justify-between gap-4 border-b border-border px-6 py-4">
-          <h3 className="text-lg font-bold text-navy">{title}</h3>
+      <div className="w-full max-w-3xl rounded-xl bg-card shadow-2xl">
+        <div className="flex items-center justify-between border-b border-border px-6 py-4">
+          <h2 className="text-lg font-bold text-navy">{title}</h2>
           <button
             onClick={onClose}
-            aria-label="Close"
-            className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-navy"
+            className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-navy"
           >
-            <X className="h-5 w-5" />
+            ✕
           </button>
         </div>
-        <div className="max-h-[80vh] overflow-y-auto px-6 py-5">{children}</div>
+        <div className="px-6 py-5">{children}</div>
       </div>
     </div>
   )
 }
+

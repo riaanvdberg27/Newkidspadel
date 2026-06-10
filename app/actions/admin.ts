@@ -65,8 +65,7 @@ export async function createClub(input: ClubInput) {
       published: input.published,
     })
     .returning({ id: clubs.id })
-  revalidatePath("/admin")
-  revalidatePath("/")
+  revalidateClubPaths()
   return { id: rows[0].id }
 }
 
@@ -88,8 +87,7 @@ export async function updateClub(id: number, input: ClubInput) {
       updatedAt: new Date(),
     })
     .where(eq(clubs.id, id))
-  revalidatePath("/admin")
-  revalidatePath("/")
+  revalidateClubPaths()
   return { success: true }
 }
 
@@ -97,9 +95,15 @@ export async function deleteClub(id: number) {
   await requireAdmin()
   await db.delete(clubSlots).where(eq(clubSlots.clubId, id))
   await db.delete(clubs).where(eq(clubs.id, id))
+  revalidateClubPaths()
+  return { success: true }
+}
+
+function revalidateClubPaths() {
   revalidatePath("/admin")
   revalidatePath("/")
-  return { success: true }
+  revalidatePath("/clubs")
+  revalidatePath("/enrollment")
 }
 
 /** Full slot grid (weekday x hour) for a club filtered by age group, including hours with 0 capacity. */

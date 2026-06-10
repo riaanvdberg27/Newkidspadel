@@ -2,6 +2,9 @@ import Link from "next/link"
 import Image from "next/image"
 import { ClubsSection } from "@/components/clubs-section"
 
+// Always fetch the latest club list — prevents stale data on different edge nodes
+export const dynamic = "force-dynamic"
+
 export default function ClubsPage() {
   return (
     <main>

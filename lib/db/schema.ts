@@ -171,14 +171,22 @@ export const enrollments = pgTable("enrollments", {
   updatedAt: timestamp("updatedAt").notNull().defaultNow(),
 })
 
-export const packageSlots = pgTable("package_slots", {
-  id: serial("id").primaryKey(),
-  packageId: integer("packageId").notNull(),
-  weekday: integer("weekday").notNull(),
-  hour: integer("hour").notNull(),
-  capacity: integer("capacity").notNull().default(10),
-  createdAt: timestamp("createdAt").notNull().defaultNow(),
-})
+export const packageSlots = pgTable(
+  "package_slots",
+  {
+    id: serial("id").primaryKey(),
+    packageId: integer("packageId").notNull(),
+    weekday: integer("weekday").notNull(),
+    hour: integer("hour").notNull(),
+    capacity: integer("capacity").notNull().default(10),
+    // Age group this package slot is available for
+    ageGroup: text("ageGroup").notNull().default("5-8"),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  (t) => ({
+    uniqueSlot: unique("package_slots_unique").on(t.packageId, t.weekday, t.hour, t.ageGroup),
+  }),
+)
 
 export type Enrollment = typeof enrollments.$inferSelect
 export type Club = typeof clubs.$inferSelect
