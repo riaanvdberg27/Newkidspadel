@@ -22,7 +22,7 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en" className="bg-background">
+    <html lang="en" className="bg-background" data-scroll-behavior="smooth">
       <body className={`${geistSans.variable} font-sans antialiased`}>
         <SiteHeader />
         {children}

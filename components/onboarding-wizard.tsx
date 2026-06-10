@@ -4,6 +4,7 @@ import Image from "next/image"
 import Link from "next/link"
 import { useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
+// lucide-react icons used in this file
 import { Check, ChevronRight } from "lucide-react"
 import { formatSlot } from "@/lib/slots"
 import type { Club } from "@/lib/db/schema"
