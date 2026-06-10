@@ -1,111 +1,114 @@
 import Image from "next/image"
 import Link from "next/link"
-import { Phone, Mail } from "lucide-react"
+import { Phone, Mail, Clock, MessageCircle } from "lucide-react"
 import { COACHES } from "@/lib/site-data"
+import { getPublishedPackages } from "@/app/actions/packages"
+import { PackagesSection } from "@/components/packages-section"
 
-export default function ContactPage() {
+export default async function ContactPage() {
+  const packages = await getPublishedPackages()
   return (
     <main>
-      <section className="bg-navy text-navy-foreground">
-        <div className="mx-auto max-w-3xl px-4 py-16 text-center">
-          <h1 className="text-balance text-3xl font-extrabold sm:text-4xl">Contact Us</h1>
-          <p className="mt-2 text-xl font-extrabold text-lime">Book Your Sessions Today!</p>
-          <p className="mx-auto mt-4 max-w-2xl text-pretty leading-relaxed text-navy-foreground/85">
-            Have questions about our programs? Want to learn more about enrolling your child? We&apos;d love to hear from
-            you. Reach out to our team and we&apos;ll get back to you as soon as possible.
-          </p>
-        </div>
+      {/* Hero */}
+      <section className="bg-navy px-4 py-16 text-center text-navy-foreground">
+        <span className="inline-block rounded-full bg-lime/20 px-4 py-1.5 text-sm font-bold text-lime mb-4">
+          Say Hello
+        </span>
+        <h1 className="text-balance text-3xl font-black sm:text-5xl">Get In Touch</h1>
+        <p className="mt-2 text-xl font-black text-lime">We&apos;d love to hear from you!</p>
+        <p className="mx-auto mt-3 max-w-xl text-sm leading-relaxed text-navy-foreground/80 sm:text-base">
+          Questions about our programs? Want to enroll your child? Reach out — we respond fast.
+        </p>
       </section>
 
+      {/* Coaches contact */}
       <section className="mx-auto max-w-5xl px-4 py-16">
-        <h2 className="text-center text-3xl font-extrabold text-navy">Get In Touch</h2>
-        <div className="mt-10 grid gap-6 md:grid-cols-2">
+        <div className="grid gap-5 sm:grid-cols-2">
           {COACHES.map((coach) => (
-            <article key={coach.name} className="rounded-card border border-border bg-card p-6 shadow-sm">
-              <div className="flex items-center gap-4">
-                <Image src="/images/tennis-ball.png" alt="Tennis ball" width={48} height={48} className="h-12 w-12" />
+            <article
+              key={coach.name}
+              className="rounded-2xl border border-border bg-card overflow-hidden shadow-sm"
+            >
+              <div className="bg-lime px-5 py-4 flex items-center gap-3">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-navy shadow">
+                  <Image src="/images/tennis-ball.png" alt="" width={24} height={24} className="h-6 w-6" />
+                </div>
                 <div>
-                  <h3 className="text-lg font-bold text-navy">{coach.name}</h3>
-                  <p className="text-sm font-semibold text-lime">{coach.role}</p>
+                  <h3 className="font-black text-navy">{coach.name}</h3>
+                  <p className="text-xs font-bold text-navy/70">{coach.role}</p>
                 </div>
               </div>
-              <p className="mt-4 leading-relaxed text-muted-foreground">{coach.bio}</p>
-              <div className="mt-4 space-y-2">
-                <a
-                  href={`tel:${coach.phone.replace(/\s/g, "")}`}
-                  className="flex items-center gap-2 font-semibold text-navy hover:text-lime"
-                >
-                  <Phone className="h-4 w-4 text-lime" />
-                  {coach.phone}
-                </a>
-                <a
-                  href={`mailto:${coach.email}`}
-                  className="flex items-center gap-2 font-semibold text-navy hover:text-lime"
-                >
-                  <Mail className="h-4 w-4 text-lime" />
-                  {coach.email}
-                </a>
+              <div className="p-5">
+                <p className="text-sm leading-relaxed text-muted-foreground">{coach.bio}</p>
+                <div className="mt-4 space-y-2">
+                  <a
+                    href={`tel:${coach.phone.replace(/\s/g, "")}`}
+                    className="flex items-center gap-2.5 rounded-xl bg-muted px-4 py-3 text-sm font-bold text-navy transition-colors hover:bg-lime/20"
+                  >
+                    <Phone className="h-4 w-4 text-lime shrink-0" />
+                    {coach.phone}
+                  </a>
+                  <a
+                    href={`https://wa.me/27${coach.phone.replace(/^0/, "").replace(/\s/g, "")}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2.5 rounded-xl bg-muted px-4 py-3 text-sm font-bold text-navy transition-colors hover:bg-lime/20"
+                  >
+                    <MessageCircle className="h-4 w-4 text-lime shrink-0" />
+                    WhatsApp
+                  </a>
+                  <a
+                    href={`mailto:${coach.email}`}
+                    className="flex items-center gap-2.5 rounded-xl bg-muted px-4 py-3 text-sm font-bold text-navy transition-colors hover:bg-lime/20"
+                  >
+                    <Mail className="h-4 w-4 text-lime shrink-0" />
+                    {coach.email}
+                  </a>
+                </div>
               </div>
             </article>
           ))}
         </div>
 
-        <div className="mt-10 grid gap-6 md:grid-cols-2">
-          <div className="rounded-card border border-border bg-card p-6 shadow-sm">
-            <h3 className="text-lg font-bold text-navy">Office Hours</h3>
-            <dl className="mt-4 space-y-2 text-sm">
-              <div className="flex justify-between border-b border-border pb-2">
-                <dt>Monday - Friday</dt>
-                <dd className="font-semibold">08:00 - 17:00</dd>
-              </div>
-              <div className="flex justify-between border-b border-border pb-2">
-                <dt>Saturday</dt>
-                <dd className="font-semibold">08:00 - 13:00</dd>
-              </div>
-              <div className="flex justify-between">
-                <dt>Sunday</dt>
-                <dd className="font-semibold">Closed</dd>
-              </div>
+        {/* Hours + response */}
+        <div className="mt-5 grid gap-4 sm:grid-cols-2">
+          <div className="rounded-2xl bg-card border border-border p-5 shadow-sm">
+            <div className="flex items-center gap-2 mb-4">
+              <Clock className="h-5 w-5 text-lime" />
+              <h3 className="font-black text-navy">Office Hours</h3>
+            </div>
+            <dl className="space-y-2 text-sm">
+              {[
+                { day: "Mon – Fri", hours: "08:00 – 17:00" },
+                { day: "Saturday", hours: "08:00 – 13:00" },
+                { day: "Sunday", hours: "Closed" },
+              ].map((r) => (
+                <div key={r.day} className="flex justify-between rounded-xl bg-muted px-3 py-2">
+                  <dt className="text-muted-foreground">{r.day}</dt>
+                  <dd className="font-bold text-navy">{r.hours}</dd>
+                </div>
+              ))}
             </dl>
-            <p className="mt-4 text-sm text-muted-foreground">
+            <p className="mt-3 text-xs text-muted-foreground">
               Coaching sessions available outside office hours at our affiliated clubs.
             </p>
           </div>
-          <div className="rounded-card border border-border bg-card p-6 shadow-sm">
-            <h3 className="text-lg font-bold text-navy">Quick Response</h3>
-            <p className="mt-4 text-sm leading-relaxed text-muted-foreground">
-              We aim to respond to all inquiries within 24 hours during business days. For urgent matters, please call
-              us directly.
+          <div className="rounded-2xl bg-lime/10 border border-lime/30 p-5">
+            <h3 className="font-black text-navy mb-2">Fast Response</h3>
+            <p className="text-sm leading-relaxed text-muted-foreground">
+              We aim to respond within 24 hours on business days. For urgent matters call or WhatsApp us directly.
             </p>
-            <p className="mt-4 text-sm leading-relaxed text-muted-foreground">
-              You can also reach us via WhatsApp on either of the numbers listed above.
-            </p>
+            <Link
+              href="/enrollment"
+              className="mt-4 block rounded-xl bg-lime py-3 text-center text-sm font-black text-lime-foreground transition-all hover:scale-105 shadow-sm"
+            >
+              Enroll Online Now
+            </Link>
           </div>
         </div>
       </section>
 
-      <section className="bg-muted">
-        <div className="mx-auto max-w-3xl px-4 py-16 text-center">
-          <h2 className="text-3xl font-extrabold text-navy">Ready to Enroll?</h2>
-          <p className="mx-auto mt-4 max-w-xl text-pretty leading-relaxed text-muted-foreground">
-            Choose a package below to enroll your child directly through our online enrollment system.
-          </p>
-          <div className="mt-8 flex flex-wrap justify-center gap-4">
-            <Link
-              href="/enrollment?package=beginner"
-              className="rounded-md bg-lime px-6 py-3 font-bold text-lime-foreground transition-colors hover:bg-lime/90"
-            >
-              Beginner Package - R600/month
-            </Link>
-            <Link
-              href="/enrollment?package=advanced"
-              className="rounded-md bg-navy px-6 py-3 font-bold text-navy-foreground transition-colors hover:bg-navy/90"
-            >
-              Advanced Package - R900/month
-            </Link>
-          </div>
-        </div>
-      </section>
+      <PackagesSection packages={packages} />
     </main>
   )
 }

@@ -1,6 +1,6 @@
 import Image from "next/image"
+import Link from "next/link"
 import { SkillsSection } from "@/components/skills-section"
-import { OfferingsSection } from "@/components/offerings-section"
 import { PackagesSection } from "@/components/packages-section"
 import { COACHES } from "@/lib/site-data"
 import { getPublishedPackages } from "@/app/actions/packages"
@@ -9,62 +9,88 @@ export default async function AboutPage() {
   const packages = await getPublishedPackages()
   return (
     <main>
-      <section className="bg-navy text-navy-foreground">
-        <div className="mx-auto max-w-3xl px-4 py-16 text-center">
-          <h1 className="text-balance text-3xl font-extrabold sm:text-4xl">About Next Gen Padel Academy</h1>
-          <p className="mt-2 text-xl font-extrabold text-lime">Play. Learn. Grow.</p>
-          <p className="mx-auto mt-4 max-w-2xl text-pretty leading-relaxed text-navy-foreground/85">
-            Next Gen Padel Academy is dedicated to introducing young athletes to the exciting world of padel. Our
-            experienced coaches provide personalized training in a fun, safe, and encouraging environment where
-            children can develop both their athletic abilities and life skills.
-          </p>
-        </div>
+      {/* Hero */}
+      <section className="bg-navy px-4 py-16 text-center text-navy-foreground">
+        <span className="inline-block rounded-full bg-lime/20 px-4 py-1.5 text-sm font-bold text-lime mb-4">
+          Our Story
+        </span>
+        <h1 className="text-balance text-3xl font-black sm:text-5xl">About Next Gen Padel</h1>
+        <p className="mt-2 text-2xl font-black text-lime">Play. Learn. Grow.</p>
+        <p className="mx-auto mt-4 max-w-2xl text-pretty text-sm leading-relaxed text-navy-foreground/80 sm:text-base">
+          Introducing young athletes to the exciting world of padel — in a fun, safe, and encouraging environment.
+        </p>
       </section>
 
-      <section className="mx-auto grid max-w-5xl items-center gap-10 px-4 py-16 md:grid-cols-2">
-        <div className="relative mx-auto aspect-[3/4] w-full max-w-sm overflow-hidden rounded-card">
+      {/* Mission */}
+      <section className="mx-auto grid max-w-5xl items-center gap-8 px-4 py-16 sm:grid-cols-2">
+        <div className="relative mx-auto aspect-[4/3] w-full overflow-hidden rounded-2xl shadow-xl">
           <Image
-            src="/images/mascots.png"
-            alt="Next Gen Padel Academy Mascots"
+            src="/images/kids-playing-padel.png"
+            alt="Kids playing padel"
             fill
-            className="object-contain"
+            className="object-cover"
           />
         </div>
         <div>
-          <h2 className="text-3xl font-extrabold text-navy">Our Mission</h2>
-          <div className="mt-4 space-y-4 leading-relaxed text-foreground/90">
+          <span className="inline-block rounded-full bg-lime/20 px-4 py-1.5 text-sm font-bold text-lime-foreground mb-4">
+            Our Mission
+          </span>
+          <h2 className="text-2xl font-black text-navy sm:text-3xl">Every Child Deserves Sport</h2>
+          <div className="mt-4 space-y-3 text-sm leading-relaxed text-foreground/80 sm:text-base">
             <p>
-              We believe every child deserves the opportunity to experience the joy of sport. Our mission is to nurture
-              young talent, build confidence, and instill values of teamwork, discipline, and respect through the
-              beautiful game of padel.
+              We nurture young talent, build confidence, and instill values of teamwork, discipline, and respect
+              through the beautiful game of padel.
             </p>
             <p>
-              Whether your child is a complete beginner or looking to advance their skills, our programs are designed to
-              meet them where they are and help them grow at their own pace.
+              Whether your child is a complete beginner or looking to advance their skills, our programs meet them
+              where they are and help them grow at their own pace.
             </p>
             <p>
-              By combining structured coaching, affordable subscriptions, qualified coaching staff, and exciting
-              inter-club competition, this initiative has the potential to significantly grow junior padel
+              Structured coaching, affordable subscriptions, and qualified staff — designed to grow junior padel
               participation across South Africa.
             </p>
           </div>
+          <Link
+            href="/enrollment"
+            className="mt-6 inline-flex items-center rounded-2xl bg-lime px-6 py-3 font-black text-lime-foreground shadow-lg transition-all hover:scale-105"
+          >
+            Enroll Now
+          </Link>
         </div>
       </section>
 
-      <section className="bg-muted">
-        <div className="mx-auto max-w-5xl px-4 py-16">
-          <h2 className="text-center text-3xl font-extrabold text-navy">Meet Our Coaches</h2>
-          <div className="mt-10 grid gap-6 md:grid-cols-2">
+      {/* Photo row */}
+      <section className="mx-auto grid max-w-6xl grid-cols-2 gap-3 px-4 pb-4">
+        <div className="relative aspect-video overflow-hidden rounded-2xl">
+          <Image src="/images/coach-kids.png" alt="Coach with kids" fill className="object-cover" />
+        </div>
+        <div className="relative aspect-video overflow-hidden rounded-2xl">
+          <Image src="/images/padel-action.png" alt="Padel action" fill className="object-cover" />
+        </div>
+      </section>
+
+      {/* Coaches */}
+      <section className="bg-muted py-16 px-4">
+        <div className="mx-auto max-w-5xl">
+          <div className="text-center mb-10">
+            <span className="inline-block rounded-full bg-lime/20 px-4 py-1.5 text-sm font-bold text-lime-foreground mb-3">
+              The Team
+            </span>
+            <h2 className="text-3xl font-black text-navy">Meet Our Coaches</h2>
+          </div>
+          <div className="grid gap-5 sm:grid-cols-2">
             {COACHES.map((coach) => (
-              <article key={coach.name} className="rounded-card border border-border bg-card p-6 shadow-sm">
+              <article key={coach.name} className="rounded-2xl border border-border bg-card p-6 shadow-sm">
                 <div className="flex items-center gap-4">
-                  <Image src="/images/tennis-ball.png" alt="Tennis ball" width={48} height={48} className="h-12 w-12" />
+                  <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-lime shadow-md">
+                    <Image src="/images/tennis-ball.png" alt="" width={28} height={28} className="h-7 w-7" />
+                  </div>
                   <div>
-                    <h3 className="text-lg font-bold text-navy">{coach.name}</h3>
-                    <p className="text-sm font-semibold text-lime">{coach.role}</p>
+                    <h3 className="font-black text-navy">{coach.name}</h3>
+                    <p className="text-sm font-bold text-lime">{coach.role}</p>
                   </div>
                 </div>
-                <p className="mt-4 leading-relaxed text-muted-foreground">{coach.bio}</p>
+                <p className="mt-4 text-sm leading-relaxed text-muted-foreground">{coach.bio}</p>
               </article>
             ))}
           </div>
@@ -72,7 +98,6 @@ export default async function AboutPage() {
       </section>
 
       <SkillsSection />
-      <OfferingsSection />
       <PackagesSection packages={packages} />
     </main>
   )

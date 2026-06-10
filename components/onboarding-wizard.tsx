@@ -10,6 +10,7 @@ import type { Club } from "@/lib/db/schema"
 import type { PublicPackage } from "@/app/actions/packages"
 import { SlotPicker, type SelectedSlot } from "@/components/slot-picker"
 import { PackageSlotPicker } from "@/components/package-slot-picker"
+import { DobPicker } from "@/components/dob-picker"
 import type { AgeGroup } from "@/lib/db/schema"
 import { SignaturePad } from "@/components/signature-pad"
 import { CONSENT_TERMS_LABEL, CONSENT_MEDIA_LABEL, TERMS_TITLE, TERMS_SECTIONS } from "@/lib/terms"
@@ -60,7 +61,7 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
   const [clubId, setClubId] = useState<number | null>(null)
   const [slot, setSlot] = useState<SelectedSlot | null>(null)
   const [ageGroup, setAgeGroup] = useState<AgeGroup | null>(null)
-  const [child, setChild] = useState({ name: "", dob: "", age: "" })
+  const [child, setChild] = useState({ name: "", dob: "" })
   const [parent, setParent] = useState({ name: "", email: "", mobile: "", password: "" })
   const [emergency, setEmergency] = useState({ name: "", phone: "" })
   const [debit, setDebit] = useState<DebitOrder>({
@@ -123,7 +124,7 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
         parentMobile: parent.mobile,
         childName: child.name,
         childDob: child.dob,
-        childAge: Number(child.age),
+        childAge: child.dob ? Math.floor((Date.now() - new Date(child.dob).getTime()) / (1000 * 60 * 60 * 24 * 365.25)) : 0,
         packageName: selectedPackage.name,
         packagePrice: selectedPackage.price,
         club: selectedClub?.name ?? "",
@@ -169,7 +170,7 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
             setSelectedPackage(null)
             setStep(0)
           }}
-          className="rounded-md border border-border px-4 py-2 text-sm font-semibold text-navy transition-colors hover:bg-muted"
+          className="rounded-2xl border border-border px-4 py-2 text-sm font-bold text-navy transition-colors hover:bg-muted"
         >
           Change Package
         </button>
@@ -199,25 +200,13 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
           <div>
             <h2 className="text-xl font-bold text-navy">Your Child&apos;s Details</h2>
             <p className="mt-1 text-sm text-muted-foreground">Tell us who will be joining the academy</p>
-            <div className="mt-6 grid gap-4 sm:grid-cols-2">
+            <div className="mt-6 space-y-5">
               <Field label="Child's Full Name" value={child.name} onChange={(v) => setChild({ ...child, name: v })} />
-              <Field
-                label="Date of Birth"
-                type="date"
-                value={child.dob}
-                onChange={(v) => {
-                  setChild({ ...child, dob: v })
-                }}
-              />
-              <Field
-                label="Age"
-                type="number"
-                value={child.age}
-                onChange={(v) => {
-                  setChild({ ...child, age: v })
-                }}
-                placeholder="Ages 5-17"
-              />
+
+              <div>
+                <p className="mb-2 text-sm font-semibold text-navy">Date of Birth</p>
+                <DobPicker value={child.dob} onChange={(v) => setChild({ ...child, dob: v })} />
+              </div>
             </div>
 
             {/* Age-group category selector */}
@@ -233,15 +222,15 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
                     type="button"
                     onClick={() => {
                       setAgeGroup(ag)
-                      setSlot(null) // reset slot if age group changes
+                      setSlot(null)
                     }}
-                    className={`rounded-card border p-4 text-center transition-colors ${
+                    className={`rounded-2xl border-2 p-4 text-center transition-all ${
                       ageGroup === ag
-                        ? "border-lime bg-lime/10"
+                        ? "border-lime bg-lime/10 scale-105 shadow-md"
                         : "border-border bg-card hover:border-lime/50"
                     }`}
                   >
-                    <span className="block text-lg font-extrabold text-navy">{ag}</span>
+                    <span className="block text-2xl font-black text-navy">{ag}</span>
                     <span className="mt-0.5 block text-xs text-muted-foreground">years old</span>
                   </button>
                 ))}
@@ -250,7 +239,7 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
 
             <StepNav
               onNext={() => setStep(1)}
-              nextDisabled={!child.name || !child.dob || !child.age || !ageGroup}
+              nextDisabled={!child.name || !child.dob || !ageGroup}
             />
           </div>
         ) : step === 1 ? (
@@ -432,7 +421,7 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
               <Row label="Package" value={`${selectedPackage.name} (R${selectedPackage.price}/month)`} />
               <Row label="Club" value={selectedClub?.name ?? ""} />
               <Row label="Time Slot" value={slot ? formatSlot(slot.weekday, slot.hour) : ""} />
-              <Row label="Child" value={`${child.name} (age ${child.age})`} />
+              <Row label="Child" value={`${child.name} (born ${child.dob})`} />
               <Row label="Parent" value={parent.name} />
               <Row label="Email" value={parent.email} />
               <Row label="Mobile" value={parent.mobile} />
@@ -491,14 +480,14 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
             <div className="mt-8 flex items-center justify-between gap-4">
               <button
                 onClick={() => setStep(4)}
-                className="rounded-md border border-border px-5 py-2.5 font-semibold text-navy transition-colors hover:bg-muted"
+                className="rounded-2xl border-2 border-border px-5 py-3 font-bold text-navy transition-all hover:bg-muted active:scale-95"
               >
                 Back
               </button>
               <button
                 onClick={handleSubmit}
                 disabled={submitting || !agreedTerms || !signatureData}
-                className="rounded-md bg-lime px-6 py-2.5 font-bold text-lime-foreground transition-colors hover:bg-lime/90 disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-2xl bg-lime px-6 py-3 font-black text-lime-foreground shadow-sm transition-all hover:scale-105 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-40 active:scale-95"
               >
                 {submitting ? "Creating account…" : "Create Account & Enroll"}
               </button>
@@ -585,7 +574,7 @@ function StepNav({
       {onBack ? (
         <button
           onClick={onBack}
-          className="rounded-md border border-border px-5 py-2.5 font-semibold text-navy transition-colors hover:bg-muted"
+          className="rounded-2xl border-2 border-border px-5 py-3 font-bold text-navy transition-all hover:bg-muted active:scale-95"
         >
           Back
         </button>
@@ -595,7 +584,7 @@ function StepNav({
       <button
         onClick={onNext}
         disabled={nextDisabled}
-        className="rounded-md bg-lime px-6 py-2.5 font-bold text-lime-foreground transition-colors hover:bg-lime/90 disabled:cursor-not-allowed disabled:opacity-50"
+        className="rounded-2xl bg-lime px-6 py-3 font-black text-lime-foreground shadow-sm transition-all hover:scale-105 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-40 active:scale-95"
       >
         {nextLabel}
       </button>

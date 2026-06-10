@@ -1,6 +1,5 @@
 import Image from "next/image"
 import Link from "next/link"
-import { Users } from "lucide-react"
 import { PackagesSection } from "@/components/packages-section"
 import { SkillsSection } from "@/components/skills-section"
 import { OfferingsSection } from "@/components/offerings-section"
@@ -12,34 +11,35 @@ export default async function HomePage() {
   return (
     <main>
       {/* Hero */}
-      <section className="bg-navy text-navy-foreground">
-        <div className="w-full">
-          <Image
-            src="/images/hero-banner.png"
-            alt="Next Gen Padel Academy - Boy and Girl mascots high-fiving on a padel court. Play. Learn. Grow."
-            width={1414}
-            height={780}
-            priority
-            sizes="100vw"
-            className="h-auto w-full object-cover"
-          />
-        </div>
-        <div className="mx-auto max-w-3xl px-4 py-12 text-center">
-          <h1 className="text-balance text-3xl font-extrabold sm:text-4xl">Coaching for Boys and Girls</h1>
-          <p className="mt-2 text-2xl font-extrabold text-lime sm:text-3xl">Ages 5-17 Years</p>
-          <p className="mx-auto mt-4 max-w-xl text-pretty leading-relaxed text-navy-foreground/85">
-            Learn the basics the right way in a fun, safe and encouraging environment with experienced coaches.
+      <section className="relative bg-navy overflow-hidden">
+        <Image
+          src="/images/hero-banner.png"
+          alt="Next Gen Padel Academy"
+          width={1414}
+          height={780}
+          priority
+          sizes="100vw"
+          className="h-auto w-full object-cover"
+        />
+        {/* Floating CTA bar below image */}
+        <div className="bg-navy px-4 pb-10 pt-8 text-center text-navy-foreground">
+          <h1 className="text-balance text-3xl font-black sm:text-5xl leading-tight">
+            Coaching for Boys &amp; Girls
+          </h1>
+          <p className="mt-2 text-2xl font-black text-lime sm:text-3xl">Ages 5 – 17 Years</p>
+          <p className="mx-auto mt-3 max-w-md text-pretty text-sm leading-relaxed text-navy-foreground/80 sm:text-base">
+            Learn padel the right way — fun, safe, and with coaches who care.
           </p>
-          <div className="mt-8 flex flex-wrap justify-center gap-4">
+          <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-center">
             <Link
               href="/enrollment"
-              className="rounded-md bg-lime px-6 py-3 font-bold text-lime-foreground transition-colors hover:bg-lime/90"
+              className="rounded-2xl bg-lime px-8 py-4 text-base font-black text-lime-foreground shadow-lg transition-all hover:scale-105 hover:shadow-xl active:scale-95"
             >
-              View Packages
+              Start Enrollment
             </Link>
             <Link
               href="/about"
-              className="rounded-md border border-navy-foreground/40 bg-transparent px-6 py-3 font-bold text-navy-foreground transition-colors hover:bg-white/10"
+              className="rounded-2xl border-2 border-white/30 px-8 py-4 text-base font-bold text-white transition-all hover:bg-white/10"
             >
               Learn More
             </Link>
@@ -47,14 +47,45 @@ export default async function HomePage() {
         </div>
       </section>
 
+      {/* Stats strip */}
+      <section className="bg-lime">
+        <div className="mx-auto flex max-w-4xl flex-wrap justify-center gap-6 px-4 py-6 sm:gap-12">
+          {[
+            { value: "5–17", label: "Age Range" },
+            { value: "4", label: "Age Groups" },
+            { value: "2", label: "Expert Coaches" },
+            { value: "100%", label: "Fun Guaranteed" },
+          ].map((stat) => (
+            <div key={stat.label} className="text-center">
+              <p className="text-3xl font-black text-navy">{stat.value}</p>
+              <p className="text-xs font-bold uppercase tracking-widest text-navy/70">{stat.label}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Packages */}
       <PackagesSection packages={packages} />
 
-      <div className="flex justify-center pb-4">
-        <span className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-4 py-2 text-sm font-semibold text-navy shadow-sm">
-          <Users className="h-4 w-4 text-lime" />
-          Group Sessions Available!
-        </span>
-      </div>
+      {/* Photo break */}
+      <section className="mx-auto grid max-w-6xl grid-cols-2 gap-3 px-4 pb-4 sm:grid-cols-3">
+        <div className="relative col-span-2 aspect-video overflow-hidden rounded-2xl sm:col-span-2">
+          <Image
+            src="/images/kids-playing-padel.png"
+            alt="Kids playing padel"
+            fill
+            className="object-cover"
+          />
+        </div>
+        <div className="relative aspect-square overflow-hidden rounded-2xl hidden sm:block">
+          <Image
+            src="/images/coach-kids.png"
+            alt="Coach with kids"
+            fill
+            className="object-cover"
+          />
+        </div>
+      </section>
 
       <SkillsSection />
       <OfferingsSection />
