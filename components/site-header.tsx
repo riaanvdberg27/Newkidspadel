@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import { useSession } from "@/lib/auth-client"
 
 const NAV = [
   { label: "Home", href: "/" },
@@ -13,6 +14,10 @@ const NAV = [
 
 export function SiteHeader() {
   const pathname = usePathname()
+  const { data: session } = useSession()
+  const accountLink = session?.user
+    ? { label: "My Dashboard", href: "/dashboard" }
+    : { label: "Parent Login", href: "/sign-in" }
 
   return (
     <header className="sticky top-0 z-50 bg-navy text-navy-foreground shadow-md">
@@ -35,6 +40,18 @@ export function SiteHeader() {
               </li>
             )
           })}
+          <li>
+            <Link
+              href={accountLink.href}
+              className={`rounded-md px-3 py-2 text-sm font-semibold transition-colors sm:text-base ${
+                pathname === accountLink.href
+                  ? "bg-lime text-lime-foreground"
+                  : "bg-white/10 text-navy-foreground hover:bg-white/20"
+              }`}
+            >
+              {accountLink.label}
+            </Link>
+          </li>
         </ul>
       </nav>
     </header>

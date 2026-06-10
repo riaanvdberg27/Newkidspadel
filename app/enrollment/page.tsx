@@ -1,5 +1,5 @@
 import { Suspense } from "react"
-import { EnrollmentWizard } from "@/components/enrollment-wizard"
+import { OnboardingWizard } from "@/components/onboarding-wizard"
 
 export default function EnrollmentPage() {
   return (
@@ -15,7 +15,7 @@ export default function EnrollmentPage() {
       </section>
 
       <Suspense fallback={<div className="py-20 text-center text-muted-foreground">Loading…</div>}>
-        <EnrollmentWizard />
+        <OnboardingWizard />
       </Suspense>
     </main>
   )
