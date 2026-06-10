@@ -9,6 +9,7 @@ import { formatSlot } from "@/lib/slots"
 import type { Club } from "@/lib/db/schema"
 import type { PublicPackage } from "@/app/actions/packages"
 import { SlotPicker, type SelectedSlot } from "@/components/slot-picker"
+import { PackageSlotPicker } from "@/components/package-slot-picker"
 import { SignaturePad } from "@/components/signature-pad"
 import { CONSENT_TERMS_LABEL, CONSENT_MEDIA_LABEL, TERMS_TITLE, TERMS_SECTIONS } from "@/lib/terms"
 import { authClient } from "@/lib/auth-client"
@@ -211,7 +212,15 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
                 </button>
               ))}
             </div>
-            {clubId && (
+            {clubId && selectedPackage?.slotType === "custom" ? (
+              <div className="mt-6">
+                <p className="block text-sm font-semibold text-navy">Available Time Slots</p>
+                <p className="mb-3 text-xs text-muted-foreground">
+                  This package runs at fixed times. Pick a slot below.
+                </p>
+                <PackageSlotPicker packageId={selectedPackage.id} selected={slot} onSelect={setSlot} />
+              </div>
+            ) : clubId ? (
               <div className="mt-6">
                 <p className="block text-sm font-semibold text-navy">Available Time Slots</p>
                 <p className="mb-3 text-xs text-muted-foreground">
@@ -219,7 +228,7 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
                 </p>
                 <SlotPicker clubId={clubId} selected={slot} onSelect={setSlot} />
               </div>
-            )}
+            ) : null}
             <StepNav onNext={() => setStep(1)} nextDisabled={!clubId || !slot} />
           </div>
         ) : step === 1 ? (

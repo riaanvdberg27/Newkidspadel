@@ -44,6 +44,7 @@ export type ClubInput = {
   hours: string
   features: string[]
   image: string | null
+  imageUrl: string | null
   published: boolean
 }
 
@@ -60,6 +61,7 @@ export async function createClub(input: ClubInput) {
       hours: input.hours,
       features: input.features,
       image: input.image || null,
+      imageUrl: input.imageUrl || null,
       published: input.published,
     })
     .returning({ id: clubs.id })
@@ -81,6 +83,7 @@ export async function updateClub(id: number, input: ClubInput) {
       hours: input.hours,
       features: input.features,
       image: input.image || null,
+      imageUrl: input.imageUrl || null,
       published: input.published,
       updatedAt: new Date(),
     })

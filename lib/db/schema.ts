@@ -65,15 +65,18 @@ export const verification = pgTable("verification", {
 
 export const packages = pgTable("packages", {
   id: serial("id").primaryKey(),
-  // Stable slug used in URLs (e.g. ?package=beginner)
   slug: text("slug").notNull().unique(),
   name: text("name").notNull(),
   price: integer("price").notNull(),
-  period: text("period").notNull().default("/month"),
+  // 'monthly' | 'once-off'
+  period: text("period").notNull().default("monthly"),
   tagline: text("tagline").notNull().default(""),
   features: jsonb("features").notNull().default([]),
+  description: text("description").notNull().default(""),
   popular: boolean("popular").notNull().default(false),
   published: boolean("published").notNull().default(true),
+  // 'standard' | 'custom'
+  slotType: text("slotType").notNull().default("standard"),
   sortOrder: integer("sortOrder").notNull().default(0),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
   updatedAt: timestamp("updatedAt").notNull().defaultNow(),
@@ -89,6 +92,7 @@ export const clubs = pgTable("clubs", {
   hours: text("hours").notNull(),
   features: jsonb("features").notNull().default([]),
   image: text("image"),
+  imageUrl: text("imageUrl"),
   published: boolean("published").notNull().default(true),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
   updatedAt: timestamp("updatedAt").notNull().defaultNow(),
@@ -161,7 +165,17 @@ export const enrollments = pgTable("enrollments", {
   updatedAt: timestamp("updatedAt").notNull().defaultNow(),
 })
 
+export const packageSlots = pgTable("package_slots", {
+  id: serial("id").primaryKey(),
+  packageId: integer("packageId").notNull(),
+  weekday: integer("weekday").notNull(),
+  hour: integer("hour").notNull(),
+  capacity: integer("capacity").notNull().default(10),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+})
+
 export type Enrollment = typeof enrollments.$inferSelect
 export type Club = typeof clubs.$inferSelect
 export type ClubSlot = typeof clubSlots.$inferSelect
 export type PackageRow = typeof packages.$inferSelect
+export type PackageSlot = typeof packageSlots.$inferSelect

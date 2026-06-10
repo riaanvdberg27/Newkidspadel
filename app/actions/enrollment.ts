@@ -2,7 +2,7 @@
 
 import { auth } from "@/lib/auth"
 import { db } from "@/lib/db"
-import { enrollments } from "@/lib/db/schema"
+import { enrollments, user } from "@/lib/db/schema"
 import { and, desc, eq } from "drizzle-orm"
 import { headers } from "next/headers"
 import { revalidatePath } from "next/cache"
@@ -209,4 +209,20 @@ export async function getMyEnrollment(id: number) {
     .where(and(eq(enrollments.id, id), eq(enrollments.userId, userId)))
     .limit(1)
   return rows[0] ?? null
+}
+
+export async function updateProfile(input: { name: string; mobile: string }) {
+  const userId = await getUserId()
+  const name = input.name.trim()
+  const mobile = input.mobile.trim()
+  if (!name) throw new Error("Name is required.")
+  // Update the user display name
+  await db.update(user).set({ name, updatedAt: new Date() }).where(eq(user.id, userId))
+  // Also update parentName and parentMobile on all the user's enrollments
+  await db
+    .update(enrollments)
+    .set({ parentName: name, parentMobile: mobile })
+    .where(eq(enrollments.userId, userId))
+  revalidatePath("/dashboard")
+  return { success: true }
 }
