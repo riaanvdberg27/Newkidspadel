@@ -1,9 +1,10 @@
 import { Suspense } from "react"
 import { OnboardingWizard } from "@/components/onboarding-wizard"
 import { getPublishedClubs } from "@/app/actions/clubs"
+import { getPublishedPackages } from "@/app/actions/packages"
 
 export default async function EnrollmentPage() {
-  const clubs = await getPublishedClubs()
+  const [clubs, packages] = await Promise.all([getPublishedClubs(), getPublishedPackages()])
   return (
     <main>
       <section className="bg-navy text-navy-foreground">
@@ -17,7 +18,7 @@ export default async function EnrollmentPage() {
       </section>
 
       <Suspense fallback={<div className="py-20 text-center text-muted-foreground">Loading…</div>}>
-        <OnboardingWizard clubs={clubs} />
+        <OnboardingWizard clubs={clubs} packages={packages} />
       </Suspense>
     </main>
   )

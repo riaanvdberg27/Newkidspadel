@@ -5,10 +5,12 @@ import Link from "next/link"
 import { useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Check } from "lucide-react"
-import { PACKAGES, type Package } from "@/lib/site-data"
 import { formatSlot } from "@/lib/slots"
 import type { Club } from "@/lib/db/schema"
+import type { PublicPackage } from "@/app/actions/packages"
 import { SlotPicker, type SelectedSlot } from "@/components/slot-picker"
+import { SignaturePad } from "@/components/signature-pad"
+import { CONSENT_TERMS_LABEL, CONSENT_MEDIA_LABEL, TERMS_TITLE, TERMS_SECTIONS } from "@/lib/terms"
 import { authClient } from "@/lib/auth-client"
 import { createEnrollment } from "@/app/actions/enrollment"
 
@@ -44,12 +46,12 @@ type DebitOrder = {
   debitDay: string
 }
 
-export function OnboardingWizard({ clubs }: { clubs: Club[] }) {
+export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages: PublicPackage[] }) {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const initialPackage = PACKAGES.find((p) => p.id === searchParams.get("package")) ?? null
+  const initialPackage = packages.find((p) => p.slug === searchParams.get("package")) ?? null
 
-  const [selectedPackage, setSelectedPackage] = useState<Package | null>(initialPackage)
+  const [selectedPackage, setSelectedPackage] = useState<PublicPackage | null>(initialPackage)
   const [step, setStep] = useState(0)
 
   // Step data
@@ -74,6 +76,12 @@ export function OnboardingWizard({ clubs }: { clubs: Club[] }) {
     prefHolidayClinics: false,
   })
 
+  // Terms, consent & signature
+  const [agreedTerms, setAgreedTerms] = useState(false)
+  const [consentMedia, setConsentMedia] = useState(false)
+  const [signatureData, setSignatureData] = useState<string | null>(null)
+  const [showTerms, setShowTerms] = useState(false)
+
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [reference, setReference] = useState<string | null>(null)
@@ -81,7 +89,7 @@ export function OnboardingWizard({ clubs }: { clubs: Club[] }) {
   const selectedClub = clubs.find((c) => c.id === clubId) ?? null
 
   if (!selectedPackage) {
-    return <PackagePicker onSelect={setSelectedPackage} />
+    return <PackagePicker packages={packages} onSelect={setSelectedPackage} />
   }
 
   if (reference) {
@@ -114,6 +122,7 @@ export function OnboardingWizard({ clubs }: { clubs: Club[] }) {
         childDob: child.dob,
         childAge: Number(child.age),
         packageName: selectedPackage.name,
+        packagePrice: selectedPackage.price,
         club: selectedClub?.name ?? "",
         clubId: clubId,
         slotWeekday: slot?.weekday ?? null,
@@ -125,6 +134,10 @@ export function OnboardingWizard({ clubs }: { clubs: Club[] }) {
         debitDay: Number(debit.debitDay),
         emergencyContactName: emergency.name,
         emergencyContactPhone: emergency.phone,
+        agreedTerms,
+        consentMedia,
+        signatureData,
+        signedName: parent.name,
         ...prefs,
       })
 
@@ -376,6 +389,45 @@ export function OnboardingWizard({ clubs }: { clubs: Club[] }) {
               />
             </dl>
 
+            {/* Terms & consent */}
+            <div className="mt-6 rounded-card border border-border bg-card p-5 shadow-sm">
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="font-bold text-navy">Terms &amp; Indemnity</h3>
+                <button
+                  type="button"
+                  onClick={() => setShowTerms((s) => !s)}
+                  className="text-sm font-semibold text-navy underline-offset-4 hover:underline"
+                >
+                  {showTerms ? "Hide full terms" : "Read full terms"}
+                </button>
+              </div>
+
+              {showTerms && (
+                <div className="mt-3 max-h-56 overflow-y-auto rounded-md border border-border bg-muted/40 p-4 text-xs leading-relaxed text-muted-foreground">
+                  <p className="font-semibold text-navy">{TERMS_TITLE}</p>
+                  {TERMS_SECTIONS.map((s) => (
+                    <div key={s.heading} className="mt-3">
+                      <p className="font-semibold text-navy">{s.heading}</p>
+                      <p>{s.body}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="mt-4 space-y-3">
+                <ConsentCheck label={CONSENT_TERMS_LABEL} checked={agreedTerms} onChange={setAgreedTerms} required />
+                <ConsentCheck label={CONSENT_MEDIA_LABEL} checked={consentMedia} onChange={setConsentMedia} />
+              </div>
+
+              <div className="mt-5">
+                <p className="text-sm font-semibold text-navy">Signature</p>
+                <p className="mb-2 text-xs text-muted-foreground">
+                  Please sign below to confirm your agreement ({parent.name || "parent/guardian"}).
+                </p>
+                <SignaturePad value={signatureData} onChange={setSignatureData} />
+              </div>
+            </div>
+
             {error && (
               <p className="mt-4 rounded-md border border-destructive/30 bg-destructive/10 px-4 py-2 text-sm text-destructive" role="alert">
                 {error}
@@ -391,12 +443,17 @@ export function OnboardingWizard({ clubs }: { clubs: Club[] }) {
               </button>
               <button
                 onClick={handleSubmit}
-                disabled={submitting}
+                disabled={submitting || !agreedTerms || !signatureData}
                 className="rounded-md bg-lime px-6 py-2.5 font-bold text-lime-foreground transition-colors hover:bg-lime/90 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {submitting ? "Creating account…" : "Create Account & Enroll"}
               </button>
             </div>
+            {(!agreedTerms || !signatureData) && (
+              <p className="mt-3 text-center text-xs text-muted-foreground">
+                You must agree to the terms and sign before enrolling.
+              </p>
+            )}
             <p className="mt-4 text-center text-xs text-muted-foreground">
               Already enrolled?{" "}
               <Link href="/sign-in" className="font-semibold text-navy underline-offset-4 hover:underline">
@@ -414,7 +471,7 @@ export function OnboardingWizard({ clubs }: { clubs: Club[] }) {
   )
 }
 
-function PackagePicker({ onSelect }: { onSelect: (p: Package) => void }) {
+function PackagePicker({ packages, onSelect }: { packages: PublicPackage[]; onSelect: (p: PublicPackage) => void }) {
   return (
     <section className="mx-auto max-w-3xl px-4 py-12">
       <h2 className="text-center text-2xl font-extrabold text-navy">Choose a Monthly Package to Begin</h2>
@@ -422,7 +479,7 @@ function PackagePicker({ onSelect }: { onSelect: (p: Package) => void }) {
         Select one of our monthly package deals below to start your enrollment.
       </p>
       <div className="mt-8 grid gap-6 md:grid-cols-2">
-        {PACKAGES.map((pkg) => (
+        {packages.map((pkg) => (
           <button
             key={pkg.id}
             onClick={() => onSelect(pkg)}
@@ -539,6 +596,33 @@ function Row({ label, value }: { label: string; value: string }) {
       <dt className="text-muted-foreground">{label}</dt>
       <dd className="text-right font-semibold text-navy">{value}</dd>
     </div>
+  )
+}
+
+function ConsentCheck({
+  label,
+  checked,
+  onChange,
+  required,
+}: {
+  label: string
+  checked: boolean
+  onChange: (v: boolean) => void
+  required?: boolean
+}) {
+  return (
+    <label className="flex cursor-pointer items-start gap-3">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        className="mt-0.5 h-5 w-5 flex-shrink-0 accent-lime"
+      />
+      <span className="text-sm leading-relaxed text-navy">
+        {label}
+        {required && <span className="ml-1 text-destructive">*</span>}
+      </span>
+    </label>
   )
 }
 

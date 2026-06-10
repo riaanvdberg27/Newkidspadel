@@ -1,8 +1,9 @@
 import Link from "next/link"
 import { Check } from "lucide-react"
-import { PACKAGES } from "@/lib/site-data"
+import type { PublicPackage } from "@/app/actions/packages"
 
-export function PackagesSection() {
+export function PackagesSection({ packages }: { packages: PublicPackage[] }) {
+  if (packages.length === 0) return null
   return (
     <section className="mx-auto max-w-6xl px-4 py-16">
       <h2 className="text-center text-3xl font-extrabold text-navy">Our Packages</h2>
@@ -12,10 +13,10 @@ export function PackagesSection() {
       <p className="mt-1 text-center text-sm font-semibold text-lime">Click on a package to enroll</p>
 
       <div className="mt-10 grid gap-6 md:grid-cols-2">
-        {PACKAGES.map((pkg) => (
+        {packages.map((pkg) => (
           <Link
             key={pkg.id}
-            href={`/enrollment?package=${pkg.id}`}
+            href={`/enrollment?package=${pkg.slug}`}
             className={`group relative flex flex-col overflow-hidden rounded-card border bg-card shadow-sm transition-transform hover:-translate-y-1 hover:shadow-lg ${
               pkg.popular ? "border-lime" : "border-border"
             }`}

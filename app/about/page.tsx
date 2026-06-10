@@ -3,8 +3,10 @@ import { SkillsSection } from "@/components/skills-section"
 import { OfferingsSection } from "@/components/offerings-section"
 import { PackagesSection } from "@/components/packages-section"
 import { COACHES } from "@/lib/site-data"
+import { getPublishedPackages } from "@/app/actions/packages"
 
-export default function AboutPage() {
+export default async function AboutPage() {
+  const packages = await getPublishedPackages()
   return (
     <main>
       <section className="bg-navy text-navy-foreground">
@@ -71,7 +73,7 @@ export default function AboutPage() {
 
       <SkillsSection />
       <OfferingsSection />
-      <PackagesSection />
+      <PackagesSection packages={packages} />
     </main>
   )
 }

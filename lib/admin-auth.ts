@@ -33,3 +33,9 @@ export async function clearAdminSession() {
 export function credentialsValid(username: string, password: string) {
   return username === ADMIN_USERNAME && password === ADMIN_PASSWORD
 }
+
+export async function requireAdmin() {
+  if (!(await isAdminAuthenticated())) {
+    throw new Error("Not authorized")
+  }
+}

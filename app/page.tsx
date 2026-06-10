@@ -5,8 +5,10 @@ import { PackagesSection } from "@/components/packages-section"
 import { SkillsSection } from "@/components/skills-section"
 import { OfferingsSection } from "@/components/offerings-section"
 import { ClubsSection } from "@/components/clubs-section"
+import { getPublishedPackages } from "@/app/actions/packages"
 
-export default function HomePage() {
+export default async function HomePage() {
+  const packages = await getPublishedPackages()
   return (
     <main>
       {/* Hero */}
@@ -45,7 +47,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      <PackagesSection />
+      <PackagesSection packages={packages} />
 
       <div className="flex justify-center pb-4">
         <span className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-4 py-2 text-sm font-semibold text-navy shadow-sm">
