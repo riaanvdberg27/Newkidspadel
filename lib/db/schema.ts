@@ -63,6 +63,22 @@ export const verification = pgTable("verification", {
 
 // ---- App tables ----
 
+export const packages = pgTable("packages", {
+  id: serial("id").primaryKey(),
+  // Stable slug used in URLs (e.g. ?package=beginner)
+  slug: text("slug").notNull().unique(),
+  name: text("name").notNull(),
+  price: integer("price").notNull(),
+  period: text("period").notNull().default("/month"),
+  tagline: text("tagline").notNull().default(""),
+  features: jsonb("features").notNull().default([]),
+  popular: boolean("popular").notNull().default(false),
+  published: boolean("published").notNull().default(true),
+  sortOrder: integer("sortOrder").notNull().default(0),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+  updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+})
+
 export const clubs = pgTable("clubs", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
@@ -123,6 +139,13 @@ export const enrollments = pgTable("enrollments", {
   // Emergency contact
   emergencyContactName: text("emergencyContactName"),
   emergencyContactPhone: text("emergencyContactPhone"),
+  // Terms, consent & signature
+  agreedTerms: boolean("agreedTerms").notNull().default(false),
+  consentMedia: boolean("consentMedia").notNull().default(false),
+  signatureData: text("signatureData"),
+  signedName: text("signedName"),
+  signedAt: timestamp("signedAt"),
+  contractUrl: text("contractUrl"),
   // Communication preferences
   prefEmail: boolean("prefEmail").notNull().default(true),
   prefWhatsapp: boolean("prefWhatsapp").notNull().default(false),
@@ -141,3 +164,4 @@ export const enrollments = pgTable("enrollments", {
 export type Enrollment = typeof enrollments.$inferSelect
 export type Club = typeof clubs.$inferSelect
 export type ClubSlot = typeof clubSlots.$inferSelect
+export type PackageRow = typeof packages.$inferSelect
