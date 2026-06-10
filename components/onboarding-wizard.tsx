@@ -135,8 +135,8 @@ export function OnboardingWizard({
             <CardDescription>Choose the channels you&apos;d like to hear from us on.</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
-            {channelToggles.map((t) => (
-              <ToggleRow key={t.key} {...t} checked={prefs[t.key]} onChange={() => toggle(t.key)} />
+            {channelToggles.map(({ key, ...t }) => (
+              <ToggleRow key={key} {...t} checked={prefs[key]} onChange={() => toggle(key)} />
             ))}
             <div className="mt-2 flex gap-3">
               <Button variant="ghost" onClick={() => setStep(0)}>
@@ -162,8 +162,8 @@ export function OnboardingWizard({
             <CardDescription>Pick the updates you&apos;d like to receive. Change these anytime.</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
-            {topicToggles.map((t) => (
-              <ToggleRow key={t.key} {...t} checked={prefs[t.key]} onChange={() => toggle(t.key)} />
+            {topicToggles.map(({ key, ...t }) => (
+              <ToggleRow key={key} {...t} checked={prefs[key]} onChange={() => toggle(key)} />
             ))}
             <div className="mt-2 flex gap-3">
               <Button variant="ghost" onClick={() => setStep(1)} disabled={saving}>

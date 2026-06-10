@@ -61,12 +61,18 @@ export default async function PortalLayout({ children }: { children: React.React
             <Logo inverted />
           </Link>
           <Sheet>
-            <SheetTrigger asChild>
-              <Button variant="ghost" size="icon" className="text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground">
-                <Menu />
-                <span className="sr-only">Open menu</span>
-              </Button>
-            </SheetTrigger>
+            <SheetTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                >
+                  <Menu />
+                  <span className="sr-only">Open menu</span>
+                </Button>
+              }
+            />
             <SheetContent side="left" className="w-72 border-sidebar-border bg-sidebar p-0">
               <SheetTitle className="sr-only">Navigation</SheetTitle>
               <div className="flex h-16 items-center border-b border-sidebar-border px-5">

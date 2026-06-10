@@ -191,7 +191,7 @@ export function EnrollmentForm({ defaultPackage }: Props) {
             </div>
             <Field>
               <FieldLabel htmlFor="club">Preferred club</FieldLabel>
-              <Select value={form.club} onValueChange={(v) => set("club", v)}>
+              <Select value={form.club} onValueChange={(v) => set("club", v ?? "")}>
                 <SelectTrigger id="club">
                   <SelectValue placeholder="Select a club" />
                 </SelectTrigger>

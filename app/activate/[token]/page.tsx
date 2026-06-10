@@ -40,8 +40,8 @@ export default async function ActivatePage({
                 <h1 className="font-heading text-xl font-bold">Link unavailable</h1>
                 <p className="mt-1 text-sm text-muted-foreground">{info.error}</p>
               </div>
-              <Button asChild variant="outline" className="w-full bg-transparent">
-                <Link href="/sign-in">Go to sign in</Link>
+              <Button render={<Link href="/sign-in" />} variant="outline" className="w-full bg-transparent">
+                Go to sign in
               </Button>
             </CardContent>
           </Card>

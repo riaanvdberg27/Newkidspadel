@@ -205,7 +205,7 @@ export function AdminDashboard({
                             </Badge>
                           </TableCell>
                           <TableCell>
-                            <Select value={e.status} onValueChange={(v) => changeStatus(e.id, v)} disabled={isPending}>
+                            <Select value={e.status} onValueChange={(v) => changeStatus(e.id, v ?? "")} disabled={isPending}>
                               <SelectTrigger className="w-36">
                                 <SelectValue />
                               </SelectTrigger>

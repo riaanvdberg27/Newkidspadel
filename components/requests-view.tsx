@@ -69,7 +69,7 @@ export function RequestsView({ requests }: { requests: RequestRow[] }) {
             <FieldGroup>
               <Field>
                 <FieldLabel htmlFor="type">Request type</FieldLabel>
-                <Select value={type} onValueChange={setType}>
+                <Select value={type} onValueChange={(v) => setType(v ?? "")}>
                   <SelectTrigger id="type">
                     <SelectValue />
                   </SelectTrigger>
