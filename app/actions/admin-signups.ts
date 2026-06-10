@@ -62,8 +62,8 @@ function priceFor(packageName: string): number {
   return 0
 }
 
-/** Regenerate the contract PDF for a signup and store it in Blob; returns the URL. */
-export async function regenerateContract(id: number): Promise<{ url: string }> {
+/** Regenerate the contract PDF for a signup and store it in Blob; returns the blob pathname. */
+export async function regenerateContract(id: number): Promise<{ pathname: string }> {
   await requireAdmin()
   const r = await loadEnrollment(id)
   const slotLabel =
@@ -90,12 +90,13 @@ export async function regenerateContract(id: number): Promise<{ url: string }> {
   })
 
   const blob = await put(`contracts/${r.referenceNumber}.pdf`, Buffer.from(pdf), {
-    access: "public",
+    access: "private",
     contentType: "application/pdf",
     addRandomSuffix: true,
   })
-  await db.update(enrollments).set({ contractUrl: blob.url }).where(eq(enrollments.id, id))
-  return { url: blob.url }
+  // Persist the blob pathname; the file is served via an authenticated admin route.
+  await db.update(enrollments).set({ contractUrl: blob.pathname }).where(eq(enrollments.id, id))
+  return { pathname: blob.pathname }
 }
 
 /** Resend the welcome email (with the contract) for an existing signup. */

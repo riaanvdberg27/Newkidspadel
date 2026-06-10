@@ -15,17 +15,21 @@ export function AdminSignupsManager({ initialSignups }: { initialSignups: AdminS
     setTimeout(() => setToast((t) => (t?.id === id ? null : t)), 4000)
   }
 
+  function openContract(pathname: string) {
+    window.open(`/api/admin/contract?pathname=${encodeURIComponent(pathname)}`, "_blank")
+  }
+
   function handleContract(s: AdminSignup) {
     if (s.contractUrl) {
-      window.open(s.contractUrl, "_blank")
+      openContract(s.contractUrl)
       return
     }
     setBusyId(s.id)
     startTransition(async () => {
       try {
-        const { url } = await regenerateContract(s.id)
-        setSignups((prev) => prev.map((p) => (p.id === s.id ? { ...p, contractUrl: url } : p)))
-        window.open(url, "_blank")
+        const { pathname } = await regenerateContract(s.id)
+        setSignups((prev) => prev.map((p) => (p.id === s.id ? { ...p, contractUrl: pathname } : p)))
+        openContract(pathname)
       } catch {
         flash(s.id, false, "Could not generate contract")
       } finally {

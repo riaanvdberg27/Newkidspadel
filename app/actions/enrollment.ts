@@ -129,11 +129,13 @@ export async function createEnrollment(input: EnrollmentInput) {
     })
 
     const blob = await put(`contracts/${referenceNumber}.pdf`, Buffer.from(contractPdf), {
-      access: "public",
+      access: "private",
       contentType: "application/pdf",
       addRandomSuffix: true,
     })
-    contractUrl = blob.url
+    // Store the blob pathname (not a public URL). The contract is served to
+    // admins through an authenticated route, since it contains banking details.
+    contractUrl = blob.pathname
 
     if (enrollmentId != null) {
       await db.update(enrollments).set({ contractUrl }).where(eq(enrollments.id, enrollmentId))
