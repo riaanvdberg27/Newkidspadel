@@ -1,7 +1,9 @@
 import { redirect } from "next/navigation"
 import { isAdminAuthenticated } from "@/lib/admin-auth"
 import { getAllClubsAdmin, adminLogout } from "@/app/actions/admin"
-import { AdminClubManager } from "@/components/admin/admin-club-manager"
+import { getAllPackagesAdmin } from "@/app/actions/packages"
+import { getAllSignups } from "@/app/actions/admin-signups"
+import { AdminTabs } from "@/components/admin/admin-tabs"
 
 export const metadata = {
   title: "Admin Dashboard | Next Gen Padel",
@@ -12,7 +14,11 @@ export default async function AdminPage() {
     redirect("/admin/login")
   }
 
-  const clubs = await getAllClubsAdmin()
+  const [clubs, packages, signups] = await Promise.all([
+    getAllClubsAdmin(),
+    getAllPackagesAdmin(),
+    getAllSignups(),
+  ])
 
   return (
     <main className="min-h-screen bg-background">
@@ -20,7 +26,7 @@ export default async function AdminPage() {
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-4 py-6">
           <div>
             <h1 className="text-2xl font-extrabold">Admin Dashboard</h1>
-            <p className="text-sm text-navy-foreground/80">Manage clubs and weekly slot availability</p>
+            <p className="text-sm text-navy-foreground/80">Manage clubs, packages, slots and signups</p>
           </div>
           <form action={adminLogout}>
             <button
@@ -34,7 +40,7 @@ export default async function AdminPage() {
       </header>
 
       <section className="mx-auto max-w-6xl px-4 py-10">
-        <AdminClubManager initialClubs={clubs} />
+        <AdminTabs clubs={clubs} packages={packages} signups={signups} />
       </section>
     </main>
   )
