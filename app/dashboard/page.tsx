@@ -3,6 +3,7 @@ import { headers } from "next/headers"
 import { auth } from "@/lib/auth"
 import { getMyEnrollments } from "@/app/actions/enrollment"
 import { SignOutButton } from "@/components/sign-out-button"
+import { ChangeSlot } from "@/components/change-slot"
 import { CalendarDays, Mail, Phone, ShieldCheck, User } from "lucide-react"
 
 const STATUS_STYLES: Record<string, string> = {
@@ -72,6 +73,12 @@ export default async function DashboardPage() {
                 <dl className="mt-4 space-y-2 text-sm">
                   <Detail icon={ShieldCheck} label="Reference" value={e.referenceNumber} />
                   <Detail icon={CalendarDays} label="Club" value={e.club} />
+                  <ChangeSlot
+                    enrollmentId={e.id}
+                    clubId={e.clubId}
+                    weekday={e.slotWeekday}
+                    hour={e.slotHour}
+                  />
                   <Detail icon={User} label="Age" value={`${e.childAge} years`} />
                   <Detail icon={Mail} label="Email" value={e.parentEmail} />
                   <Detail icon={Phone} label="Mobile" value={e.parentMobile} />

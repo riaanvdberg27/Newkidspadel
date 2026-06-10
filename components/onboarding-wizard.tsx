@@ -265,6 +265,74 @@ export function OnboardingWizard({ clubs }: { clubs: Club[] }) {
           </div>
         ) : step === 3 ? (
           <div>
+            <h2 className="text-xl font-bold text-navy">Debit Order Details</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Monthly fees are collected by debit order. Please provide the account to be debited.
+            </p>
+            <div className="mt-6 grid gap-4 sm:grid-cols-2">
+              <Field
+                label="Account Holder Name"
+                value={debit.accountHolder}
+                onChange={(v) => setDebit({ ...debit, accountHolder: v })}
+              />
+              <label className="block">
+                <span className="block text-sm font-semibold text-navy">Bank Name</span>
+                <select
+                  value={debit.bankName}
+                  onChange={(e) => setDebit({ ...debit, bankName: e.target.value })}
+                  className="mt-2 w-full rounded-md border border-border bg-card px-3 py-2 outline-none focus:border-lime"
+                >
+                  <option value="">Select your bank</option>
+                  {BANKS.map((b) => (
+                    <option key={b} value={b}>
+                      {b}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <Field
+                label="Account Number"
+                type="text"
+                value={debit.accountNumber}
+                onChange={(v) => setDebit({ ...debit, accountNumber: v.replace(/[^0-9]/g, "") })}
+                placeholder="Digits only"
+              />
+              <label className="block">
+                <span className="block text-sm font-semibold text-navy">Account Type</span>
+                <select
+                  value={debit.accountType}
+                  onChange={(e) => setDebit({ ...debit, accountType: e.target.value })}
+                  className="mt-2 w-full rounded-md border border-border bg-card px-3 py-2 outline-none focus:border-lime"
+                >
+                  <option value="Cheque">Cheque / Current</option>
+                  <option value="Savings">Savings</option>
+                </select>
+              </label>
+              <label className="block">
+                <span className="block text-sm font-semibold text-navy">Day of Debit Order</span>
+                <select
+                  value={debit.debitDay}
+                  onChange={(e) => setDebit({ ...debit, debitDay: e.target.value })}
+                  className="mt-2 w-full rounded-md border border-border bg-card px-3 py-2 outline-none focus:border-lime"
+                >
+                  {Array.from({ length: 28 }, (_, i) => i + 1).map((d) => (
+                    <option key={d} value={String(d)}>
+                      {d}
+                      {d === 1 || d === 21 ? "st" : d === 2 || d === 22 ? "nd" : d === 3 || d === 23 ? "rd" : "th"} of each
+                      month
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <StepNav
+              onBack={() => setStep(2)}
+              onNext={() => setStep(4)}
+              nextDisabled={!debit.accountHolder || !debit.bankName || debit.accountNumber.length < 5}
+            />
+          </div>
+        ) : step === 4 ? (
+          <div>
             <h2 className="text-xl font-bold text-navy">Communication Preferences</h2>
             <p className="mt-1 text-sm text-muted-foreground">Choose how you&apos;d like to hear from us</p>
             <div className="mt-6 space-y-2">
@@ -287,7 +355,7 @@ export function OnboardingWizard({ clubs }: { clubs: Club[] }) {
                 onChange={(v) => setPrefs({ ...prefs, prefHolidayClinics: v })}
               />
             </div>
-            <StepNav onBack={() => setStep(2)} onNext={() => setStep(4)} />
+            <StepNav onBack={() => setStep(3)} onNext={() => setStep(5)} />
           </div>
         ) : (
           <div>
@@ -295,13 +363,17 @@ export function OnboardingWizard({ clubs }: { clubs: Club[] }) {
             <p className="mt-1 text-sm text-muted-foreground">Check your details, then create your account to finish.</p>
             <dl className="mt-6 space-y-2 rounded-card border border-border bg-card p-5 text-sm shadow-sm">
               <Row label="Package" value={`${selectedPackage.name} (R${selectedPackage.price}/month)`} />
-              <Row label="Club" value={club ?? ""} />
-              <Row label="Preferred Time" value={timeSlot ?? ""} />
+              <Row label="Club" value={selectedClub?.name ?? ""} />
+              <Row label="Time Slot" value={slot ? formatSlot(slot.weekday, slot.hour) : ""} />
               <Row label="Child" value={`${child.name} (age ${child.age})`} />
               <Row label="Parent" value={parent.name} />
               <Row label="Email" value={parent.email} />
               <Row label="Mobile" value={parent.mobile} />
               <Row label="Emergency Contact" value={`${emergency.name} — ${emergency.phone}`} />
+              <Row
+                label="Debit Order"
+                value={`${debit.bankName} ••${debit.accountNumber.slice(-4)} (${debit.accountType}), day ${debit.debitDay}`}
+              />
             </dl>
 
             {error && (
@@ -312,7 +384,7 @@ export function OnboardingWizard({ clubs }: { clubs: Club[] }) {
 
             <div className="mt-8 flex items-center justify-between gap-4">
               <button
-                onClick={() => setStep(3)}
+                onClick={() => setStep(4)}
                 className="rounded-md border border-border px-5 py-2.5 font-semibold text-navy transition-colors hover:bg-muted"
               >
                 Back
