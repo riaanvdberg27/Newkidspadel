@@ -11,13 +11,15 @@ export default function HomePage() {
     <main>
       {/* Hero */}
       <section className="bg-navy text-navy-foreground">
-        <div className="relative h-64 w-full sm:h-80 md:h-[420px]">
+        <div className="mx-auto w-full max-w-6xl">
           <Image
             src="/images/hero-banner.png"
             alt="Next Gen Padel Academy - Boy and Girl mascots high-fiving on a padel court. Play. Learn. Grow."
-            fill
+            width={1414}
+            height={780}
             priority
-            className="object-cover object-center"
+            sizes="(max-width: 1152px) 100vw, 1152px"
+            className="h-auto w-full object-contain"
           />
         </div>
         <div className="mx-auto max-w-3xl px-4 py-12 text-center">

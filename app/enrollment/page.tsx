@@ -1,7 +1,9 @@
 import { Suspense } from "react"
 import { OnboardingWizard } from "@/components/onboarding-wizard"
+import { getPublishedClubs } from "@/app/actions/clubs"
 
-export default function EnrollmentPage() {
+export default async function EnrollmentPage() {
+  const clubs = await getPublishedClubs()
   return (
     <main>
       <section className="bg-navy text-navy-foreground">
@@ -15,7 +17,7 @@ export default function EnrollmentPage() {
       </section>
 
       <Suspense fallback={<div className="py-20 text-center text-muted-foreground">Loading…</div>}>
-        <OnboardingWizard />
+        <OnboardingWizard clubs={clubs} />
       </Suspense>
     </main>
   )

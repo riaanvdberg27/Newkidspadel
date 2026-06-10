@@ -5,17 +5,26 @@ import Link from "next/link"
 import { useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Check } from "lucide-react"
-import { PACKAGES, ENROLLMENT_CLUBS, type Package } from "@/lib/site-data"
+import { PACKAGES, type Package } from "@/lib/site-data"
+import { formatSlot } from "@/lib/slots"
+import type { Club } from "@/lib/db/schema"
+import { SlotPicker, type SelectedSlot } from "@/components/slot-picker"
 import { authClient } from "@/lib/auth-client"
 import { createEnrollment } from "@/app/actions/enrollment"
 
-const STEPS = ["Club & Schedule", "Child", "Parent Account", "Preferences", "Review"]
+const STEPS = ["Club & Schedule", "Child", "Parent Account", "Debit Order", "Preferences", "Review"]
 
-const TIME_SLOTS = [
-  "Weekday Afternoon (15:00 - 17:00)",
-  "Weekday Evening (17:00 - 19:00)",
-  "Saturday Morning (08:00 - 12:00)",
-  "Saturday Afternoon (12:00 - 16:00)",
+const BANKS = [
+  "Absa",
+  "Capitec",
+  "Discovery Bank",
+  "FNB",
+  "Investec",
+  "Nedbank",
+  "Standard Bank",
+  "TymeBank",
+  "African Bank",
+  "Other",
 ]
 
 type Prefs = {
@@ -27,7 +36,15 @@ type Prefs = {
   prefHolidayClinics: boolean
 }
 
-export function OnboardingWizard() {
+type DebitOrder = {
+  accountHolder: string
+  bankName: string
+  accountNumber: string
+  accountType: string
+  debitDay: string
+}
+
+export function OnboardingWizard({ clubs }: { clubs: Club[] }) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const initialPackage = PACKAGES.find((p) => p.id === searchParams.get("package")) ?? null
@@ -36,11 +53,18 @@ export function OnboardingWizard() {
   const [step, setStep] = useState(0)
 
   // Step data
-  const [club, setClub] = useState<string | null>(null)
-  const [timeSlot, setTimeSlot] = useState<string | null>(null)
+  const [clubId, setClubId] = useState<number | null>(null)
+  const [slot, setSlot] = useState<SelectedSlot | null>(null)
   const [child, setChild] = useState({ name: "", dob: "", age: "" })
   const [parent, setParent] = useState({ name: "", email: "", mobile: "", password: "" })
   const [emergency, setEmergency] = useState({ name: "", phone: "" })
+  const [debit, setDebit] = useState<DebitOrder>({
+    accountHolder: "",
+    bankName: "",
+    accountNumber: "",
+    accountType: "Cheque",
+    debitDay: "1",
+  })
   const [prefs, setPrefs] = useState<Prefs>({
     prefEmail: true,
     prefWhatsapp: false,
@@ -53,6 +77,8 @@ export function OnboardingWizard() {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [reference, setReference] = useState<string | null>(null)
+
+  const selectedClub = clubs.find((c) => c.id === clubId) ?? null
 
   if (!selectedPackage) {
     return <PackagePicker onSelect={setSelectedPackage} />
@@ -88,7 +114,15 @@ export function OnboardingWizard() {
         childDob: child.dob,
         childAge: Number(child.age),
         packageName: selectedPackage.name,
-        club: club ?? "",
+        club: selectedClub?.name ?? "",
+        clubId: clubId,
+        slotWeekday: slot?.weekday ?? null,
+        slotHour: slot?.hour ?? null,
+        debitAccountHolder: debit.accountHolder,
+        debitBankName: debit.bankName,
+        debitAccountNumber: debit.accountNumber,
+        debitAccountType: debit.accountType,
+        debitDay: Number(debit.debitDay),
         emergencyContactName: emergency.name,
         emergencyContactPhone: emergency.phone,
         ...prefs,
@@ -148,12 +182,15 @@ export function OnboardingWizard() {
             <h2 className="text-xl font-bold text-navy">Choose Your Club &amp; Schedule</h2>
             <p className="mt-1 text-sm text-muted-foreground">Select the affiliated club nearest to you</p>
             <div className="mt-6 space-y-3">
-              {ENROLLMENT_CLUBS.map((c) => (
+              {clubs.map((c) => (
                 <button
-                  key={c.name}
-                  onClick={() => setClub(c.name)}
+                  key={c.id}
+                  onClick={() => {
+                    setClubId(c.id)
+                    setSlot(null)
+                  }}
                   className={`w-full rounded-card border p-4 text-left transition-colors ${
-                    club === c.name ? "border-lime bg-lime/10" : "border-border bg-card hover:border-lime/50"
+                    clubId === c.id ? "border-lime bg-lime/10" : "border-border bg-card hover:border-lime/50"
                   }`}
                 >
                   <h3 className="font-bold text-navy">{c.name}</h3>
@@ -161,23 +198,16 @@ export function OnboardingWizard() {
                 </button>
               ))}
             </div>
-            <div className="mt-6">
-              <p className="block text-sm font-semibold text-navy">Preferred Time Slot</p>
-              <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                {TIME_SLOTS.map((slot) => (
-                  <button
-                    key={slot}
-                    onClick={() => setTimeSlot(slot)}
-                    className={`rounded-md border p-3 text-left text-sm transition-colors ${
-                      timeSlot === slot ? "border-lime bg-lime/10" : "border-border bg-card hover:border-lime/50"
-                    }`}
-                  >
-                    {slot}
-                  </button>
-                ))}
+            {clubId && (
+              <div className="mt-6">
+                <p className="block text-sm font-semibold text-navy">Available Time Slots</p>
+                <p className="mb-3 text-xs text-muted-foreground">
+                  Pick a day and time. Only times with open places are selectable.
+                </p>
+                <SlotPicker clubId={clubId} selected={slot} onSelect={setSlot} />
               </div>
-            </div>
-            <StepNav onNext={() => setStep(1)} nextDisabled={!club || !timeSlot} />
+            )}
+            <StepNav onNext={() => setStep(1)} nextDisabled={!clubId || !slot} />
           </div>
         ) : step === 1 ? (
           <div>

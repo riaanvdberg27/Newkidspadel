@@ -5,6 +5,8 @@ import {
   boolean,
   integer,
   serial,
+  jsonb,
+  unique,
 } from "drizzle-orm/pg-core"
 
 // ---- Better Auth tables (camelCase columns to match Better Auth defaults) ----
@@ -61,6 +63,39 @@ export const verification = pgTable("verification", {
 
 // ---- App tables ----
 
+export const clubs = pgTable("clubs", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  location: text("location").notNull(),
+  description: text("description"),
+  address: text("address").notNull(),
+  phone: text("phone").notNull(),
+  hours: text("hours").notNull(),
+  features: jsonb("features").notNull().default([]),
+  image: text("image"),
+  published: boolean("published").notNull().default(true),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+  updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+})
+
+export const clubSlots = pgTable(
+  "club_slots",
+  {
+    id: serial("id").primaryKey(),
+    clubId: integer("clubId").notNull(),
+    // 0 = Sunday ... 6 = Saturday
+    weekday: integer("weekday").notNull(),
+    // 8 - 18 (24h)
+    hour: integer("hour").notNull(),
+    capacity: integer("capacity").notNull().default(0),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+  },
+  (t) => ({
+    uniqueSlot: unique("club_slots_unique").on(t.clubId, t.weekday, t.hour),
+  }),
+)
+
 export const enrollments = pgTable("enrollments", {
   id: serial("id").primaryKey(),
   userId: text("userId").notNull(),
@@ -76,6 +111,15 @@ export const enrollments = pgTable("enrollments", {
   // Program
   packageName: text("packageName").notNull(),
   club: text("club").notNull(),
+  clubId: integer("clubId"),
+  slotWeekday: integer("slotWeekday"),
+  slotHour: integer("slotHour"),
+  // Debit order
+  debitAccountHolder: text("debitAccountHolder"),
+  debitBankName: text("debitBankName"),
+  debitAccountNumber: text("debitAccountNumber"),
+  debitAccountType: text("debitAccountType"),
+  debitDay: integer("debitDay"),
   // Emergency contact
   emergencyContactName: text("emergencyContactName"),
   emergencyContactPhone: text("emergencyContactPhone"),
@@ -95,3 +139,5 @@ export const enrollments = pgTable("enrollments", {
 })
 
 export type Enrollment = typeof enrollments.$inferSelect
+export type Club = typeof clubs.$inferSelect
+export type ClubSlot = typeof clubSlots.$inferSelect
