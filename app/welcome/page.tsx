@@ -60,9 +60,11 @@ export default async function WelcomePage({
             {activation && <CopyActivation url={activation} />}
 
             {activation && (
-              <Button asChild size="lg" className="w-full">
-                <Link href={new URL(activation).pathname}>Activate your parent portal</Link>
-              </Button>
+              <Button
+                render={<Link href={new URL(activation).pathname}>Activate your parent portal</Link>}
+                size="lg"
+                className="w-full"
+              />
             )}
           </CardContent>
         </Card>

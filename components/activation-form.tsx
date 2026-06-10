@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Field, FieldGroup, FieldLabel, FieldDescription } from "@/components/ui/field"
 import { Badge } from "@/components/ui/badge"
 import { activateAccount } from "@/app/actions/activation"
+import { authClient } from "@/lib/auth-client"
 import { toast } from "sonner"
 import { Loader2 } from "lucide-react"
 import Link from "next/link"
@@ -38,9 +39,7 @@ export function ActivationForm({
           <CardDescription>This account has been set up. Please sign in to continue.</CardDescription>
         </CardHeader>
         <CardContent>
-          <Button asChild className="w-full">
-            <Link href="/sign-in">Go to sign in</Link>
-          </Button>
+          <Button render={<Link href="/sign-in">Go to sign in</Link>} className="w-full" />
         </CardContent>
       </Card>
     )
@@ -53,12 +52,23 @@ export function ActivationForm({
 
     setLoading(true)
     const result = await activateAccount(token, password)
-    setLoading(false)
 
     if (!result.ok) {
+      setLoading(false)
       toast.error(result.error)
       return
     }
+
+    // Sign in on the client so the session cookie is set in the browser.
+    const signIn = await authClient.signIn.email({ email, password })
+    setLoading(false)
+
+    if (signIn.error) {
+      toast.success("Account activated! Please sign in.")
+      router.push("/sign-in")
+      return
+    }
+
     toast.success("Account activated! Welcome to your portal.")
     router.push("/portal")
     router.refresh()

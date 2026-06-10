@@ -54,17 +54,13 @@ export default function HomePage() {
               portal to manage every step of their journey.
             </p>
             <div className="flex flex-col gap-3 sm:flex-row">
-              <Button asChild size="lg" className="text-base">
-                <Link href="/enroll">Start enrollment</Link>
-              </Button>
+              <Button render={<Link href="/enroll">Start enrollment</Link>} size="lg" className="text-base" />
               <Button
-                asChild
+                render={<Link href="#programmes">View programmes</Link>}
                 size="lg"
                 variant="outline"
                 className="border-sidebar-border bg-transparent text-base text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground"
-              >
-                <Link href="#programmes">View programmes</Link>
-              </Button>
+              />
             </div>
             <div className="flex items-center gap-6 pt-2 text-sm text-sidebar-foreground/60">
               <span className="flex items-center gap-2">
@@ -161,9 +157,11 @@ export default function HomePage() {
                       Parent portal access
                     </li>
                   </ul>
-                  <Button asChild className="mt-2 w-full" variant={i === 1 ? "default" : "outline"}>
-                    <Link href={`/enroll?package=${pkg.id}`}>Enroll in {pkg.name.split(" — ")[0]}</Link>
-                  </Button>
+                  <Button
+                    render={<Link href={`/enroll?package=${pkg.id}`}>Enroll in {pkg.name.split(" — ")[0]}</Link>}
+                    className="mt-2 w-full"
+                    variant={i === 1 ? "default" : "outline"}
+                  />
                 </CardContent>
               </Card>
             ))}
@@ -198,9 +196,7 @@ export default function HomePage() {
                 </div>
               ))}
             </div>
-            <Button asChild size="lg" className="w-fit">
-              <Link href="/enroll">Enroll your child today</Link>
-            </Button>
+            <Button render={<Link href="/enroll">Enroll your child today</Link>} size="lg" className="w-fit" />
           </div>
         </div>
       </section>
@@ -214,9 +210,12 @@ export default function HomePage() {
           <p className="max-w-md text-pretty text-primary-foreground/80">
             Join a community where every child is encouraged to play, learn and grow — on and off the court.
           </p>
-          <Button asChild size="lg" variant="secondary" className="text-base">
-            <Link href="/enroll">Begin enrollment</Link>
-          </Button>
+          <Button
+            render={<Link href="/enroll">Begin enrollment</Link>}
+            size="lg"
+            variant="secondary"
+            className="text-base"
+          />
         </div>
       </section>
 

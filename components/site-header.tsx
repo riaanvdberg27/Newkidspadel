@@ -10,12 +10,13 @@ export function SiteHeader() {
           <Logo />
         </Link>
         <nav className="flex items-center gap-2 sm:gap-3">
-          <Button asChild variant="ghost" size="sm" className="hidden sm:inline-flex">
-            <Link href="/sign-in">Parent sign in</Link>
-          </Button>
-          <Button asChild size="sm">
-            <Link href="/enroll">Enroll now</Link>
-          </Button>
+          <Button
+            render={<Link href="/sign-in">Parent sign in</Link>}
+            variant="ghost"
+            size="sm"
+            className="hidden sm:inline-flex"
+          />
+          <Button render={<Link href="/enroll">Enroll now</Link>} size="sm" />
         </nav>
       </div>
     </header>

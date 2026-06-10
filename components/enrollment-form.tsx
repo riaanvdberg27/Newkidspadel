@@ -16,7 +16,7 @@ import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
-import { CLUBS, PACKAGES } from "@/lib/academy"
+import { CLUBS, PACKAGES, getClubById } from "@/lib/academy"
 import { submitEnrollment } from "@/app/actions/enrollment"
 import { toast } from "sonner"
 import { CheckCircle2, ChevronLeft, ChevronRight, Loader2 } from "lucide-react"
@@ -38,7 +38,7 @@ export function EnrollmentForm({ defaultPackage }: Props) {
     parentMobile: "",
     emergencyContactName: "",
     emergencyContactPhone: "",
-    club: CLUBS[0] as string,
+    club: CLUBS[0].id,
     packageId: defaultPackage && PACKAGES.some((p) => p.id === defaultPackage) ? defaultPackage : PACKAGES[1].id,
   })
 
@@ -198,8 +198,8 @@ export function EnrollmentForm({ defaultPackage }: Props) {
                 <SelectContent>
                   <SelectGroup>
                     {CLUBS.map((c) => (
-                      <SelectItem key={c} value={c}>
-                        {c}
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.name}
                       </SelectItem>
                     ))}
                   </SelectGroup>
@@ -247,7 +247,7 @@ export function EnrollmentForm({ defaultPackage }: Props) {
                 <ReviewRow label="Parent" value={form.parentName} />
                 <ReviewRow label="Email" value={form.parentEmail} />
                 <ReviewRow label="Mobile" value={form.parentMobile} />
-                <ReviewRow label="Club" value={form.club} />
+                <ReviewRow label="Club" value={getClubById(form.club)?.name ?? form.club} />
                 <ReviewRow label="Programme" value={selectedPackage?.name ?? ""} />
                 <ReviewRow label="Monthly fee" value={selectedPackage ? `R${selectedPackage.price}` : ""} />
               </dl>

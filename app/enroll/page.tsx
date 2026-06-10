@@ -17,9 +17,7 @@ export default async function EnrollPage({
           <Link href="/" aria-label="Next Gen Padel Academy home">
             <Logo />
           </Link>
-          <Button asChild variant="ghost" size="sm">
-            <Link href="/sign-in">Sign in</Link>
-          </Button>
+          <Button render={<Link href="/sign-in">Sign in</Link>} variant="ghost" size="sm" />
         </div>
       </header>
 

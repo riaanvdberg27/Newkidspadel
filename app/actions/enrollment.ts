@@ -2,7 +2,7 @@
 
 import { db } from "@/lib/db"
 import { enrollments, activationTokens, notifications, activityLogs } from "@/lib/db/schema"
-import { calculateAge, generateReference, getPackageById, ACADEMY } from "@/lib/academy"
+import { calculateAge, generateReference, getPackageById, getClubById, ACADEMY } from "@/lib/academy"
 import { sendWelcomeEmail } from "@/lib/email"
 import { sendWhatsAppConfirmation } from "@/lib/whatsapp"
 import { randomBytes } from "crypto"
@@ -39,6 +39,10 @@ export async function submitEnrollment(formData: FormData): Promise<EnrollmentRe
 
   const pkg = getPackageById(packageId)
   if (!pkg) return { ok: false, error: "Please select a valid programme." }
+
+  const clubRecord = getClubById(club)
+  if (!clubRecord) return { ok: false, error: "Please select a valid club." }
+  const clubName = clubRecord.name
 
   const childAge = calculateAge(childDob)
   if (isNaN(childAge) || childAge < 3 || childAge > 18) {
@@ -89,7 +93,7 @@ export async function submitEnrollment(formData: FormData): Promise<EnrollmentRe
     parentName,
     childName,
     packageName: pkg.name,
-    club,
+    club: clubName,
     reference,
     activationUrl,
   })

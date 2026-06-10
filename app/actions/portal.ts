@@ -18,6 +18,27 @@ export async function getMyEnrollment() {
   return row ?? null
 }
 
+export async function getDashboardData() {
+  const session = await getSession()
+  if (!session?.user) return null
+  const userId = session.user.id
+
+  const [enrollment] = await db.select().from(enrollments).where(eq(enrollments.userId, userId))
+  const notes = await db
+    .select()
+    .from(notifications)
+    .where(eq(notifications.userId, userId))
+    .orderBy(desc(notifications.createdAt))
+  const anns = await db.select().from(announcements).orderBy(desc(announcements.createdAt)).limit(3)
+
+  return {
+    user: session.user,
+    enrollment: enrollment ?? null,
+    notifications: notes,
+    announcements: anns,
+  }
+}
+
 export async function getMyNotifications() {
   const userId = await getUserId()
   return db
