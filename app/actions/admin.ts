@@ -1,0 +1,160 @@
+"use server"
+
+import { db } from "@/lib/db"
+import { clubs, clubSlots } from "@/lib/db/schema"
+import { and, asc, eq } from "drizzle-orm"
+import { revalidatePath } from "next/cache"
+import { redirect } from "next/navigation"
+import {
+  clearAdminSession,
+  credentialsValid,
+  isAdminAuthenticated,
+  setAdminSession,
+} from "@/lib/admin-auth"
+import { SLOT_HOURS } from "@/lib/slots"
+import type { ClubSlot } from "@/lib/db/schema"
+
+async function requireAdmin() {
+  if (!(await isAdminAuthenticated())) {
+    throw new Error("Unauthorized")
+  }
+}
+
+export async function adminLogin(_prev: { error?: string } | undefined, formData: FormData) {
+  const username = String(formData.get("username") ?? "")
+  const password = String(formData.get("password") ?? "")
+  if (!credentialsValid(username, password)) {
+    return { error: "Invalid username or password." }
+  }
+  await setAdminSession()
+  redirect("/admin")
+}
+
+export async function adminLogout() {
+  await clearAdminSession()
+  redirect("/admin/login")
+}
+
+export type ClubInput = {
+  name: string
+  location: string
+  description: string
+  address: string
+  phone: string
+  hours: string
+  features: string[]
+  image: string | null
+  published: boolean
+}
+
+export async function createClub(input: ClubInput) {
+  await requireAdmin()
+  const rows = await db
+    .insert(clubs)
+    .values({
+      name: input.name,
+      location: input.location,
+      description: input.description || null,
+      address: input.address,
+      phone: input.phone,
+      hours: input.hours,
+      features: input.features,
+      image: input.image || null,
+      published: input.published,
+    })
+    .returning({ id: clubs.id })
+  revalidatePath("/admin")
+  revalidatePath("/")
+  return { id: rows[0].id }
+}
+
+export async function updateClub(id: number, input: ClubInput) {
+  await requireAdmin()
+  await db
+    .update(clubs)
+    .set({
+      name: input.name,
+      location: input.location,
+      description: input.description || null,
+      address: input.address,
+      phone: input.phone,
+      hours: input.hours,
+      features: input.features,
+      image: input.image || null,
+      published: input.published,
+      updatedAt: new Date(),
+    })
+    .where(eq(clubs.id, id))
+  revalidatePath("/admin")
+  revalidatePath("/")
+  return { success: true }
+}
+
+export async function deleteClub(id: number) {
+  await requireAdmin()
+  await db.delete(clubSlots).where(eq(clubSlots.clubId, id))
+  await db.delete(clubs).where(eq(clubs.id, id))
+  revalidatePath("/admin")
+  revalidatePath("/")
+  return { success: true }
+}
+
+/** Full slot grid (weekday x hour) for a club, including hours with 0 capacity. */
+export async function getClubSlots(clubId: number): Promise<ClubSlot[]> {
+  await requireAdmin()
+  return db
+    .select()
+    .from(clubSlots)
+    .where(eq(clubSlots.clubId, clubId))
+    .orderBy(asc(clubSlots.weekday), asc(clubSlots.hour))
+}
+
+/** All clubs (published and unpublished) for the admin dashboard. */
+export async function getAllClubsAdmin() {
+  await requireAdmin()
+  return db.select().from(clubs).orderBy(asc(clubs.id))
+}
+
+/** Upsert a single slot's capacity. Capacity 0 removes the slot. */
+export async function setSlotCapacity(input: {
+  clubId: number
+  weekday: number
+  hour: number
+  capacity: number
+}) {
+  await requireAdmin()
+  const capacity = Math.max(0, Math.floor(input.capacity))
+
+  if (!SLOT_HOURS.includes(input.hour as (typeof SLOT_HOURS)[number])) {
+    throw new Error("Invalid hour")
+  }
+
+  const existing = await db
+    .select()
+    .from(clubSlots)
+    .where(
+      and(
+        eq(clubSlots.clubId, input.clubId),
+        eq(clubSlots.weekday, input.weekday),
+        eq(clubSlots.hour, input.hour),
+      ),
+    )
+    .limit(1)
+
+  if (existing.length > 0) {
+    await db
+      .update(clubSlots)
+      .set({ capacity, updatedAt: new Date() })
+      .where(eq(clubSlots.id, existing[0].id))
+  } else if (capacity > 0) {
+    await db.insert(clubSlots).values({
+      clubId: input.clubId,
+      weekday: input.weekday,
+      hour: input.hour,
+      capacity,
+    })
+  }
+
+  revalidatePath("/admin")
+  return { success: true }
+}

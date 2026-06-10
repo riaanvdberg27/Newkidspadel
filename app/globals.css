@@ -1,0 +1,50 @@
+@import "tailwindcss";
+
+@theme inline {
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-navy: var(--navy);
+  --color-navy-foreground: var(--navy-foreground);
+  --color-lime: var(--lime);
+  --color-lime-foreground: var(--lime-foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+
+  --radius-card: var(--radius);
+}
+
+:root {
+  --background: #f4f7f9;
+  --foreground: #06121f;
+
+  /* Brand navy (hero / cards / footer) */
+  --navy: #0a2347;
+  --navy-foreground: #ffffff;
+
+  /* Brand lime green (accents / buttons) */
+  --lime: #8cc63f;
+  --lime-foreground: #0a2347;
+
+  --card: #ffffff;
+  --card-foreground: #06121f;
+
+  --muted: #eef2f5;
+  --muted-foreground: #5b6b7b;
+
+  --border: #e2e8ed;
+
+  --radius: 0.75rem;
+}
+
+@layer base {
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+  }
+}
