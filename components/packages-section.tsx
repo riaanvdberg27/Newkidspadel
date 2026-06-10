@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { Check, ChevronLeft, ChevronRight } from "lucide-react"
 import type { PublicPackage } from "@/app/actions/packages"
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect, useCallback } from "react"
 import useEmblaCarousel from "embla-carousel-react"
 
 export function PackagesSection({ packages }: { packages: PublicPackage[] }) {
@@ -47,14 +47,18 @@ function PackageCarousel({ packages }: { packages: PublicPackage[] }) {
   })
   const [selected, setSelected] = useState(0)
 
-  const scrollPrev = () => {
-    emblaApi?.scrollPrev()
-    setSelected((s) => (s - 1 + packages.length) % packages.length)
-  }
-  const scrollNext = () => {
-    emblaApi?.scrollNext()
-    setSelected((s) => (s + 1) % packages.length)
-  }
+  const onSelect = useCallback(() => {
+    if (emblaApi) setSelected(emblaApi.selectedScrollSnap())
+  }, [emblaApi])
+
+  useEffect(() => {
+    if (!emblaApi) return
+    emblaApi.on("select", onSelect)
+    return () => { emblaApi.off("select", onSelect) }
+  }, [emblaApi, onSelect])
+
+  const scrollPrev = () => emblaApi?.scrollPrev()
+  const scrollNext = () => emblaApi?.scrollNext()
 
   return (
     <div className="mt-10 relative">
