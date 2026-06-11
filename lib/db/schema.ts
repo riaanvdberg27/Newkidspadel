@@ -98,7 +98,7 @@ export const clubs = pgTable("clubs", {
   updatedAt: timestamp("updatedAt").notNull().defaultNow(),
 })
 
-export const AGE_GROUPS = ["5-8", "9-13", "14-18"] as const
+export const AGE_GROUPS = ["5-8", "9-13", "14-17"] as const
 export type AgeGroup = (typeof AGE_GROUPS)[number]
 
 export const clubSlots = pgTable(

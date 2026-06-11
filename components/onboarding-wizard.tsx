@@ -218,7 +218,7 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
                 Select the age group that best fits your child — this determines which time slots are available.
               </p>
               <div className="mt-3 grid grid-cols-3 gap-3">
-                {(["5-8", "9-13", "14-18"] as const).map((ag) => (
+                {(["5-8", "9-13", "14-17"] as const).map((ag) => (
                   <button
                     key={ag}
                     type="button"

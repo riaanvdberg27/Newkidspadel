@@ -39,7 +39,7 @@ export function DobPicker({ value, onChange }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [year, month, day])
 
-  const minYear = currentYear - 18
+  const minYear = currentYear - 17
   const maxYear = currentYear - 4
 
   return (

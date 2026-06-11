@@ -381,7 +381,7 @@ function EditModal({
                 <input
                   type="number"
                   min={1}
-                  max={18}
+                  max={17}
                   value={childAge}
                   onChange={(e) => setChildAge(e.target.value)}
                   className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-lime"

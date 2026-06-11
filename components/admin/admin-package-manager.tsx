@@ -20,7 +20,7 @@ const HOURS = [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]
 const AGE_GROUP_LABELS: Record<AgeGroup, string> = {
   "5-8": "Ages 5 – 8",
   "9-13": "Ages 9 – 13",
-  "14-18": "Ages 14 – 18",
+  "14-17": "Ages 14 – 17",
 }
 
 const EMPTY: PackageInput = {
