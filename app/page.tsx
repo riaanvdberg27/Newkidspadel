@@ -15,18 +15,20 @@ export default async function HomePage() {
     <main>
       {/* Hero */}
       <section className="relative bg-navy overflow-hidden">
-        <div className="mx-auto flex max-w-6xl flex-col items-center px-4 pt-10 pb-0 sm:flex-row sm:items-end sm:gap-0 sm:pt-14 sm:pb-0">
-          {/* Text + CTA — sits above the image on mobile, left on desktop */}
-          <div className="flex-1 text-center sm:text-left text-navy-foreground pb-8 sm:pb-14 sm:pr-8 z-10">
-            <p className="mb-2 text-sm font-bold uppercase tracking-widest text-lime">Next Gen Padel Academy</p>
+        {/* Text — drives the section height; image is layered on top via absolute */}
+        <div className="relative z-10 mx-auto max-w-6xl px-4 py-12 sm:py-16 lg:py-20">
+          <div className="max-w-lg text-center sm:text-left sm:pr-0">
+            <p className="mb-2 text-sm font-bold uppercase tracking-widest text-lime">
+              Next Gen Padel Academy
+            </p>
             <h1 className="text-balance text-4xl font-black leading-tight text-white sm:text-5xl lg:text-6xl">
               Coaching for<br className="hidden sm:block" /> Boys &amp; Girls
             </h1>
             <p className="mt-3 text-2xl font-black text-lime sm:text-3xl">Ages 5 – 17 Years</p>
-            <p className="mx-auto mt-4 max-w-md text-pretty text-sm leading-relaxed text-white/70 sm:mx-0 sm:text-base">
+            <p className="mt-4 max-w-md text-pretty text-sm leading-relaxed text-white/70 sm:text-base">
               Learn padel the right way — fun, safe, and with coaches who care.
             </p>
-            <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:justify-start justify-center">
+            <div className="mt-7 flex flex-col gap-3 sm:flex-row">
               <Link
                 href="/enrollment"
                 className="rounded-2xl bg-lime px-8 py-4 text-base font-black text-lime-foreground shadow-lg transition-all hover:scale-105 hover:shadow-xl active:scale-95"
@@ -41,18 +43,37 @@ export default async function HomePage() {
               </Link>
             </div>
           </div>
+        </div>
 
-          {/* Mascot — large, bottom-anchored, black bg blends into navy */}
-          <div className="relative flex-shrink-0 w-80 sm:w-[420px] lg:w-[520px] xl:w-[580px] self-end">
-            <Image
-              src="/images/hero-kids.png"
-              alt="Two kids with padel rackets — Play, Learn, Grow"
-              width={870}
-              height={1100}
-              priority
-              className="w-full h-auto [mix-blend-mode:lighten]"
-            />
-          </div>
+        {/* Mascot — absolutely positioned so it never shifts the heading.
+            On mobile: shown below text in normal flow via a separate block.
+            On sm+: sits absolutely on the right, overflowing into the stats strip. */}
+        <div className="
+          hidden sm:block
+          absolute bottom-0 right-0
+          w-[420px] lg:w-[500px] xl:w-[560px]
+          pointer-events-none select-none
+        ">
+          <Image
+            src="/images/hero-kids.png"
+            alt="Two kids with padel rackets — Play, Learn, Grow"
+            width={900}
+            height={1100}
+            priority
+            className="w-full h-auto [mix-blend-mode:lighten] translate-y-[8%]"
+          />
+        </div>
+
+        {/* Mobile-only mascot — in normal flow, centred, smaller */}
+        <div className="sm:hidden flex justify-center pb-0 -mb-4 pointer-events-none select-none">
+          <Image
+            src="/images/hero-kids.png"
+            alt="Two kids with padel rackets — Play, Learn, Grow"
+            width={900}
+            height={1100}
+            priority
+            className="w-64 h-auto [mix-blend-mode:lighten]"
+          />
         </div>
       </section>
 
