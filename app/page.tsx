@@ -14,10 +14,10 @@ export default async function HomePage() {
   return (
     <main>
       {/* Hero */}
-      <section className="relative bg-navy overflow-hidden">
-        {/* Text — drives the section height; image is layered on top via absolute */}
-        <div className="relative z-10 mx-auto max-w-6xl px-4 py-12 sm:py-16 lg:py-20">
-          <div className="max-w-lg text-center sm:text-left sm:pr-0">
+      <section className="relative bg-navy overflow-visible min-h-[420px] sm:min-h-[480px] lg:min-h-[500px]">
+        {/* Text — drives the section height */}
+        <div className="relative z-10 mx-auto max-w-6xl px-4 py-12 sm:py-14 lg:py-16">
+          <div className="max-w-[480px] text-center sm:text-left">
             <p className="mb-2 text-sm font-bold uppercase tracking-widest text-lime">
               Next Gen Padel Academy
             </p>
@@ -45,34 +45,27 @@ export default async function HomePage() {
           </div>
         </div>
 
-        {/* Mascot — absolutely positioned so it never shifts the heading.
-            On mobile: shown below text in normal flow via a separate block.
-            On sm+: sits absolutely on the right, overflowing into the stats strip. */}
-        <div className="
-          hidden sm:block
-          absolute bottom-0 right-0
-          w-[420px] lg:w-[500px] xl:w-[560px]
-          pointer-events-none select-none
-        ">
+        {/* Mascot — fills right half, overflows down into stats strip */}
+        <div className="hidden sm:block absolute top-0 right-0 bottom-[-60px] w-[52%] lg:w-[50%] pointer-events-none select-none z-20">
           <Image
             src="/images/hero-kids.png"
             alt="Two kids with padel rackets — Play, Learn, Grow"
-            width={900}
-            height={1100}
+            fill
             priority
-            className="w-full h-auto [mix-blend-mode:lighten] translate-y-[8%]"
+            sizes="(min-width: 1024px) 50vw, 52vw"
+            className="object-contain object-bottom [mix-blend-mode:lighten]"
           />
         </div>
 
-        {/* Mobile-only mascot — in normal flow, centred, smaller */}
-        <div className="sm:hidden flex justify-center pb-0 -mb-4 pointer-events-none select-none">
+        {/* Mobile-only mascot */}
+        <div className="sm:hidden flex justify-center -mb-6 pointer-events-none select-none">
           <Image
             src="/images/hero-kids.png"
             alt="Two kids with padel rackets — Play, Learn, Grow"
             width={900}
             height={1100}
             priority
-            className="w-64 h-auto [mix-blend-mode:lighten]"
+            className="w-72 h-auto [mix-blend-mode:lighten]"
           />
         </div>
       </section>
