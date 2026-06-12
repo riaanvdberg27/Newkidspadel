@@ -14,9 +14,9 @@ export default async function HomePage() {
   return (
     <main>
       {/* Hero */}
-      <section className="relative bg-navy overflow-visible min-h-0 sm:min-h-[640px] lg:min-h-[720px]">
-        {/* Text — drives the section height on desktop; on mobile just wraps content */}
-        <div className="relative z-10 mx-auto max-w-6xl px-4 pt-12 pb-6 sm:py-20 lg:py-24">
+      <section className="relative bg-navy overflow-hidden min-h-0 sm:min-h-[640px] lg:min-h-[720px]">
+        {/* Text block */}
+        <div className="relative z-10 mx-auto max-w-6xl px-4 pt-10 pb-4 sm:py-20 lg:py-24">
           <div className="max-w-[460px] text-center sm:text-left mx-auto sm:mx-0">
             <p className="mb-2 text-sm font-bold uppercase tracking-widest text-lime">
               Next Gen Padel Academy
@@ -45,15 +45,15 @@ export default async function HomePage() {
           </div>
         </div>
 
-        {/* Mobile mascot — in normal flow, sits below buttons, blends into navy */}
-        <div className="sm:hidden flex justify-center -mb-10 pointer-events-none select-none">
+        {/* Mobile mascot — in normal flow below buttons, clipped by section */}
+        <div className="sm:hidden flex justify-center pointer-events-none select-none">
           <Image
             src="/images/hero-kids.png"
             alt="Two kids with padel rackets — Play, Learn, Grow"
             width={900}
             height={1100}
             priority
-            className="w-[300px] h-auto [mix-blend-mode:lighten]"
+            className="w-[220px] h-auto [mix-blend-mode:lighten]"
           />
         </div>
 
