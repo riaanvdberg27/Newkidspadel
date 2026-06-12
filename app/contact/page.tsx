@@ -23,7 +23,7 @@ export default async function ContactPage() {
   return (
     <main>
       {/* Hero */}
-      <section className="bg-navy px-4 py-16 text-center text-navy-foreground">
+      <section className="bg-navy px-4 py-12 text-center text-navy-foreground sm:py-16">
         <span className="inline-block rounded-full bg-lime/20 px-4 py-1.5 text-sm font-bold text-lime mb-4">
           Say Hello
         </span>
@@ -35,8 +35,8 @@ export default async function ContactPage() {
       </section>
 
       {/* Coaches contact */}
-      <section className="mx-auto max-w-5xl px-4 py-16">
-        <div className="grid gap-5 sm:grid-cols-2">
+      <section className="mx-auto max-w-5xl px-4 py-10 sm:py-16">
+        <div className="grid gap-4 sm:grid-cols-2">
           {coaches.map((coach) => (
             <article
               key={coach.key}
@@ -51,7 +51,7 @@ export default async function ContactPage() {
                   <p className="text-xs font-bold text-navy/70">{coach.role}</p>
                 </div>
               </div>
-              <div className="p-5">
+              <div className="p-4 sm:p-5">
                 <p className="text-sm leading-relaxed text-muted-foreground">{COACH_BIOS[coach.key]}</p>
                 <div className="mt-4 space-y-2">
                   <a
@@ -84,8 +84,8 @@ export default async function ContactPage() {
         </div>
 
         {/* Hours + response */}
-        <div className="mt-5 grid gap-4 sm:grid-cols-2">
-          <div className="rounded-2xl bg-card border border-border p-5 shadow-sm">
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <div className="rounded-2xl bg-card border border-border p-4 shadow-sm sm:p-5">
             <div className="flex items-center gap-2 mb-4">
               <Clock className="h-5 w-5 text-lime" />
               <h3 className="font-black text-navy">Office Hours</h3>
@@ -106,7 +106,7 @@ export default async function ContactPage() {
               Coaching sessions available outside office hours at our affiliated clubs.
             </p>
           </div>
-          <div className="rounded-2xl bg-lime/10 border border-lime/30 p-5">
+          <div className="rounded-2xl bg-lime/10 border border-lime/30 p-4 sm:p-5">
             <h3 className="font-black text-navy mb-2">Fast Response</h3>
             <p className="text-sm leading-relaxed text-muted-foreground">
               We aim to respond within 24 hours on business days. For urgent matters call or WhatsApp us directly.

@@ -7,7 +7,7 @@ export default async function EnrollmentPage() {
   const [clubs, packages] = await Promise.all([getPublishedClubs(), getPublishedPackages()])
   return (
     <main>
-      <section className="bg-navy px-4 py-14 text-center text-navy-foreground">
+      <section className="bg-navy px-4 py-12 text-center text-navy-foreground sm:py-14">
         <span className="inline-block rounded-full bg-lime/20 px-4 py-1.5 text-sm font-bold text-lime mb-4">
           Join the Academy
         </span>

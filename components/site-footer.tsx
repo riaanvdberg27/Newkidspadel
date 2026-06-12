@@ -12,7 +12,7 @@ export async function SiteFooter() {
   ]
   return (
     <footer className="bg-navy text-navy-foreground">
-      <div className="mx-auto max-w-6xl px-4 py-12">
+      <div className="mx-auto max-w-6xl px-4 py-10 sm:py-12">
         <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
           {/* Brand */}
           <div className="flex flex-col gap-3">

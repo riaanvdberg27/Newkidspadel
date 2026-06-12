@@ -26,9 +26,9 @@ export default async function DashboardPage() {
     <main className="min-h-[70vh] bg-background">
       {/* Hero */}
       <section className="bg-navy text-navy-foreground">
-        <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-4 px-4 py-10">
+        <div className="mx-auto flex max-w-5xl flex-col gap-3 px-4 py-8 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-4 sm:py-10">
           <div>
-            <h1 className="text-2xl font-extrabold sm:text-3xl">
+            <h1 className="text-xl font-extrabold sm:text-3xl">
               Welcome back, {session.user.name}
             </h1>
             <p className="mt-1 text-sm text-navy-foreground/80">{session.user.email}</p>
@@ -37,7 +37,7 @@ export default async function DashboardPage() {
         </div>
       </section>
 
-      <div className="mx-auto max-w-5xl px-4 py-10 space-y-12">
+      <div className="mx-auto max-w-5xl px-4 py-8 space-y-10 sm:py-10 sm:space-y-12">
         {/* Profile section */}
         <section>
           <h2 className="text-lg font-bold text-navy">My Profile</h2>
@@ -67,9 +67,9 @@ export default async function DashboardPage() {
               </a>
             </div>
           ) : (
-            <div className="mt-6 grid gap-6 md:grid-cols-2">
+            <div className="mt-6 grid gap-4 md:grid-cols-2">
               {enrollments.map((e) => (
-                <article key={e.id} className="rounded-card border border-border bg-card p-6 shadow-sm">
+                <article key={e.id} className="rounded-card border border-border bg-card p-4 shadow-sm sm:p-6">
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <h3 className="text-lg font-bold text-navy">{e.childName}</h3>
