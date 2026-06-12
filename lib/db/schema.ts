@@ -193,3 +193,13 @@ export type Club = typeof clubs.$inferSelect
 export type ClubSlot = typeof clubSlots.$inferSelect
 export type PackageRow = typeof packages.$inferSelect
 export type PackageSlot = typeof packageSlots.$inferSelect
+
+// ---- Site settings (contact details, etc.) ----
+
+export const siteSettings = pgTable("site_settings", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull().default(""),
+  updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+})
+
+export type SiteSetting = typeof siteSettings.$inferSelect

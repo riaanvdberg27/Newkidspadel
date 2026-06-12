@@ -1,13 +1,15 @@
 import Link from "next/link"
 import Image from "next/image"
 import { Phone, Mail, MessageCircle } from "lucide-react"
+import { getContactSettings } from "@/app/actions/contact-settings"
 
-const COACHES = [
-  { name: "Riaan van den Berg", role: "Co-Founder & Assistant Coach", phone: "084 412 2084", email: "riaan@nextgenpadel.co.za" },
-  { name: "Gareth Nunes", role: "Co-Founder & Head Coach", phone: "066 352 7053", email: "gareth@nextgenpadel.co.za" },
-]
+export async function SiteFooter() {
+  const s = await getContactSettings()
 
-export function SiteFooter() {
+  const coaches = [
+    { name: s.coach1_name, role: s.coach1_role, phone: s.coach1_phone, email: s.coach1_email },
+    { name: s.coach2_name, role: s.coach2_role, phone: s.coach2_phone, email: s.coach2_email },
+  ]
   return (
     <footer className="bg-navy text-navy-foreground">
       <div className="mx-auto max-w-6xl px-4 py-12">
@@ -35,7 +37,7 @@ export function SiteFooter() {
           </div>
 
           {/* Coaches */}
-          {COACHES.map((coach) => (
+          {coaches.map((coach) => (
             <div key={coach.name}>
               <h4 className="font-black text-white">{coach.name}</h4>
               <p className="text-xs text-navy-foreground/60 mb-3">{coach.role}</p>
