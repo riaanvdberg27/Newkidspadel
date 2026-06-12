@@ -15,15 +15,15 @@ export default async function HomePage() {
     <main>
       {/* Hero */}
       <section className="relative bg-navy overflow-hidden">
-        <div className="mx-auto flex max-w-6xl flex-col items-center gap-8 px-4 py-10 sm:flex-row sm:items-center sm:gap-12 sm:py-16">
-          {/* Text + CTA */}
-          <div className="flex-1 text-center sm:text-left text-navy-foreground">
+        <div className="mx-auto flex max-w-6xl flex-col items-center px-4 pt-10 pb-0 sm:flex-row sm:items-end sm:gap-0 sm:pt-14 sm:pb-0">
+          {/* Text + CTA — sits above the image on mobile, left on desktop */}
+          <div className="flex-1 text-center sm:text-left text-navy-foreground pb-8 sm:pb-14 sm:pr-8 z-10">
             <p className="mb-2 text-sm font-bold uppercase tracking-widest text-lime">Next Gen Padel Academy</p>
-            <h1 className="text-balance text-4xl font-black leading-tight sm:text-5xl lg:text-6xl">
+            <h1 className="text-balance text-4xl font-black leading-tight text-white sm:text-5xl lg:text-6xl">
               Coaching for<br className="hidden sm:block" /> Boys &amp; Girls
             </h1>
             <p className="mt-3 text-2xl font-black text-lime sm:text-3xl">Ages 5 – 17 Years</p>
-            <p className="mx-auto mt-4 max-w-md text-pretty text-sm leading-relaxed text-navy-foreground/70 sm:mx-0 sm:text-base">
+            <p className="mx-auto mt-4 max-w-md text-pretty text-sm leading-relaxed text-white/70 sm:mx-0 sm:text-base">
               Learn padel the right way — fun, safe, and with coaches who care.
             </p>
             <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:justify-start justify-center">
@@ -42,15 +42,15 @@ export default async function HomePage() {
             </div>
           </div>
 
-          {/* Mascot image */}
-          <div className="relative flex-shrink-0 w-72 sm:w-80 lg:w-96">
+          {/* Mascot — large, bottom-anchored, black bg blends into navy */}
+          <div className="relative flex-shrink-0 w-80 sm:w-[420px] lg:w-[520px] xl:w-[580px] self-end">
             <Image
               src="/images/hero-kids.png"
               alt="Two kids with padel rackets — Play, Learn, Grow"
-              width={600}
-              height={700}
+              width={870}
+              height={1100}
               priority
-              className="w-full h-auto drop-shadow-2xl"
+              className="w-full h-auto [mix-blend-mode:lighten]"
             />
           </div>
         </div>
