@@ -14,10 +14,10 @@ export default async function HomePage() {
   return (
     <main>
       {/* Hero */}
-      <section className="relative bg-navy overflow-visible min-h-[420px] sm:min-h-[480px] lg:min-h-[500px]">
+      <section className="relative bg-navy overflow-visible min-h-[600px] sm:min-h-[640px] lg:min-h-[680px]">
         {/* Text — drives the section height */}
-        <div className="relative z-10 mx-auto max-w-6xl px-4 py-12 sm:py-14 lg:py-16">
-          <div className="max-w-[480px] text-center sm:text-left">
+        <div className="relative z-10 mx-auto max-w-6xl px-4 py-16 sm:py-20 lg:py-24">
+          <div className="max-w-[460px] text-center sm:text-left">
             <p className="mb-2 text-sm font-bold uppercase tracking-widest text-lime">
               Next Gen Padel Academy
             </p>
@@ -45,27 +45,27 @@ export default async function HomePage() {
           </div>
         </div>
 
-        {/* Mascot — fills right half, overflows down into stats strip */}
-        <div className="hidden sm:block absolute top-0 right-0 bottom-[-60px] w-[52%] lg:w-[50%] pointer-events-none select-none z-20">
+        {/* Mascot — takes up 60% of the width, overflows 80px into stats strip */}
+        <div className="hidden sm:block absolute top-[-40px] right-[-20px] bottom-[-80px] w-[60%] lg:w-[58%] pointer-events-none select-none z-20">
           <Image
             src="/images/hero-kids.png"
             alt="Two kids with padel rackets — Play, Learn, Grow"
             fill
             priority
-            sizes="(min-width: 1024px) 50vw, 52vw"
+            sizes="(min-width: 1024px) 58vw, 60vw"
             className="object-contain object-bottom [mix-blend-mode:lighten]"
           />
         </div>
 
         {/* Mobile-only mascot */}
-        <div className="sm:hidden flex justify-center -mb-6 pointer-events-none select-none">
+        <div className="sm:hidden flex justify-center -mb-8 pointer-events-none select-none">
           <Image
             src="/images/hero-kids.png"
             alt="Two kids with padel rackets — Play, Learn, Grow"
             width={900}
             height={1100}
             priority
-            className="w-72 h-auto [mix-blend-mode:lighten]"
+            className="w-80 h-auto [mix-blend-mode:lighten]"
           />
         </div>
       </section>
