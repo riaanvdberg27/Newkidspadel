@@ -14,39 +14,59 @@ export default async function HomePage() {
   return (
     <main>
       {/* Hero */}
-      <section className="relative bg-navy overflow-hidden">
-        <Image
-          src="/images/hero-banner.png"
-          alt="Next Gen Padel Academy"
-          width={1414}
-          height={780}
-          priority
-          sizes="100vw"
-          className="h-auto w-full object-cover"
-        />
-        {/* Floating CTA bar below image */}
-        <div className="bg-navy px-4 pb-10 pt-8 text-center text-navy-foreground">
-          <h1 className="text-balance text-3xl font-black sm:text-5xl leading-tight">
-            Coaching for Boys &amp; Girls
-          </h1>
-          <p className="mt-2 text-2xl font-black text-lime sm:text-3xl">Ages 5 – 17 Years</p>
-          <p className="mx-auto mt-3 max-w-md text-pretty text-sm leading-relaxed text-navy-foreground/80 sm:text-base">
-            Learn padel the right way — fun, safe, and with coaches who care.
-          </p>
-          <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-center">
-            <Link
-              href="/enrollment"
-              className="rounded-2xl bg-lime px-8 py-4 text-base font-black text-lime-foreground shadow-lg transition-all hover:scale-105 hover:shadow-xl active:scale-95"
-            >
-              Start Enrollment
-            </Link>
-            <Link
-              href="/about"
-              className="rounded-2xl border-2 border-white/30 px-8 py-4 text-base font-bold text-white transition-all hover:bg-white/10"
-            >
-              Learn More
-            </Link>
+      <section className="relative bg-navy overflow-visible min-h-[720px] sm:min-h-[780px] lg:min-h-[860px]">
+        {/* Text — drives the section height */}
+        <div className="relative z-10 mx-auto max-w-6xl px-4 py-20 sm:py-24 lg:py-32">
+          <div className="max-w-[460px] text-center sm:text-left">
+            <p className="mb-2 text-sm font-bold uppercase tracking-widest text-lime">
+              Next Gen Padel Academy
+            </p>
+            <h1 className="text-balance text-4xl font-black leading-tight text-white sm:text-5xl lg:text-6xl">
+              Coaching for<br className="hidden sm:block" /> Boys &amp; Girls
+            </h1>
+            <p className="mt-3 text-2xl font-black text-lime sm:text-3xl">Ages 5 – 17 Years</p>
+            <p className="mt-4 max-w-md text-pretty text-sm leading-relaxed text-white/70 sm:text-base">
+              Learn padel the right way — fun, safe, and with coaches who care.
+            </p>
+            <div className="mt-7 flex flex-col gap-3 sm:flex-row">
+              <Link
+                href="/enrollment"
+                className="rounded-2xl bg-lime px-8 py-4 text-base font-black text-lime-foreground shadow-lg transition-all hover:scale-105 hover:shadow-xl active:scale-95"
+              >
+                Start Enrollment
+              </Link>
+              <Link
+                href="/about"
+                className="rounded-2xl border-2 border-white/30 px-8 py-4 text-base font-bold text-white transition-all hover:bg-white/10"
+              >
+                Learn More
+              </Link>
+            </div>
           </div>
+        </div>
+
+        {/* Mascot — wide column, tall container, overflows top and bottom */}
+        <div className="hidden sm:block absolute top-[-80px] right-[-40px] bottom-[-120px] w-[75%] lg:w-[68%] pointer-events-none select-none z-20">
+          <Image
+            src="/images/hero-kids.png"
+            alt="Two kids with padel rackets — Play, Learn, Grow"
+            fill
+            priority
+            sizes="(min-width: 1024px) 68vw, 75vw"
+            className="object-contain object-bottom [mix-blend-mode:lighten]"
+          />
+        </div>
+
+        {/* Mobile-only mascot */}
+        <div className="sm:hidden flex justify-center -mb-10 pointer-events-none select-none">
+          <Image
+            src="/images/hero-kids.png"
+            alt="Two kids with padel rackets — Play, Learn, Grow"
+            width={900}
+            height={1100}
+            priority
+            className="w-[340px] h-auto [mix-blend-mode:lighten]"
+          />
         </div>
       </section>
 

@@ -1,12 +1,25 @@
 import Image from "next/image"
 import Link from "next/link"
 import { Phone, Mail, Clock, MessageCircle } from "lucide-react"
-import { COACHES } from "@/lib/site-data"
+import { getContactSettings } from "@/app/actions/contact-settings"
 import { getPublishedPackages } from "@/app/actions/packages"
 import { PackagesSection } from "@/components/packages-section"
 
+const COACH_BIOS: Record<string, string> = {
+  coach1: "Riaan co-founded Next Gen Padel Academy and supports our coaching team with years of experience in youth sports development. His patient approach helps children of all skill levels thrive.",
+  coach2: "Gareth is the Head Coach and co-founder of Next Gen Padel Academy. His passion for the sport and dedication to nurturing young talent has shaped our academy's coaching philosophy.",
+}
+
 export default async function ContactPage() {
-  const packages = await getPublishedPackages()
+  const [packages, settings] = await Promise.all([
+    getPublishedPackages(),
+    getContactSettings(),
+  ])
+
+  const coaches = [
+    { key: "coach1", name: settings.coach1_name, role: settings.coach1_role, phone: settings.coach1_phone, email: settings.coach1_email },
+    { key: "coach2", name: settings.coach2_name, role: settings.coach2_role, phone: settings.coach2_phone, email: settings.coach2_email },
+  ]
   return (
     <main>
       {/* Hero */}
@@ -24,9 +37,9 @@ export default async function ContactPage() {
       {/* Coaches contact */}
       <section className="mx-auto max-w-5xl px-4 py-16">
         <div className="grid gap-5 sm:grid-cols-2">
-          {COACHES.map((coach) => (
+          {coaches.map((coach) => (
             <article
-              key={coach.name}
+              key={coach.key}
               className="rounded-2xl border border-border bg-card overflow-hidden shadow-sm"
             >
               <div className="bg-lime px-5 py-4 flex items-center gap-3">
@@ -39,7 +52,7 @@ export default async function ContactPage() {
                 </div>
               </div>
               <div className="p-5">
-                <p className="text-sm leading-relaxed text-muted-foreground">{coach.bio}</p>
+                <p className="text-sm leading-relaxed text-muted-foreground">{COACH_BIOS[coach.key]}</p>
                 <div className="mt-4 space-y-2">
                   <a
                     href={`tel:${coach.phone.replace(/\s/g, "")}`}

@@ -21,7 +21,7 @@ export const TERMS_SECTIONS: TermsSection[] = [
   },
   {
     heading: "3. Eligibility",
-    body: "Participants must be between 5-18 years of age. All participants must have parental/guardian consent to participate.",
+    body: "Participants must be between 5-17 years of age. All participants must have parental/guardian consent to participate.",
   },
   {
     heading: "4. Membership and Subscription Fees",
