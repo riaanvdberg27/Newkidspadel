@@ -9,7 +9,7 @@ export default function ClubsPage() {
   return (
     <main>
       {/* Hero */}
-      <section className="bg-navy px-4 py-16 text-center text-navy-foreground">
+      <section className="bg-navy px-4 py-12 text-center text-navy-foreground sm:py-16">
         <span className="inline-block rounded-full bg-lime/20 px-4 py-1.5 text-sm font-bold text-lime mb-4">
           Near You
         </span>
@@ -23,7 +23,7 @@ export default function ClubsPage() {
       <ClubsSection heading={false} />
 
       {/* CTA */}
-      <section className="bg-lime px-4 py-16 text-center">
+      <section className="bg-lime px-4 py-12 text-center sm:py-16">
         <h2 className="text-3xl font-black text-navy">Ready to Start?</h2>
         <p className="mx-auto mt-3 max-w-md text-sm leading-relaxed text-navy/80">
           Give your child the gift of sport, friendship, and personal growth.
@@ -31,13 +31,13 @@ export default function ClubsPage() {
         <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-center">
           <Link
             href="/enrollment"
-            className="rounded-2xl bg-navy px-8 py-4 font-black text-white shadow-lg transition-all hover:scale-105"
+            className="rounded-2xl bg-navy px-8 py-4 font-black text-white shadow-lg transition-all hover:scale-105 text-center"
           >
             View &amp; Enroll
           </Link>
           <Link
             href="/contact"
-            className="rounded-2xl border-2 border-navy/30 px-8 py-4 font-bold text-navy transition-all hover:bg-navy/10"
+            className="rounded-2xl border-2 border-navy/30 px-8 py-4 font-bold text-navy transition-all hover:bg-navy/10 text-center"
           >
             Contact Us
           </Link>

@@ -14,30 +14,30 @@ export default async function HomePage() {
   return (
     <main>
       {/* Hero */}
-      <section className="relative bg-navy overflow-visible min-h-[720px] sm:min-h-[780px] lg:min-h-[860px]">
+      <section className="relative bg-navy overflow-visible min-h-[500px] sm:min-h-[640px] lg:min-h-[720px]">
         {/* Text — drives the section height */}
-        <div className="relative z-10 mx-auto max-w-6xl px-4 py-20 sm:py-24 lg:py-32">
-          <div className="max-w-[460px] text-center sm:text-left">
+        <div className="relative z-10 mx-auto max-w-6xl px-4 pt-12 pb-64 sm:py-20 lg:py-24">
+          <div className="max-w-[460px] text-center sm:text-left mx-auto sm:mx-0">
             <p className="mb-2 text-sm font-bold uppercase tracking-widest text-lime">
               Next Gen Padel Academy
             </p>
             <h1 className="text-balance text-4xl font-black leading-tight text-white sm:text-5xl lg:text-6xl">
-              Coaching for<br className="hidden sm:block" /> Boys &amp; Girls
+              Coaching for Boys &amp; Girls
             </h1>
-            <p className="mt-3 text-2xl font-black text-lime sm:text-3xl">Ages 5 – 17 Years</p>
-            <p className="mt-4 max-w-md text-pretty text-sm leading-relaxed text-white/70 sm:text-base">
+            <p className="mt-3 text-xl font-black text-lime sm:text-2xl lg:text-3xl">Ages 5 – 17 Years</p>
+            <p className="mt-4 text-pretty text-sm leading-relaxed text-white/70 sm:text-base">
               Learn padel the right way — fun, safe, and with coaches who care.
             </p>
-            <div className="mt-7 flex flex-col gap-3 sm:flex-row">
+            <div className="mt-7 flex flex-col gap-3 sm:flex-row justify-center sm:justify-start">
               <Link
                 href="/enrollment"
-                className="rounded-2xl bg-lime px-8 py-4 text-base font-black text-lime-foreground shadow-lg transition-all hover:scale-105 hover:shadow-xl active:scale-95"
+                className="rounded-2xl bg-lime px-8 py-4 text-base font-black text-lime-foreground shadow-lg transition-all hover:scale-105 hover:shadow-xl active:scale-95 text-center"
               >
                 Start Enrollment
               </Link>
               <Link
                 href="/about"
-                className="rounded-2xl border-2 border-white/30 px-8 py-4 text-base font-bold text-white transition-all hover:bg-white/10"
+                className="rounded-2xl border-2 border-white/30 px-8 py-4 text-base font-bold text-white transition-all hover:bg-white/10 text-center"
               >
                 Learn More
               </Link>
@@ -45,7 +45,17 @@ export default async function HomePage() {
           </div>
         </div>
 
-        {/* Mascot — wide column, tall container, overflows top and bottom */}
+        {/* Mascot — absolutely positioned on sm+, overlaid on mobile */}
+        <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[320px] sm:hidden pointer-events-none select-none z-20">
+          <Image
+            src="/images/hero-kids.png"
+            alt="Two kids with padel rackets — Play, Learn, Grow"
+            width={900}
+            height={1100}
+            priority
+            className="w-full h-auto [mix-blend-mode:lighten]"
+          />
+        </div>
         <div className="hidden sm:block absolute top-[-80px] right-[-40px] bottom-[-120px] w-[75%] lg:w-[68%] pointer-events-none select-none z-20">
           <Image
             src="/images/hero-kids.png"
@@ -56,23 +66,11 @@ export default async function HomePage() {
             className="object-contain object-bottom [mix-blend-mode:lighten]"
           />
         </div>
-
-        {/* Mobile-only mascot */}
-        <div className="sm:hidden flex justify-center -mb-10 pointer-events-none select-none">
-          <Image
-            src="/images/hero-kids.png"
-            alt="Two kids with padel rackets — Play, Learn, Grow"
-            width={900}
-            height={1100}
-            priority
-            className="w-[340px] h-auto [mix-blend-mode:lighten]"
-          />
-        </div>
       </section>
 
       {/* Stats strip */}
       <section className="bg-lime">
-        <div className="mx-auto flex max-w-4xl flex-wrap justify-center gap-6 px-4 py-6 sm:gap-12">
+        <div className="mx-auto grid grid-cols-2 max-w-4xl gap-4 px-4 py-6 sm:flex sm:flex-wrap sm:justify-center sm:gap-12">
           {[
             { value: "5–17", label: "Age Range" },
             { value: "4", label: "Age Groups" },
@@ -91,22 +89,24 @@ export default async function HomePage() {
       <PackagesSection packages={packages} />
 
       {/* Photo break */}
-      <section className="mx-auto grid max-w-6xl grid-cols-2 gap-3 px-4 pb-4 sm:grid-cols-3">
-        <div className="relative col-span-2 aspect-video overflow-hidden rounded-2xl sm:col-span-2">
-          <Image
-            src="/images/kids-playing-padel.png"
-            alt="Kids playing padel"
-            fill
-            className="object-cover"
-          />
-        </div>
-        <div className="relative aspect-square overflow-hidden rounded-2xl hidden sm:block">
-          <Image
-            src="/images/coach-kids.png"
-            alt="Coach with kids"
-            fill
-            className="object-cover"
-          />
+      <section className="mx-auto max-w-6xl px-4 pb-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="relative aspect-video overflow-hidden rounded-2xl sm:col-span-2">
+            <Image
+              src="/images/kids-playing-padel.png"
+              alt="Kids playing padel"
+              fill
+              className="object-cover"
+            />
+          </div>
+          <div className="relative aspect-video overflow-hidden rounded-2xl">
+            <Image
+              src="/images/coach-kids.png"
+              alt="Coach with kids"
+              fill
+              className="object-cover"
+            />
+          </div>
         </div>
       </section>
 

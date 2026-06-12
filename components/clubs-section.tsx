@@ -30,9 +30,9 @@ export async function ClubsSection({ heading = true }: { heading?: boolean }) {
                   key={club.id}
                   className="overflow-hidden rounded-2xl bg-white shadow-xl"
                 >
-                  <div className="grid sm:grid-cols-[200px_1fr]">
+                  <div className="flex flex-col sm:grid sm:grid-cols-[200px_1fr]">
                     {/* Club image / logo */}
-                    <div className="relative flex h-40 items-center justify-center bg-navy/90 sm:h-auto">
+                    <div className="relative flex h-48 items-center justify-center bg-navy/90 sm:h-auto">
                       {imgSrc ? (
                         <Image
                           src={imgSrc}
@@ -46,7 +46,7 @@ export async function ClubsSection({ heading = true }: { heading?: boolean }) {
                         </span>
                       )}
                     </div>
-                    <div className="p-5">
+                    <div className="p-4 sm:p-5">
                       <h3 className="text-xl font-black text-navy">{club.name}</h3>
                       <p className="font-bold text-lime text-sm">{club.location}</p>
                       {club.description && (
