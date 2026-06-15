@@ -8,7 +8,7 @@ import { AdminSignupsManager } from "@/components/admin/admin-signups-manager"
 import { AdminContactManager } from "@/components/admin/admin-contact-manager"
 import type { PublicPackage as PackageDTO } from "@/app/actions/packages"
 import type { AdminSignup } from "@/app/actions/admin-signups"
-import type { ContactSettings } from "@/app/actions/contact-settings"
+import type { ContactPerson } from "@/app/actions/contact-settings"
 
 type Tab = "clubs" | "packages" | "signups" | "contact"
 
@@ -16,12 +16,12 @@ export function AdminTabs({
   clubs,
   packages,
   signups,
-  contactSettings,
+  contacts,
 }: {
   clubs: Club[]
   packages: PackageDTO[]
   signups: AdminSignup[]
-  contactSettings: ContactSettings
+  contacts: ContactPerson[]
 }) {
   const [tab, setTab] = useState<Tab>("clubs")
 
@@ -54,7 +54,7 @@ export function AdminTabs({
         {tab === "clubs" && <AdminClubManager initialClubs={clubs} />}
         {tab === "packages" && <AdminPackageManager initialPackages={packages} />}
         {tab === "signups" && <AdminSignupsManager initialSignups={signups} />}
-        {tab === "contact" && <AdminContactManager initialSettings={contactSettings} />}
+        {tab === "contact" && <AdminContactManager initialContacts={contacts} />}
       </div>
     </div>
   )

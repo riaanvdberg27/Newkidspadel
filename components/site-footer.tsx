@@ -1,15 +1,11 @@
 import Link from "next/link"
 import Image from "next/image"
 import { Phone, Mail, MessageCircle } from "lucide-react"
-import { getContactSettings } from "@/app/actions/contact-settings"
+import { getContacts } from "@/app/actions/contact-settings"
 
 export async function SiteFooter() {
-  const s = await getContactSettings()
-
-  const coaches = [
-    { name: s.coach1_name, role: s.coach1_role, phone: s.coach1_phone, email: s.coach1_email },
-    { name: s.coach2_name, role: s.coach2_role, phone: s.coach2_phone, email: s.coach2_email },
-  ]
+  const allContacts = await getContacts()
+  const coaches = allContacts.filter((c) => c.showOn === "both" || c.showOn === "footer")
   return (
     <footer className="bg-navy text-navy-foreground">
       <div className="mx-auto max-w-6xl px-4 py-10 sm:py-12">
