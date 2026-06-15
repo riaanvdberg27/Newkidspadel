@@ -75,7 +75,7 @@ export default async function HomePage() {
         <div className="mx-auto grid grid-cols-2 max-w-4xl gap-4 px-4 py-6 sm:flex sm:flex-wrap sm:justify-center sm:gap-12">
           {[
             { value: "5–17", label: "Age Range" },
-            { value: "4", label: "Age Groups" },
+            { value: "3", label: "Age Groups" },
             { value: "2", label: "Expert Coaches" },
             { value: "100%", label: "Fun Guaranteed" },
           ].map((stat) => (
