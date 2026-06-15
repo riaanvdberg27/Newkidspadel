@@ -2,9 +2,10 @@
 
 import { useState, useTransition, useRef } from "react"
 import Image from "next/image"
-import { Plus, Trash2, Save, Check, Upload, Eye, EyeOff, GripVertical } from "lucide-react"
+import { Plus, Trash2, Save, Check, Upload, Eye, EyeOff, GripVertical, ChevronDown } from "lucide-react"
 import type { CoachRow } from "@/app/actions/coaches"
 import { saveCoach, deleteCoach } from "@/app/actions/coaches"
+import type { Club } from "@/lib/db/schema"
 
 function makeTemp(): CoachRow {
   return {
@@ -15,6 +16,7 @@ function makeTemp(): CoachRow {
     imageUrl: null,
     sortOrder: 0,
     published: true,
+    clubIds: [],
   }
 }
 
@@ -27,14 +29,80 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   )
 }
 
+function ClubMultiSelect({
+  allClubs,
+  selected,
+  onChange,
+}: {
+  allClubs: Club[]
+  selected: number[]
+  onChange: (ids: number[]) => void
+}) {
+  const [open, setOpen] = useState(false)
+
+  function toggle(id: number) {
+    onChange(selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id])
+  }
+
+  const label =
+    selected.length === 0
+      ? "No clubs assigned"
+      : selected.length === allClubs.length
+      ? "All clubs"
+      : allClubs
+          .filter((c) => selected.includes(c.id))
+          .map((c) => c.name)
+          .join(", ")
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="mt-1.5 flex w-full items-center justify-between rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-lime"
+      >
+        <span className={`truncate ${selected.length === 0 ? "text-muted-foreground" : "text-navy"}`}>{label}</span>
+        <ChevronDown className={`ml-2 h-4 w-4 shrink-0 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && (
+        <div className="absolute z-20 mt-1 w-full rounded-md border border-border bg-card shadow-lg">
+          {allClubs.length === 0 ? (
+            <p className="px-3 py-2 text-xs text-muted-foreground">No clubs found. Add clubs first.</p>
+          ) : (
+            allClubs.map((club) => (
+              <label
+                key={club.id}
+                className="flex cursor-pointer items-center gap-2.5 px-3 py-2 hover:bg-muted"
+              >
+                <input
+                  type="checkbox"
+                  checked={selected.includes(club.id)}
+                  onChange={() => toggle(club.id)}
+                  className="h-4 w-4 accent-lime"
+                />
+                <span className="text-sm text-navy">{club.name}</span>
+                {club.location && (
+                  <span className="ml-auto text-xs text-muted-foreground">{club.location}</span>
+                )}
+              </label>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function CoachCard({
   coach,
   index,
+  allClubs,
   onUpdate,
   onRemove,
 }: {
   coach: CoachRow
   index: number
+  allClubs: Club[]
   onUpdate: (updated: CoachRow) => void
   onRemove: (id: number, imageUrl: string | null) => void
 }) {
@@ -45,7 +113,7 @@ function CoachCard({
   const [saveError, setSaveError] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
-  function update(field: keyof CoachRow, value: string | number | boolean | null) {
+  function update<K extends keyof CoachRow>(field: K, value: CoachRow[K]) {
     onUpdate({ ...coach, [field]: value })
   }
 
@@ -81,6 +149,7 @@ function CoachCard({
         imageUrl: coach.imageUrl,
         sortOrder: coach.sortOrder,
         published: coach.published,
+        clubIds: coach.clubIds,
       })
       if (res.ok) {
         onUpdate({ ...coach, id: res.id })
@@ -105,9 +174,7 @@ function CoachCard({
           onClick={() => update("published", !coach.published)}
           title={coach.published ? "Visible on site" : "Hidden from site"}
           className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold transition-colors ${
-            coach.published
-              ? "bg-lime/20 text-lime-foreground"
-              : "bg-muted text-muted-foreground"
+            coach.published ? "bg-lime/20 text-lime-foreground" : "bg-muted text-muted-foreground"
           }`}
         >
           {coach.published ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
@@ -145,13 +212,7 @@ function CoachCard({
               <Upload className="h-3.5 w-3.5" />
               {uploading ? "Uploading…" : coach.imageUrl ? "Change photo" : "Upload photo"}
             </button>
-            <input
-              ref={fileRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={handleImageChange}
-            />
+            <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleImageChange} />
             {uploadError && <p className="mt-1 text-xs text-destructive">{uploadError}</p>}
             <p className="mt-1 text-xs text-muted-foreground">JPG, PNG or WebP · max 5 MB</p>
           </div>
@@ -175,6 +236,14 @@ function CoachCard({
           />
         </Field>
 
+        <Field label="Assigned clubs">
+          <ClubMultiSelect
+            allClubs={allClubs}
+            selected={coach.clubIds}
+            onChange={(ids) => update("clubIds", ids)}
+          />
+        </Field>
+
         <Field label="Sort order">
           <input
             type="number"
@@ -191,7 +260,7 @@ function CoachCard({
             onChange={(e) => update("bio", e.target.value)}
             rows={3}
             placeholder="Short bio…"
-            className="mt-1.5 w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-lime sm:col-span-2 resize-none"
+            className="mt-1.5 w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-lime resize-none sm:col-span-2"
           />
         </Field>
       </div>
@@ -203,7 +272,11 @@ function CoachCard({
           disabled={saving || !coach.name}
           className="inline-flex items-center gap-2 rounded-md bg-lime px-4 py-2 text-sm font-bold text-lime-foreground hover:bg-lime/90 disabled:opacity-40 transition-colors"
         >
-          {saved ? <><Check className="h-4 w-4" />Saved</> : <><Save className="h-4 w-4" />{saving ? "Saving…" : "Save coach"}</>}
+          {saved ? (
+            <><Check className="h-4 w-4" />Saved</>
+          ) : (
+            <><Save className="h-4 w-4" />{saving ? "Saving…" : "Save coach"}</>
+          )}
         </button>
         {saveError && <p className="text-xs text-destructive">{saveError}</p>}
       </div>
@@ -211,30 +284,38 @@ function CoachCard({
   )
 }
 
-export function AdminCoachesManager({ initialCoaches }: { initialCoaches: CoachRow[] }) {
-  const [coaches, setCoaches] = useState<CoachRow[]>(initialCoaches)
+export function AdminCoachesManager({
+  initialCoaches,
+  allClubs,
+}: {
+  initialCoaches: CoachRow[]
+  allClubs: Club[]
+}) {
+  const [coachesList, setCoachesList] = useState<CoachRow[]>(initialCoaches)
   const [removing, startRemove] = useTransition()
 
   function updateCoach(updated: CoachRow) {
-    setCoaches((prev) =>
-      prev.map((c) => (c.id === updated.id && c.id !== 0 ? updated : c.id === updated.id ? updated : c))
+    setCoachesList((prev) =>
+      prev.map((c) => (c.id !== 0 && c.id === updated.id ? updated : c.id === 0 && updated.id === 0 ? updated : c))
     )
   }
 
   function addCoach() {
-    setCoaches((prev) => [...prev, { ...makeTemp(), sortOrder: prev.length }])
+    setCoachesList((prev) => [...prev, { ...makeTemp(), sortOrder: prev.length }])
   }
 
   function handleRemove(id: number, imageUrl: string | null) {
     if (id === 0) {
-      // Unsaved — just remove from local state
-      setCoaches((prev) => prev.filter((c) => !(c.id === 0)))
+      setCoachesList((prev) => {
+        const idx = prev.findLastIndex((c) => c.id === 0)
+        return prev.filter((_, i) => i !== idx)
+      })
       return
     }
     if (!confirm("Remove this coach permanently?")) return
     startRemove(async () => {
       await deleteCoach(id, imageUrl)
-      setCoaches((prev) => prev.filter((c) => c.id !== id))
+      setCoachesList((prev) => prev.filter((c) => c.id !== id))
     })
   }
 
@@ -242,15 +323,16 @@ export function AdminCoachesManager({ initialCoaches }: { initialCoaches: CoachR
     <div>
       <h2 className="text-xl font-bold text-navy">Meet Our Coaches</h2>
       <p className="mt-1 text-sm text-muted-foreground">
-        Add, edit or remove coaches. Each coach can have a photo, name, role and bio. Published coaches appear on the About page.
+        Add, edit or remove coaches. Assign each coach to one or more clubs — only assigned coaches appear in the sign-up form for that venue.
       </p>
 
       <div className="mt-6 space-y-5">
-        {coaches.map((coach, i) => (
+        {coachesList.map((coach, i) => (
           <CoachCard
             key={coach.id === 0 ? `new-${i}` : coach.id}
             coach={coach}
             index={i}
+            allClubs={allClubs}
             onUpdate={updateCoach}
             onRemove={handleRemove}
           />

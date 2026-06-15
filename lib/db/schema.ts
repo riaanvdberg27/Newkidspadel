@@ -169,6 +169,9 @@ export const enrollments = pgTable("enrollments", {
   // 'pending' | 'complete' | 'failed' | 'cancelled'
   paymentStatus: text("paymentStatus").notNull().default("pending"),
   payfastPaymentId: text("payfastPaymentId"),
+  // Coach assignment
+  coachId: integer("coachId"),
+  coachName: text("coachName"),
   // Status
   status: text("status").notNull().default("pending"),
   accountStatus: text("accountStatus").notNull().default("active"),
@@ -225,3 +228,43 @@ export const coaches = pgTable("coaches", {
 })
 
 export type Coach = typeof coaches.$inferSelect
+
+// ---- Coach ↔ Club assignments ----
+
+export const coachClubs = pgTable(
+  "coach_clubs",
+  {
+    id: serial("id").primaryKey(),
+    coachId: integer("coachId")
+      .notNull()
+      .references(() => coaches.id, { onDelete: "cascade" }),
+    clubId: integer("clubId")
+      .notNull()
+      .references(() => clubs.id, { onDelete: "cascade" }),
+  },
+  (t) => ({
+    uniqueAssignment: unique("coach_clubs_unique").on(t.coachId, t.clubId),
+  }),
+)
+
+export type CoachClub = typeof coachClubs.$inferSelect
+
+// ---- Package ↔ Club restrictions ----
+
+export const packageClubs = pgTable(
+  "package_clubs",
+  {
+    id: serial("id").primaryKey(),
+    packageId: integer("packageId")
+      .notNull()
+      .references(() => packages.id, { onDelete: "cascade" }),
+    clubId: integer("clubId")
+      .notNull()
+      .references(() => clubs.id, { onDelete: "cascade" }),
+  },
+  (t) => ({
+    uniqueRestriction: unique("package_clubs_unique").on(t.packageId, t.clubId),
+  }),
+)
+
+export type PackageClub = typeof packageClubs.$inferSelect
