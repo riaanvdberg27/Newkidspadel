@@ -2,11 +2,16 @@ import Image from "next/image"
 import Link from "next/link"
 import { SkillsSection } from "@/components/skills-section"
 import { PackagesSection } from "@/components/packages-section"
-import { COACHES } from "@/lib/site-data"
 import { getPublishedPackages } from "@/app/actions/packages"
+import { getPublishedCoaches } from "@/app/actions/coaches"
+
+export const dynamic = "force-dynamic"
 
 export default async function AboutPage() {
-  const packages = await getPublishedPackages()
+  const [packages, coaches] = await Promise.all([
+    getPublishedPackages(),
+    getPublishedCoaches(),
+  ])
   return (
     <main>
       {/* Hero */}
@@ -83,11 +88,17 @@ export default async function AboutPage() {
             <h2 className="text-3xl font-black text-navy">Meet Our Coaches</h2>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
-            {COACHES.map((coach) => (
-              <article key={coach.name} className="rounded-2xl border border-border bg-card p-5 shadow-sm sm:p-6">
+            {coaches.map((coach) => (
+              <article key={coach.id} className="rounded-2xl border border-border bg-card p-5 shadow-sm sm:p-6">
                 <div className="flex items-center gap-4">
-                  <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-lime shadow-md">
-                    <Image src="/images/tennis-ball.png" alt="" width={28} height={28} className="h-7 w-7" />
+                  <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-full bg-lime shadow-md">
+                    {coach.imageUrl ? (
+                      <Image src={coach.imageUrl} alt={coach.name} fill className="object-cover" />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center">
+                        <Image src="/images/tennis-ball.png" alt="" width={28} height={28} className="h-7 w-7" />
+                      </div>
+                    )}
                   </div>
                   <div>
                     <h3 className="font-black text-navy">{coach.name}</h3>

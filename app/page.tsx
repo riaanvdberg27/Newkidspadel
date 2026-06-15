@@ -5,12 +5,16 @@ import { SkillsSection } from "@/components/skills-section"
 import { OfferingsSection } from "@/components/offerings-section"
 import { ClubsSection } from "@/components/clubs-section"
 import { getPublishedPackages } from "@/app/actions/packages"
+import { getPublishedCoaches } from "@/app/actions/coaches"
 
-// Always render fresh — clubs and packages change in the admin and must reflect immediately
+// Always render fresh — clubs, packages and coaches change in the admin
 export const dynamic = "force-dynamic"
 
 export default async function HomePage() {
-  const packages = await getPublishedPackages()
+  const [packages, coaches] = await Promise.all([
+    getPublishedPackages(),
+    getPublishedCoaches(),
+  ])
   return (
     <main>
       {/* Hero */}
@@ -76,7 +80,7 @@ export default async function HomePage() {
           {[
             { value: "5–17", label: "Age Range" },
             { value: "3", label: "Age Groups" },
-            { value: "2", label: "Expert Coaches" },
+            { value: String(coaches.length), label: "Expert Coaches" },
             { value: "100%", label: "Fun Guaranteed" },
           ].map((stat) => (
             <div key={stat.label} className="text-center">

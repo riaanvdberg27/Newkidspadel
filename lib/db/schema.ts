@@ -209,3 +209,19 @@ export const siteSettings = pgTable("site_settings", {
 })
 
 export type SiteSetting = typeof siteSettings.$inferSelect
+
+// ---- Coaches ----
+
+export const coaches = pgTable("coaches", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull().default(""),
+  role: text("role").notNull().default(""),
+  bio: text("bio").notNull().default(""),
+  imageUrl: text("imageUrl"),
+  sortOrder: integer("sortOrder").notNull().default(0),
+  published: boolean("published").notNull().default(true),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+  updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+})
+
+export type Coach = typeof coaches.$inferSelect
