@@ -163,6 +163,12 @@ export const enrollments = pgTable("enrollments", {
   prefAnnouncements: boolean("prefAnnouncements").notNull().default(true),
   prefEvents: boolean("prefEvents").notNull().default(false),
   prefHolidayClinics: boolean("prefHolidayClinics").notNull().default(false),
+  // Payment
+  // 'monthly' | 'once-off'
+  paymentType: text("paymentType").notNull().default("monthly"),
+  // 'pending' | 'complete' | 'failed' | 'cancelled'
+  paymentStatus: text("paymentStatus").notNull().default("pending"),
+  payfastPaymentId: text("payfastPaymentId"),
   // Status
   status: text("status").notNull().default("pending"),
   accountStatus: text("accountStatus").notNull().default("active"),
