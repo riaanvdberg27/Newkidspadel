@@ -12,7 +12,7 @@ import {
   type PackageInput,
   type CustomSlot,
 } from "@/app/actions/packages"
-import { AGE_GROUPS, type AgeGroup } from "@/lib/db/schema"
+import { AGE_GROUPS, type AgeGroup, type Club } from "@/lib/db/schema"
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 const HOURS = [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]
@@ -38,7 +38,13 @@ const EMPTY: PackageInput = {
   customSlots: [],
 }
 
-export function AdminPackageManager({ initialPackages }: { initialPackages: PublicPackage[] }) {
+export function AdminPackageManager({
+  initialPackages,
+  allClubs,
+}: {
+  initialPackages: PublicPackage[]
+  allClubs: Club[]
+}) {
   const router = useRouter()
   const [editing, setEditing] = useState<{ pkg: PublicPackage; slots: CustomSlot[] } | null>(null)
   const [creating, setCreating] = useState(false)
@@ -117,6 +123,11 @@ export function AdminPackageManager({ initialPackages }: { initialPackages: Publ
                   <span className="rounded-full border border-border px-2 py-0.5 text-xs font-semibold text-muted-foreground">
                     {pkg.slotType === "custom" ? "Custom slots" : "Standard slots"}
                   </span>
+                  {pkg.clubIds.length > 0 && (
+                    <span className="rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-700">
+                      {pkg.clubIds.length} venue{pkg.clubIds.length !== 1 ? "s" : ""} only
+                    </span>
+                  )}
                 </div>
                 <p className="mt-1 text-sm font-semibold text-lime">
                   R{pkg.price.toLocaleString()}{" "}
@@ -196,6 +207,7 @@ export function AdminPackageManager({ initialPackages }: { initialPackages: Publ
           <PackageForm
             pkg={editing?.pkg ?? null}
             initialSlots={editing?.slots ?? []}
+            allClubs={allClubs}
             pending={pending}
             onSubmit={handleSave}
             onCancel={closeModal}
@@ -220,12 +232,14 @@ function slotKey(ageGroup: string, weekday: number, hour: number): SlotKey {
 function PackageForm({
   pkg,
   initialSlots,
+  allClubs,
   pending,
   onSubmit,
   onCancel,
 }: {
   pkg: PublicPackage | null
   initialSlots: CustomSlot[]
+  allClubs: Club[]
   pending: boolean
   onSubmit: (input: PackageInput) => void
   onCancel: () => void
@@ -242,6 +256,8 @@ function PackageForm({
   const [slotType, setSlotType] = useState(pkg?.slotType ?? "standard")
   const [sortOrder, setSortOrder] = useState(String(pkg?.sortOrder ?? 0))
   const [activeAgeGroup, setActiveAgeGroup] = useState<AgeGroup>("5-8")
+  // Club restrictions
+  const [selectedClubIds, setSelectedClubIds] = useState<number[]>(pkg?.clubIds ?? [])
 
   // Custom slots: map of "ageGroup-weekday-hour" -> capacity
   const [customSlots, setCustomSlots] = useState<Record<SlotKey, number>>(() => {
@@ -295,6 +311,7 @@ function PackageForm({
       slotType,
       sortOrder: Number(sortOrder),
       customSlots: slotType === "custom" ? customSlotList : [],
+      clubIds: selectedClubIds,
     })
   }
 
@@ -509,9 +526,51 @@ function PackageForm({
         </div>
       )}
 
+      {/* Club restrictions */}
+      {allClubs.length > 0 && (
+        <Field label="Available at (leave blank for all venues)">
+          <p className="mb-3 mt-1 text-xs text-muted-foreground">
+            Select specific clubs/venues where this package can be booked. If nothing is selected, it will appear at every venue.
+          </p>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {allClubs.filter((c) => c.published).map((club) => {
+              const checked = selectedClubIds.includes(club.id)
+              return (
+                <label
+                  key={club.id}
+                  className={`flex cursor-pointer items-center gap-3 rounded-md border p-3 transition-colors ${
+                    checked ? "border-lime bg-lime/10" : "border-border bg-card hover:border-lime/50"
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() =>
+                      setSelectedClubIds((prev) =>
+                        checked ? prev.filter((id) => id !== club.id) : [...prev, club.id],
+                      )
+                    }
+                    className="h-4 w-4 accent-lime"
+                  />
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-navy">{club.name}</p>
+                    <p className="truncate text-xs text-muted-foreground">{club.location}</p>
+                  </div>
+                </label>
+              )
+            })}
+          </div>
+          {selectedClubIds.length > 0 && (
+            <p className="mt-2 text-xs font-semibold text-amber-700">
+              Restricted to {selectedClubIds.length} venue{selectedClubIds.length !== 1 ? "s" : ""}.
+              Customers signing up for other clubs will not see this package.
+            </p>
+          )}
+        </Field>
+      )}
+
       <div className="grid gap-4 sm:grid-cols-3">
-        <Field label="Sort order">
-          <input
+        <Field label="Sort order">          <input
             type="number"
             value={sortOrder}
             onChange={(e) => setSortOrder(e.target.value)}

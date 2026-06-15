@@ -65,6 +65,12 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
   const isOnceOff = selectedPackage?.period === "once-off"
   const STEPS = isOnceOff ? ONCE_OFF_STEPS : ALL_STEPS
 
+  // If the selected package restricts to specific clubs, only show those clubs in step 1
+  const availableClubs =
+    selectedPackage && selectedPackage.clubIds.length > 0
+      ? clubs.filter((c) => selectedPackage.clubIds.includes(c.id))
+      : clubs
+
   // For once-off packages step indices: 0=Child, 1=Club, 2=Parent, 3=Preferences, 4=Review
   // For monthly packages step indices:  0=Child, 1=Club, 2=Parent, 3=Debit, 4=Preferences, 5=Review
   // We map virtual step indices to ensure once-off skips "Debit Order"
@@ -125,7 +131,15 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
   const selectedClub = clubs.find((c) => c.id === clubId) ?? null
 
   if (!selectedPackage) {
-    return <PackagePicker packages={packages} onSelect={setSelectedPackage} />
+    return <PackagePicker packages={packages} onSelect={(pkg) => {
+      setSelectedPackage(pkg)
+      // If the new package restricts clubs and the currently selected club isn't in that list, reset it
+      if (pkg.clubIds.length > 0 && clubId && !pkg.clubIds.includes(clubId)) {
+        setClubId(null)
+        setSlot(null)
+        setCoachId(null)
+      }
+    }} />
   }
 
   if (reference) {
@@ -316,8 +330,14 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
               Showing slots available for ages{" "}
               <span className="font-semibold text-navy">{ageGroup}</span>
             </p>
-            <div className="mt-6 space-y-3">
-              {clubs.map((c) => (
+            {availableClubs.length < clubs.length && (
+              <p className="mt-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700">
+                The <strong>{selectedPackage?.name}</strong> package is only available at{" "}
+                {availableClubs.length === 1 ? "the venue below" : "the venues below"}.
+              </p>
+            )}
+            <div className="mt-4 space-y-3">
+              {availableClubs.map((c) => (
                 <button
                   key={c.id}
                   onClick={() => {

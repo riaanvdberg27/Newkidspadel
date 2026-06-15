@@ -248,3 +248,23 @@ export const coachClubs = pgTable(
 )
 
 export type CoachClub = typeof coachClubs.$inferSelect
+
+// ---- Package ↔ Club restrictions ----
+
+export const packageClubs = pgTable(
+  "package_clubs",
+  {
+    id: serial("id").primaryKey(),
+    packageId: integer("packageId")
+      .notNull()
+      .references(() => packages.id, { onDelete: "cascade" }),
+    clubId: integer("clubId")
+      .notNull()
+      .references(() => clubs.id, { onDelete: "cascade" }),
+  },
+  (t) => ({
+    uniqueRestriction: unique("package_clubs_unique").on(t.packageId, t.clubId),
+  }),
+)
+
+export type PackageClub = typeof packageClubs.$inferSelect
