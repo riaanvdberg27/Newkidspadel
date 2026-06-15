@@ -6,22 +6,26 @@ import { AdminClubManager } from "@/components/admin/admin-club-manager"
 import { AdminPackageManager } from "@/components/admin/admin-package-manager"
 import { AdminSignupsManager } from "@/components/admin/admin-signups-manager"
 import { AdminContactManager } from "@/components/admin/admin-contact-manager"
+import { AdminCoachesManager } from "@/components/admin/admin-coaches-manager"
 import type { PublicPackage as PackageDTO } from "@/app/actions/packages"
 import type { AdminSignup } from "@/app/actions/admin-signups"
-import type { ContactSettings } from "@/app/actions/contact-settings"
+import type { ContactPerson } from "@/app/actions/contact-settings"
+import type { CoachRow } from "@/app/actions/coaches"
 
-type Tab = "clubs" | "packages" | "signups" | "contact"
+type Tab = "clubs" | "packages" | "signups" | "contact" | "coaches"
 
 export function AdminTabs({
   clubs,
   packages,
   signups,
-  contactSettings,
+  contacts,
+  coaches,
 }: {
   clubs: Club[]
   packages: PackageDTO[]
   signups: AdminSignup[]
-  contactSettings: ContactSettings
+  contacts: ContactPerson[]
+  coaches: CoachRow[]
 }) {
   const [tab, setTab] = useState<Tab>("clubs")
 
@@ -29,6 +33,7 @@ export function AdminTabs({
     { id: "clubs", label: "Clubs" },
     { id: "packages", label: "Packages" },
     { id: "signups", label: "Sign-ups" },
+    { id: "coaches", label: "Coaches" },
     { id: "contact", label: "Contact Details" },
   ]
 
@@ -54,7 +59,8 @@ export function AdminTabs({
         {tab === "clubs" && <AdminClubManager initialClubs={clubs} />}
         {tab === "packages" && <AdminPackageManager initialPackages={packages} />}
         {tab === "signups" && <AdminSignupsManager initialSignups={signups} />}
-        {tab === "contact" && <AdminContactManager initialSettings={contactSettings} />}
+        {tab === "coaches" && <AdminCoachesManager initialCoaches={coaches} />}
+        {tab === "contact" && <AdminContactManager initialContacts={contacts} />}
       </div>
     </div>
   )

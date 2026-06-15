@@ -18,7 +18,10 @@ import { CONSENT_TERMS_LABEL, CONSENT_MEDIA_LABEL, TERMS_TITLE, TERMS_SECTIONS }
 import { authClient } from "@/lib/auth-client"
 import { createEnrollment } from "@/app/actions/enrollment"
 
-const STEPS = ["Child", "Club & Schedule", "Parent Account", "Debit Order", "Preferences", "Review"]
+import { buildPayfastPayment } from "@/app/actions/enrollment"
+
+const ALL_STEPS = ["Child", "Club & Schedule", "Parent Account", "Debit Order", "Preferences", "Review"]
+const ONCE_OFF_STEPS = ["Child", "Club & Schedule", "Parent Account", "Preferences", "Review"]
 
 const BANKS = [
   "Absa",
@@ -57,6 +60,13 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
 
   const [selectedPackage, setSelectedPackage] = useState<PublicPackage | null>(initialPackage)
   const [step, setStep] = useState(0)
+
+  const isOnceOff = selectedPackage?.period === "once-off"
+  const STEPS = isOnceOff ? ONCE_OFF_STEPS : ALL_STEPS
+
+  // For once-off packages step indices: 0=Child, 1=Club, 2=Parent, 3=Preferences, 4=Review
+  // For monthly packages step indices:  0=Child, 1=Club, 2=Parent, 3=Debit, 4=Preferences, 5=Review
+  // We map virtual step indices to ensure once-off skips "Debit Order"
 
   // Step data
   const [clubId, setClubId] = useState<number | null>(null)
@@ -133,20 +143,51 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
         slotWeekday: slot?.weekday ?? null,
         slotHour: slot?.hour ?? null,
         slotAgeGroup: ageGroup,
-        debitAccountHolder: debit.accountHolder,
-        debitBankName: debit.bankName,
-        debitAccountNumber: debit.accountNumber,
-        debitAccountType: debit.accountType,
-        debitDay: Number(debit.debitDay),
+        // Debit fields — only passed for monthly
+        ...(isOnceOff ? {} : {
+          debitAccountHolder: debit.accountHolder,
+          debitBankName: debit.bankName,
+          debitAccountNumber: debit.accountNumber,
+          debitAccountType: debit.accountType,
+          debitDay: Number(debit.debitDay),
+        }),
         emergencyContactName: emergency.name,
         emergencyContactPhone: emergency.phone,
         agreedTerms,
         consentMedia,
         signatureData,
         signedName: parent.name,
+        paymentType: isOnceOff ? "once-off" : "monthly",
         ...prefs,
       })
 
+      if (isOnceOff) {
+        // 3a. Once-off: redirect to PayFast checkout via a hidden form POST
+        const { payfastUrl, formData } = await buildPayfastPayment({
+          referenceNumber,
+          parentName: parent.name,
+          parentEmail: parent.email,
+          packageName: selectedPackage.name,
+          packagePrice: selectedPackage.price,
+        })
+
+        // Build and auto-submit a hidden form to POST to PayFast
+        const form = document.createElement("form")
+        form.method = "POST"
+        form.action = payfastUrl
+        Object.entries(formData).forEach(([key, value]) => {
+          const input = document.createElement("input")
+          input.type = "hidden"
+          input.name = key
+          input.value = value
+          form.appendChild(input)
+        })
+        document.body.appendChild(form)
+        form.submit()
+        return // Don't call setSubmitting(false) — the page is navigating away
+      }
+
+      // 3b. Monthly: show the inline confirmation screen
       setReference(referenceNumber)
       router.refresh()
     } catch (err) {
@@ -321,10 +362,9 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
               }
             />
           </div>
-        ) : step === 3 ? (
+        ) : step === 3 && !isOnceOff ? (
           <div>
-            <h2 className="text-xl font-bold text-navy">Debit Order Details</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
+            <h2 className="text-xl font-bold text-navy">Debit Order Details</h2>            <p className="mt-1 text-sm text-muted-foreground">
               Monthly fees are collected by debit order. Please provide the account to be debited.
             </p>
             <div className="mt-6 grid gap-4 sm:grid-cols-2">
@@ -389,7 +429,7 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
               nextDisabled={!debit.accountHolder || !debit.bankName || debit.accountNumber.length < 5}
             />
           </div>
-        ) : step === 4 ? (
+        ) : (step === 4 && !isOnceOff) || (step === 3 && isOnceOff) ? (
           <div>
             <h2 className="text-xl font-bold text-navy">Communication Preferences</h2>
             <p className="mt-1 text-sm text-muted-foreground">Choose how you&apos;d like to hear from us</p>
@@ -413,14 +453,21 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
                 onChange={(v) => setPrefs({ ...prefs, prefHolidayClinics: v })}
               />
             </div>
-            <StepNav onBack={() => setStep(3)} onNext={() => setStep(5)} />
+            {/* For once-off packages step 3 is Preferences, for monthly it's step 4 */}
+            <StepNav
+              onBack={() => setStep(isOnceOff ? 2 : 3)}
+              onNext={() => setStep(isOnceOff ? 4 : 5)}
+            />
           </div>
         ) : (
           <div>
             <h2 className="text-xl font-bold text-navy">Review &amp; Confirm</h2>
             <p className="mt-1 text-sm text-muted-foreground">Check your details, then create your account to finish.</p>
             <dl className="mt-6 space-y-2 rounded-card border border-border bg-card p-5 text-sm shadow-sm">
-              <Row label="Package" value={`${selectedPackage.name} (R${selectedPackage.price}/month)`} />
+              <Row
+                label="Package"
+                value={`${selectedPackage.name} — R${selectedPackage.price.toLocaleString()} ${isOnceOff ? "(once off)" : "/month"}`}
+              />
               <Row label="Club" value={selectedClub?.name ?? ""} />
               <Row label="Time Slot" value={slot ? formatSlot(slot.weekday, slot.hour) : ""} />
               <Row label="Child" value={`${child.name} (born ${child.dob})`} />
@@ -428,11 +475,23 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
               <Row label="Email" value={parent.email} />
               <Row label="Mobile" value={parent.mobile} />
               <Row label="Emergency Contact" value={`${emergency.name} — ${emergency.phone}`} />
-              <Row
-                label="Debit Order"
-                value={`${debit.bankName} ••${debit.accountNumber.slice(-4)} (${debit.accountType}), day ${debit.debitDay}`}
-              />
+              {!isOnceOff && (
+                <Row
+                  label="Debit Order"
+                  value={`${debit.bankName} ••${debit.accountNumber.slice(-4)} (${debit.accountType}), day ${debit.debitDay}`}
+                />
+              )}
             </dl>
+            {isOnceOff && (
+              <div className="mt-4 flex items-start gap-3 rounded-card border border-lime bg-lime/10 p-4 text-sm">
+                <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-lime text-lime-foreground text-xs font-black">!</span>
+                <p className="text-navy">
+                  After creating your account you will be redirected to <strong>PayFast</strong> to complete your
+                  once-off payment of <strong>R{selectedPackage.price.toLocaleString()}</strong>. Your enrollment is
+                  confirmed once payment is received.
+                </p>
+              </div>
+            )}
 
             {/* Terms & consent */}
             <div className="mt-6 rounded-card border border-border bg-card p-5 shadow-sm">
@@ -481,7 +540,7 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
 
             <div className="mt-8 flex items-center justify-between gap-4">
               <button
-                onClick={() => setStep(4)}
+                onClick={() => setStep(isOnceOff ? 3 : 4)}
                 className="rounded-2xl border-2 border-border px-5 py-3 font-bold text-navy transition-all hover:bg-muted active:scale-95"
               >
                 Back
@@ -491,7 +550,9 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
                 disabled={submitting || !agreedTerms || !signatureData}
                 className="rounded-2xl bg-lime px-6 py-3 font-black text-lime-foreground shadow-sm transition-all hover:scale-105 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-40 active:scale-95"
               >
-                {submitting ? "Creating account…" : "Create Account & Enroll"}
+                {submitting
+                  ? isOnceOff ? "Redirecting to PayFast…" : "Creating account…"
+                  : isOnceOff ? "Create Account & Pay via PayFast" : "Create Account & Enroll"}
               </button>
             </div>
             {(!agreedTerms || !signatureData) && (

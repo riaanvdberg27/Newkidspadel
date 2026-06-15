@@ -1,25 +1,19 @@
 import Image from "next/image"
 import Link from "next/link"
 import { Phone, Mail, Clock, MessageCircle } from "lucide-react"
-import { getContactSettings } from "@/app/actions/contact-settings"
+import { getContacts } from "@/app/actions/contact-settings"
 import { getPublishedPackages } from "@/app/actions/packages"
 import { PackagesSection } from "@/components/packages-section"
 
-const COACH_BIOS: Record<string, string> = {
-  coach1: "Riaan co-founded Next Gen Padel Academy and supports our coaching team with years of experience in youth sports development. His patient approach helps children of all skill levels thrive.",
-  coach2: "Gareth is the Head Coach and co-founder of Next Gen Padel Academy. His passion for the sport and dedication to nurturing young talent has shaped our academy's coaching philosophy.",
-}
-
 export default async function ContactPage() {
-  const [packages, settings] = await Promise.all([
+  const [packages, allContacts] = await Promise.all([
     getPublishedPackages(),
-    getContactSettings(),
+    getContacts(),
   ])
 
-  const coaches = [
-    { key: "coach1", name: settings.coach1_name, role: settings.coach1_role, phone: settings.coach1_phone, email: settings.coach1_email },
-    { key: "coach2", name: settings.coach2_name, role: settings.coach2_role, phone: settings.coach2_phone, email: settings.coach2_email },
-  ]
+  const coaches = allContacts
+    .filter((c) => c.showOn === "both" || c.showOn === "contact")
+    .map((c) => ({ key: c.id, name: c.name, role: c.role, phone: c.phone, email: c.email }))
   return (
     <main>
       {/* Hero */}
@@ -52,8 +46,7 @@ export default async function ContactPage() {
                 </div>
               </div>
               <div className="p-4 sm:p-5">
-                <p className="text-sm leading-relaxed text-muted-foreground">{COACH_BIOS[coach.key]}</p>
-                <div className="mt-4 space-y-2">
+                <div className="mt-0 space-y-2">
                   <a
                     href={`tel:${coach.phone.replace(/\s/g, "")}`}
                     className="flex items-center gap-2.5 rounded-xl bg-muted px-4 py-3 text-sm font-bold text-navy transition-colors hover:bg-lime/20"

@@ -163,6 +163,12 @@ export const enrollments = pgTable("enrollments", {
   prefAnnouncements: boolean("prefAnnouncements").notNull().default(true),
   prefEvents: boolean("prefEvents").notNull().default(false),
   prefHolidayClinics: boolean("prefHolidayClinics").notNull().default(false),
+  // Payment
+  // 'monthly' | 'once-off'
+  paymentType: text("paymentType").notNull().default("monthly"),
+  // 'pending' | 'complete' | 'failed' | 'cancelled'
+  paymentStatus: text("paymentStatus").notNull().default("pending"),
+  payfastPaymentId: text("payfastPaymentId"),
   // Status
   status: text("status").notNull().default("pending"),
   accountStatus: text("accountStatus").notNull().default("active"),
@@ -203,3 +209,19 @@ export const siteSettings = pgTable("site_settings", {
 })
 
 export type SiteSetting = typeof siteSettings.$inferSelect
+
+// ---- Coaches ----
+
+export const coaches = pgTable("coaches", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull().default(""),
+  role: text("role").notNull().default(""),
+  bio: text("bio").notNull().default(""),
+  imageUrl: text("imageUrl"),
+  sortOrder: integer("sortOrder").notNull().default(0),
+  published: boolean("published").notNull().default(true),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+  updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+})
+
+export type Coach = typeof coaches.$inferSelect

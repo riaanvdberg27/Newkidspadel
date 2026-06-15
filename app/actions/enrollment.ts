@@ -10,6 +10,7 @@ import { put } from "@vercel/blob"
 import { generateContractPdf } from "@/lib/contract-pdf"
 import { sendWelcomeEmail, sendAdminNotificationEmail } from "@/lib/email"
 import { formatSlot } from "@/lib/slots"
+import { buildPayfastFormData, PAYFAST_URL } from "@/lib/payfast"
 
 async function getUserId() {
   const session = await auth.api.getSession({ headers: await headers() })
@@ -37,11 +38,12 @@ export type EnrollmentInput = {
   slotWeekday: number | null
   slotHour: number | null
   slotAgeGroup: string | null
-  debitAccountHolder: string
-  debitBankName: string
-  debitAccountNumber: string
-  debitAccountType: string
-  debitDay: number | null
+  // Debit order — only required for monthly packages
+  debitAccountHolder?: string
+  debitBankName?: string
+  debitAccountNumber?: string
+  debitAccountType?: string
+  debitDay?: number | null
   emergencyContactName: string
   emergencyContactPhone: string
   agreedTerms: boolean
@@ -54,12 +56,16 @@ export type EnrollmentInput = {
   prefAnnouncements: boolean
   prefEvents: boolean
   prefHolidayClinics: boolean
+  // Payment
+  paymentType?: "monthly" | "once-off"
 }
 
 export async function createEnrollment(input: EnrollmentInput) {
   const userId = await getUserId()
   const referenceNumber = generateReference()
   const signedAt = new Date()
+
+  const isOnceOff = input.paymentType === "once-off"
 
   const inserted = await db
     .insert(enrollments)
@@ -78,10 +84,10 @@ export async function createEnrollment(input: EnrollmentInput) {
       slotWeekday: input.slotWeekday ?? undefined,
       slotHour: input.slotHour ?? undefined,
       slotAgeGroup: input.slotAgeGroup ?? undefined,
-      debitAccountHolder: input.debitAccountHolder,
-      debitBankName: input.debitBankName,
-      debitAccountNumber: input.debitAccountNumber,
-      debitAccountType: input.debitAccountType,
+      debitAccountHolder: input.debitAccountHolder ?? undefined,
+      debitBankName: input.debitBankName ?? undefined,
+      debitAccountNumber: input.debitAccountNumber ?? undefined,
+      debitAccountType: input.debitAccountType ?? undefined,
       debitDay: input.debitDay ?? undefined,
       emergencyContactName: input.emergencyContactName,
       emergencyContactPhone: input.emergencyContactPhone,
@@ -96,9 +102,13 @@ export async function createEnrollment(input: EnrollmentInput) {
       prefAnnouncements: input.prefAnnouncements,
       prefEvents: input.prefEvents,
       prefHolidayClinics: input.prefHolidayClinics,
-      status: "active",
+      // Payment
+      paymentType: isOnceOff ? "once-off" : "monthly",
+      paymentStatus: isOnceOff ? "pending" : "pending",
+      // Once-off payments are confirmed via PayFast ITN; monthly are active immediately
+      status: isOnceOff ? "pending" : "active",
       accountStatus: "active",
-      onboardingComplete: true,
+      onboardingComplete: !isOnceOff,
     })
     .returning({ id: enrollments.id })
 
@@ -245,4 +255,37 @@ export async function updateProfile(input: { name: string; mobile: string }) {
     .where(eq(enrollments.userId, userId))
   revalidatePath("/dashboard")
   return { success: true }
+}
+
+/**
+ * Build a signed PayFast payment payload for a once-off enrollment.
+ * Called after the enrollment record has been persisted.
+ * Returns the PayFast URL and the signed form fields.
+ */
+export async function buildPayfastPayment(input: {
+  referenceNumber: string
+  parentName: string
+  parentEmail: string
+  packageName: string
+  packagePrice: number
+}) {
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL ?? "https://localhost:3000"
+
+  const formData = buildPayfastFormData({
+    merchantId: process.env.PAYFAST_MERCHANT_ID!,
+    merchantKey: process.env.PAYFAST_MERCHANT_KEY!,
+    passphrase: process.env.PAYFAST_PASSPHRASE ?? "",
+    returnUrl: `${baseUrl}/enrollment/success?ref=${encodeURIComponent(input.referenceNumber)}&name=${encodeURIComponent(input.parentName)}`,
+    cancelUrl: `${baseUrl}/enrollment?cancelled=1`,
+    notifyUrl: `${baseUrl}/api/payfast/notify`,
+    nameFirst: input.parentName.split(" ")[0] ?? input.parentName,
+    nameLast: input.parentName.split(" ").slice(1).join(" ") || undefined,
+    emailAddress: input.parentEmail,
+    mPaymentId: input.referenceNumber,
+    amount: input.packagePrice.toFixed(2), // price stored in Rands
+    itemName: `Next Gen Padel — ${input.packageName}`,
+    itemDescription: `Once-off enrollment fee for ${input.packageName}`,
+  })
+
+  return { payfastUrl: PAYFAST_URL, formData }
 }

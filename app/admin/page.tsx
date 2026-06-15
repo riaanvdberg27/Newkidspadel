@@ -3,7 +3,8 @@ import { isAdminAuthenticated } from "@/lib/admin-auth"
 import { getAllClubsAdmin, adminLogout } from "@/app/actions/admin"
 import { getAllPackagesAdmin } from "@/app/actions/packages"
 import { getAllSignups } from "@/app/actions/admin-signups"
-import { getContactSettings } from "@/app/actions/contact-settings"
+import { getContacts } from "@/app/actions/contact-settings"
+import { getCoaches } from "@/app/actions/coaches"
 import { AdminTabs } from "@/components/admin/admin-tabs"
 
 export const metadata = {
@@ -15,11 +16,12 @@ export default async function AdminPage() {
     redirect("/admin/login")
   }
 
-  const [clubs, packages, signups, contactSettings] = await Promise.all([
+  const [clubs, packages, signups, contacts, coaches] = await Promise.all([
     getAllClubsAdmin(),
     getAllPackagesAdmin(),
     getAllSignups(),
-    getContactSettings(),
+    getContacts(),
+    getCoaches(),
   ])
 
   return (
@@ -42,7 +44,7 @@ export default async function AdminPage() {
       </header>
 
       <section className="mx-auto max-w-6xl px-4 py-10">
-        <AdminTabs clubs={clubs} packages={packages} signups={signups} contactSettings={contactSettings} />
+        <AdminTabs clubs={clubs} packages={packages} signups={signups} contacts={contacts} coaches={coaches} />
       </section>
     </main>
   )
