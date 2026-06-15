@@ -1,8 +1,8 @@
 "use server"
 
 import { db } from "@/lib/db"
-import { coaches } from "@/lib/db/schema"
-import { eq, asc } from "drizzle-orm"
+import { coaches, coachClubs, clubs } from "@/lib/db/schema"
+import { eq, asc, inArray } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { del } from "@vercel/blob"
 
@@ -14,6 +14,22 @@ export type CoachRow = {
   imageUrl: string | null
   sortOrder: number
   published: boolean
+  clubIds: number[]
+}
+
+async function attachClubIds(rows: Omit<CoachRow, "clubIds">[]): Promise<CoachRow[]> {
+  if (rows.length === 0) return []
+  const ids = rows.map((r) => r.id)
+  const assignments = await db
+    .select({ coachId: coachClubs.coachId, clubId: coachClubs.clubId })
+    .from(coachClubs)
+    .where(inArray(coachClubs.coachId, ids))
+  const map = new Map<number, number[]>()
+  for (const a of assignments) {
+    if (!map.has(a.coachId)) map.set(a.coachId, [])
+    map.get(a.coachId)!.push(a.clubId)
+  }
+  return rows.map((r) => ({ ...r, clubIds: map.get(r.id) ?? [] }))
 }
 
 export async function getCoaches(): Promise<CoachRow[]> {
@@ -21,7 +37,7 @@ export async function getCoaches(): Promise<CoachRow[]> {
     .select()
     .from(coaches)
     .orderBy(asc(coaches.sortOrder), asc(coaches.id))
-  return rows.map((r) => ({
+  const base = rows.map((r) => ({
     id: r.id,
     name: r.name,
     role: r.role,
@@ -30,6 +46,7 @@ export async function getCoaches(): Promise<CoachRow[]> {
     sortOrder: r.sortOrder,
     published: r.published,
   }))
+  return attachClubIds(base)
 }
 
 export async function getPublishedCoaches(): Promise<CoachRow[]> {
@@ -38,7 +55,7 @@ export async function getPublishedCoaches(): Promise<CoachRow[]> {
     .from(coaches)
     .where(eq(coaches.published, true))
     .orderBy(asc(coaches.sortOrder), asc(coaches.id))
-  return rows.map((r) => ({
+  const base = rows.map((r) => ({
     id: r.id,
     name: r.name,
     role: r.role,
@@ -47,6 +64,33 @@ export async function getPublishedCoaches(): Promise<CoachRow[]> {
     sortOrder: r.sortOrder,
     published: r.published,
   }))
+  return attachClubIds(base)
+}
+
+/** Return published coaches assigned to a specific club — used in the enrollment wizard. */
+export async function getCoachesByClub(clubId: number): Promise<CoachRow[]> {
+  const assignments = await db
+    .select({ coachId: coachClubs.coachId })
+    .from(coachClubs)
+    .where(eq(coachClubs.clubId, clubId))
+  if (assignments.length === 0) return []
+  const coachIds = assignments.map((a) => a.coachId)
+  const rows = await db
+    .select()
+    .from(coaches)
+    .where(eq(coaches.published, true))
+    .orderBy(asc(coaches.sortOrder), asc(coaches.id))
+  const filtered = rows.filter((r) => coachIds.includes(r.id))
+  const base = filtered.map((r) => ({
+    id: r.id,
+    name: r.name,
+    role: r.role,
+    bio: r.bio,
+    imageUrl: r.imageUrl ?? null,
+    sortOrder: r.sortOrder,
+    published: r.published,
+  }))
+  return base.map((r) => ({ ...r, clubIds: [clubId] }))
 }
 
 export async function saveCoach(input: {
@@ -57,7 +101,10 @@ export async function saveCoach(input: {
   imageUrl: string | null
   sortOrder: number
   published: boolean
+  clubIds: number[]
 }): Promise<{ ok: boolean; id: number }> {
+  let coachId: number
+
   if (input.id) {
     await db
       .update(coaches)
@@ -71,37 +118,47 @@ export async function saveCoach(input: {
         updatedAt: new Date(),
       })
       .where(eq(coaches.id, input.id))
-    revalidatePath("/about")
-    revalidatePath("/")
-    return { ok: true, id: input.id }
+    coachId = input.id
+  } else {
+    const [row] = await db
+      .insert(coaches)
+      .values({
+        name: input.name,
+        role: input.role,
+        bio: input.bio,
+        imageUrl: input.imageUrl ?? undefined,
+        sortOrder: input.sortOrder,
+        published: input.published,
+      })
+      .returning({ id: coaches.id })
+    coachId = row.id
   }
-  const [row] = await db
-    .insert(coaches)
-    .values({
-      name: input.name,
-      role: input.role,
-      bio: input.bio,
-      imageUrl: input.imageUrl ?? undefined,
-      sortOrder: input.sortOrder,
-      published: input.published,
-    })
-    .returning({ id: coaches.id })
+
+  // Sync club assignments: delete all existing then re-insert
+  await db.delete(coachClubs).where(eq(coachClubs.coachId, coachId))
+  if (input.clubIds.length > 0) {
+    await db.insert(coachClubs).values(
+      input.clubIds.map((clubId) => ({ coachId, clubId }))
+    )
+  }
+
   revalidatePath("/about")
   revalidatePath("/")
-  return { ok: true, id: row.id }
+  revalidatePath("/enrollment")
+  return { ok: true, id: coachId }
 }
 
 export async function deleteCoach(id: number, imageUrl: string | null): Promise<{ ok: boolean }> {
-  // Delete the blob image if stored in Vercel Blob
   if (imageUrl && imageUrl.includes("vercel-storage.com")) {
     try {
       await del(imageUrl)
     } catch {
-      // Non-fatal — carry on even if blob deletion fails
+      // Non-fatal
     }
   }
   await db.delete(coaches).where(eq(coaches.id, id))
   revalidatePath("/about")
   revalidatePath("/")
+  revalidatePath("/enrollment")
   return { ok: true }
 }

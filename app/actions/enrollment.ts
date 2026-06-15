@@ -58,6 +58,9 @@ export type EnrollmentInput = {
   prefHolidayClinics: boolean
   // Payment
   paymentType?: "monthly" | "once-off"
+  // Coach selection
+  coachId?: number | null
+  coachName?: string | null
 }
 
 export async function createEnrollment(input: EnrollmentInput) {
@@ -109,6 +112,9 @@ export async function createEnrollment(input: EnrollmentInput) {
       status: isOnceOff ? "pending" : "active",
       accountStatus: "active",
       onboardingComplete: !isOnceOff,
+      // Coach
+      coachId: input.coachId ?? undefined,
+      coachName: input.coachName ?? undefined,
     })
     .returning({ id: enrollments.id })
 

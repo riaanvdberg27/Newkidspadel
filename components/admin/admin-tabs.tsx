@@ -59,7 +59,7 @@ export function AdminTabs({
         {tab === "clubs" && <AdminClubManager initialClubs={clubs} />}
         {tab === "packages" && <AdminPackageManager initialPackages={packages} />}
         {tab === "signups" && <AdminSignupsManager initialSignups={signups} />}
-        {tab === "coaches" && <AdminCoachesManager initialCoaches={coaches} />}
+        {tab === "coaches" && <AdminCoachesManager initialCoaches={coaches} allClubs={clubs} />}
         {tab === "contact" && <AdminContactManager initialContacts={contacts} />}
       </div>
     </div>

@@ -2,7 +2,7 @@
 
 import Image from "next/image"
 import Link from "next/link"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 // lucide-react icons used in this file
 import { Check, ChevronRight } from "lucide-react"
@@ -17,6 +17,7 @@ import { SignaturePad } from "@/components/signature-pad"
 import { CONSENT_TERMS_LABEL, CONSENT_MEDIA_LABEL, TERMS_TITLE, TERMS_SECTIONS } from "@/lib/terms"
 import { authClient } from "@/lib/auth-client"
 import { createEnrollment } from "@/app/actions/enrollment"
+import type { CoachRow } from "@/app/actions/coaches"
 
 import { buildPayfastPayment } from "@/app/actions/enrollment"
 
@@ -75,6 +76,26 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
   const [child, setChild] = useState({ name: "", dob: "" })
   const [parent, setParent] = useState({ name: "", email: "", mobile: "", password: "" })
   const [emergency, setEmergency] = useState({ name: "", phone: "" })
+  // Coach selection
+  const [availableCoaches, setAvailableCoaches] = useState<CoachRow[]>([])
+  const [coachId, setCoachId] = useState<number | null>(null)
+  const [coachesLoading, setCoachesLoading] = useState(false)
+
+  // Fetch coaches whenever the selected club changes
+  useEffect(() => {
+    if (!clubId) {
+      setAvailableCoaches([])
+      setCoachId(null)
+      return
+    }
+    setCoachesLoading(true)
+    setCoachId(null)
+    fetch(`/api/coaches/by-club?clubId=${clubId}`)
+      .then((r) => r.json())
+      .then((data: CoachRow[]) => setAvailableCoaches(Array.isArray(data) ? data : []))
+      .catch(() => setAvailableCoaches([]))
+      .finally(() => setCoachesLoading(false))
+  }, [clubId])
   const [debit, setDebit] = useState<DebitOrder>({
     accountHolder: "",
     bankName: "",
@@ -159,6 +180,8 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
         signedName: parent.name,
         paymentType: isOnceOff ? "once-off" : "monthly",
         ...prefs,
+        coachId: coachId ?? null,
+        coachName: availableCoaches.find((c) => c.id === coachId)?.name ?? null,
       })
 
       if (isOnceOff) {
@@ -286,7 +309,7 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
             />
           </div>
         ) : step === 1 ? (
-          /* ── Step 1: Club + time slot (filtered by age group) ── */
+          /* ── Step 1: Club + coach + time slot ── */
           <div>
             <h2 className="text-xl font-bold text-navy">Choose Your Club &amp; Schedule</h2>
             <p className="mt-1 text-sm text-muted-foreground">
@@ -310,6 +333,54 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
                 </button>
               ))}
             </div>
+
+            {/* Coach picker — shown once a club is selected */}
+            {clubId && (
+              <div className="mt-6">
+                <p className="block text-sm font-semibold text-navy">Select a Coach</p>
+                <p className="mb-3 text-xs text-muted-foreground">
+                  {coachesLoading
+                    ? "Loading coaches…"
+                    : availableCoaches.length === 0
+                    ? "No coaches are currently assigned to this venue."
+                    : "Pick the coach you would like to train with."}
+                </p>
+                {!coachesLoading && availableCoaches.length > 0 && (
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {availableCoaches.map((coach) => (
+                      <button
+                        key={coach.id}
+                        type="button"
+                        onClick={() => setCoachId(coach.id === coachId ? null : coach.id)}
+                        className={`flex items-center gap-3 rounded-card border p-3 text-left transition-colors ${
+                          coachId === coach.id
+                            ? "border-lime bg-lime/10"
+                            : "border-border bg-card hover:border-lime/50"
+                        }`}
+                      >
+                        <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-full bg-muted">
+                          {coach.imageUrl ? (
+                            <Image src={coach.imageUrl} alt={coach.name} fill className="object-cover" />
+                          ) : (
+                            <div className="flex h-full w-full items-center justify-center text-sm font-black text-muted-foreground">
+                              {coach.name[0]?.toUpperCase() ?? "?"}
+                            </div>
+                          )}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="truncate font-bold text-navy text-sm">{coach.name}</p>
+                          <p className="truncate text-xs text-muted-foreground">{coach.role}</p>
+                        </div>
+                        {coachId === coach.id && (
+                          <Check className="ml-auto h-4 w-4 shrink-0 text-lime-foreground" />
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
             {clubId && selectedPackage?.slotType === "custom" ? (
               <div className="mt-6">
                 <p className="block text-sm font-semibold text-navy">Available Time Slots</p>
@@ -470,6 +541,7 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
               />
               <Row label="Club" value={selectedClub?.name ?? ""} />
               <Row label="Time Slot" value={slot ? formatSlot(slot.weekday, slot.hour) : ""} />
+              {coachId && <Row label="Coach" value={availableCoaches.find((c) => c.id === coachId)?.name ?? ""} />}
               <Row label="Child" value={`${child.name} (born ${child.dob})`} />
               <Row label="Parent" value={parent.name} />
               <Row label="Email" value={parent.email} />
