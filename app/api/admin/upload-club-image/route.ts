@@ -28,9 +28,10 @@ export async function POST(request: NextRequest) {
   const filename = `clubs/${Date.now()}-${randomSuffix}.${ext}`
 
   const blob = await put(filename, file, {
-    access: "public",
+    access: "private",
     contentType: file.type,
   })
 
-  return NextResponse.json({ url: blob.url })
+  // Return the pathname so the caller can store it and resolve via /api/blob
+  return NextResponse.json({ url: blob.pathname })
 }

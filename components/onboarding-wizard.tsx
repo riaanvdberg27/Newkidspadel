@@ -18,6 +18,7 @@ import { CONSENT_TERMS_LABEL, CONSENT_MEDIA_LABEL, TERMS_TITLE, TERMS_SECTIONS }
 import { authClient } from "@/lib/auth-client"
 import { createEnrollment } from "@/app/actions/enrollment"
 import type { CoachRow } from "@/app/actions/coaches"
+import { blobUrl } from "@/lib/blob"
 
 import { buildPayfastPayment } from "@/app/actions/enrollment"
 
@@ -380,7 +381,7 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
                       >
                         <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-full bg-muted">
                           {coach.imageUrl ? (
-                            <Image src={coach.imageUrl} alt={coach.name} fill className="object-cover" />
+                            <Image src={blobUrl(coach.imageUrl)!} alt={coach.name} fill className="object-cover" />
                           ) : (
                             <div className="flex h-full w-full items-center justify-center text-sm font-black text-muted-foreground">
                               {coach.name[0]?.toUpperCase() ?? "?"}
