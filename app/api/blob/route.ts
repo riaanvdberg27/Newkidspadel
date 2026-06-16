@@ -1,40 +1,50 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { head, list } from "@vercel/blob"
+import { list } from "@vercel/blob"
 
 /**
- * Proxy private Vercel Blob files.
- * Usage: /api/blob?p=<pathname-or-full-url>
+ * Proxy private Vercel Blob images through the server.
+ * Usage: /api/blob?p=<pathname>  (e.g. coaches/abc.jpg)
  *
- * Supports two formats stored in the DB:
- *   - Full URL  (new): "https://...blob.vercel-storage.com/coaches/abc.jpg"
- *     → pass directly to head() which accepts full URLs
- *   - Pathname  (old): "coaches/abc.jpg"
- *     → use list() to resolve the full URL first, then redirect
- *
- * Redirects to the pre-signed downloadUrl so the browser fetches the image
- * directly from Blob storage — no streaming through the server needed.
+ * Private blobs live on *.private.blob.vercel-storage.com and require an
+ * Authorization header — browsers cannot fetch them directly. This route
+ * resolves the pathname to a full URL via list(), then fetches the blob
+ * server-side with the token and streams the bytes back to the browser.
  */
 export async function GET(request: NextRequest) {
   const p = request.nextUrl.searchParams.get("p")
+  if (!p) return NextResponse.json({ error: "Missing pathname" }, { status: 400 })
 
-  if (!p) {
-    return NextResponse.json({ error: "Missing pathname" }, { status: 400 })
-  }
+  const token = process.env.BLOB_READ_WRITE_TOKEN
+  if (!token) return new NextResponse("Blob token not configured", { status: 500 })
 
   try {
-    // Case 1: full URL — pass straight to head()
+    // Resolve pathname → full private URL via list()
+    let blobUrl: string
     if (p.startsWith("https://") || p.startsWith("http://")) {
-      const blob = await head(p)
-      return NextResponse.redirect(blob.downloadUrl, { status: 302 })
+      blobUrl = p
+    } else {
+      const { blobs } = await list({ prefix: p, limit: 1 })
+      if (!blobs.length) return new NextResponse("Not found", { status: 404 })
+      blobUrl = blobs[0].url
     }
 
-    // Case 2: bare pathname (legacy data) — find the blob via list()
-    const { blobs } = await list({ prefix: p, limit: 1 })
-    if (!blobs.length) {
-      return new NextResponse("Not found", { status: 404 })
+    // Fetch the private blob with the token — required for private stores
+    const upstream = await fetch(blobUrl, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+
+    if (!upstream.ok) {
+      return new NextResponse("Blob fetch failed", { status: upstream.status })
     }
-    const blob = await head(blobs[0].url)
-    return NextResponse.redirect(blob.downloadUrl, { status: 302 })
+
+    const contentType = upstream.headers.get("content-type") ?? "image/jpeg"
+
+    return new NextResponse(upstream.body, {
+      headers: {
+        "Content-Type": contentType,
+        "Cache-Control": "public, max-age=86400, stale-while-revalidate=604800",
+      },
+    })
   } catch (error) {
     console.error("[blob proxy] error:", error)
     return new NextResponse("Not found", { status: 404 })
