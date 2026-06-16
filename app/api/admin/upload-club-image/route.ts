@@ -24,11 +24,14 @@ export async function POST(request: NextRequest) {
   }
 
   const ext = file.name.split(".").pop() ?? "jpg"
-  const blob = await put(`clubs/${Date.now()}.${ext}`, file, {
-    access: "public",
+  const randomSuffix = Math.random().toString(36).slice(2, 7)
+  const filename = `clubs/${Date.now()}-${randomSuffix}.${ext}`
+
+  const blob = await put(filename, file, {
+    access: "private",
     contentType: file.type,
-    addRandomSuffix: true,
   })
 
-  return NextResponse.json({ url: blob.url })
+  // Return the pathname so the caller can store it and resolve via /api/blob
+  return NextResponse.json({ url: blob.pathname })
 }

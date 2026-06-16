@@ -26,9 +26,10 @@ export async function POST(request: NextRequest) {
     const ext = file.name.split(".").pop() ?? "jpg"
     const filename = `coaches/${Date.now()}-${Math.random().toString(36).slice(2, 7)}.${ext}`
 
-    const blob = await put(filename, file, { access: "public" })
+    const blob = await put(filename, file, { access: "private" })
 
-    return NextResponse.json({ url: blob.url })
+    // Return pathname; callers resolve it via /api/blob
+    return NextResponse.json({ url: blob.pathname })
   } catch (error) {
     console.error("Coach image upload error:", error)
     return NextResponse.json({ error: "Upload failed" }, { status: 500 })

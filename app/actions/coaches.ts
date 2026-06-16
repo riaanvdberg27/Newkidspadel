@@ -149,11 +149,13 @@ export async function saveCoach(input: {
 }
 
 export async function deleteCoach(id: number, imageUrl: string | null): Promise<{ ok: boolean }> {
-  if (imageUrl && imageUrl.includes("vercel-storage.com")) {
+  // imageUrl stores the blob pathname (e.g. "coaches/123-abc.jpg")
+  // del() accepts a pathname for private stores
+  if (imageUrl) {
     try {
       await del(imageUrl)
     } catch {
-      // Non-fatal
+      // Non-fatal — blob may already be gone
     }
   }
   await db.delete(coaches).where(eq(coaches.id, id))
