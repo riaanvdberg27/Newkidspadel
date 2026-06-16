@@ -7,6 +7,7 @@ import {
   serial,
   jsonb,
   unique,
+  numeric,
 } from "drizzle-orm/pg-core"
 
 // ---- Better Auth tables (camelCase columns to match Better Auth defaults) ----
@@ -93,6 +94,8 @@ export const clubs = pgTable("clubs", {
   features: jsonb("features").notNull().default([]),
   image: text("image"),
   imageUrl: text("imageUrl"),
+  contactPerson: text("contactPerson"),
+  contactEmail: text("contactEmail"),
   published: boolean("published").notNull().default(true),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
   updatedAt: timestamp("updatedAt").notNull().defaultNow(),
@@ -108,8 +111,8 @@ export const clubSlots = pgTable(
     clubId: integer("clubId").notNull(),
     // 0 = Sunday ... 6 = Saturday
     weekday: integer("weekday").notNull(),
-    // 8 - 18 (24h)
-    hour: integer("hour").notNull(),
+    // Start hour as decimal: 8 = 08:00, 8.5 = 08:30, 13.5 = 13:30 etc.
+    hour: numeric("hour", { precision: 4, scale: 1 }).notNull(),
     capacity: integer("capacity").notNull().default(0),
     // Age group this slot is available for
     ageGroup: text("ageGroup").notNull().default("5-8"),
@@ -138,7 +141,7 @@ export const enrollments = pgTable("enrollments", {
   club: text("club").notNull(),
   clubId: integer("clubId"),
   slotWeekday: integer("slotWeekday"),
-  slotHour: integer("slotHour"),
+  slotHour: numeric("slotHour", { precision: 4, scale: 1 }),
   slotAgeGroup: text("slotAgeGroup"),
   // Debit order
   debitAccountHolder: text("debitAccountHolder"),
@@ -186,7 +189,8 @@ export const packageSlots = pgTable(
     id: serial("id").primaryKey(),
     packageId: integer("packageId").notNull(),
     weekday: integer("weekday").notNull(),
-    hour: integer("hour").notNull(),
+    // Start hour as decimal: 8 = 08:00, 8.5 = 08:30
+    hour: numeric("hour", { precision: 4, scale: 1 }).notNull(),
     capacity: integer("capacity").notNull().default(10),
     // Age group this package slot is available for
     ageGroup: text("ageGroup").notNull().default("5-8"),

@@ -58,7 +58,7 @@ export function AdminTabs({
       <div className="mt-8">
         {tab === "clubs" && <AdminClubManager initialClubs={clubs} />}
         {tab === "packages" && <AdminPackageManager initialPackages={packages} allClubs={clubs} />}
-        {tab === "signups" && <AdminSignupsManager initialSignups={signups} />}
+        {tab === "signups" && <AdminSignupsManager initialSignups={signups} allCoaches={coaches} allPackages={packages} allClubs={clubs} />}
         {tab === "coaches" && <AdminCoachesManager initialCoaches={coaches} allClubs={clubs} />}
         {tab === "contact" && <AdminContactManager initialContacts={contacts} />}
       </div>

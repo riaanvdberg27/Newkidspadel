@@ -32,6 +32,6 @@ export async function POST(request: NextRequest) {
     contentType: file.type,
   })
 
-  // Return the pathname so the caller can store it and resolve via /api/blob
-  return NextResponse.json({ url: blob.pathname })
+  // Return the full blob URL so next/image can load it directly
+  return NextResponse.json({ url: blob.url })
 }

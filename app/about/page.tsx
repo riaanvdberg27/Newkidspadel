@@ -4,7 +4,6 @@ import { SkillsSection } from "@/components/skills-section"
 import { PackagesSection } from "@/components/packages-section"
 import { getPublishedPackages } from "@/app/actions/packages"
 import { getPublishedCoaches } from "@/app/actions/coaches"
-import { blobUrl } from "@/lib/blob"
 
 export const dynamic = "force-dynamic"
 
@@ -93,8 +92,13 @@ export default async function AboutPage() {
               <article key={coach.id} className="rounded-2xl border border-border bg-card p-5 shadow-sm sm:p-6">
                 <div className="flex items-center gap-4">
                   <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-full bg-lime shadow-md">
-                    {blobUrl(coach.imageUrl) ? (
-                      <Image src={blobUrl(coach.imageUrl)!} alt={coach.name} fill className="object-cover" />
+                    {coach.imageUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={coach.imageUrl}
+                        alt={coach.name}
+                        className="h-full w-full object-cover"
+                      />
                     ) : (
                       <div className="flex h-full w-full items-center justify-center">
                         <Image src="/images/tennis-ball.png" alt="" width={28} height={28} className="h-7 w-7" />

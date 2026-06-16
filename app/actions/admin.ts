@@ -45,6 +45,8 @@ export type ClubInput = {
   features: string[]
   image: string | null
   imageUrl: string | null
+  contactPerson: string
+  contactEmail: string
   published: boolean
 }
 
@@ -62,6 +64,8 @@ export async function createClub(input: ClubInput) {
       features: input.features,
       image: input.image || null,
       imageUrl: input.imageUrl || null,
+      contactPerson: input.contactPerson || null,
+      contactEmail: input.contactEmail || null,
       published: input.published,
     })
     .returning({ id: clubs.id })
@@ -83,6 +87,8 @@ export async function updateClub(id: number, input: ClubInput) {
       features: input.features,
       image: input.image || null,
       imageUrl: input.imageUrl || null,
+      contactPerson: input.contactPerson || null,
+      contactEmail: input.contactEmail || null,
       published: input.published,
       updatedAt: new Date(),
     })
@@ -132,8 +138,10 @@ export async function setSlotCapacity(input: {
 }) {
   await requireAdmin()
   const capacity = Math.max(0, Math.floor(input.capacity))
+  // Normalise to one decimal place so DB lookups match
+  const hour = Math.round(input.hour * 2) / 2
 
-  if (!SLOT_HOURS.includes(input.hour as (typeof SLOT_HOURS)[number])) {
+  if (!(SLOT_HOURS as readonly number[]).includes(hour)) {
     throw new Error("Invalid hour")
   }
 
@@ -148,7 +156,7 @@ export async function setSlotCapacity(input: {
       and(
         eq(clubSlots.clubId, input.clubId),
         eq(clubSlots.weekday, input.weekday),
-        eq(clubSlots.hour, input.hour),
+        eq(clubSlots.hour, String(hour)),
         eq(clubSlots.ageGroup, input.ageGroup),
       ),
     )
@@ -163,7 +171,7 @@ export async function setSlotCapacity(input: {
     await db.insert(clubSlots).values({
       clubId: input.clubId,
       weekday: input.weekday,
-      hour: input.hour,
+      hour: String(hour),
       capacity,
       ageGroup: input.ageGroup,
     })

@@ -18,12 +18,11 @@ import { CONSENT_TERMS_LABEL, CONSENT_MEDIA_LABEL, TERMS_TITLE, TERMS_SECTIONS }
 import { authClient } from "@/lib/auth-client"
 import { createEnrollment } from "@/app/actions/enrollment"
 import type { CoachRow } from "@/app/actions/coaches"
-import { blobUrl } from "@/lib/blob"
 
 import { buildPayfastPayment } from "@/app/actions/enrollment"
 
-const ALL_STEPS = ["Child", "Club & Schedule", "Parent Account", "Debit Order", "Preferences", "Review"]
-const ONCE_OFF_STEPS = ["Child", "Club & Schedule", "Parent Account", "Preferences", "Review"]
+const ALL_STEPS = ["Children", "Child Details", "Club & Schedule", "Parent Account", "Debit Order", "Preferences", "Review"]
+const ONCE_OFF_STEPS = ["Children", "Child Details", "Club & Schedule", "Parent Account", "Preferences", "Review"]
 
 const BANKS = [
   "Absa",
@@ -77,11 +76,14 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
   // We map virtual step indices to ensure once-off skips "Debit Order"
 
   // Step data
+  const [childCount, setChildCount] = useState<number>(1)
+  const [children, setChildren] = useState<Array<{ firstName: string; lastName: string; dob: string }>>(
+    Array.from({ length: 1 }, () => ({ firstName: "", lastName: "", dob: "" })),
+  )
   const [clubId, setClubId] = useState<number | null>(null)
   const [slot, setSlot] = useState<SelectedSlot | null>(null)
   const [ageGroup, setAgeGroup] = useState<AgeGroup | null>(null)
-  const [child, setChild] = useState({ name: "", dob: "" })
-  const [parent, setParent] = useState({ name: "", email: "", mobile: "", password: "" })
+  const [parent, setParent] = useState({ firstName: "", lastName: "", email: "", mobile: "", password: "" })
   const [emergency, setEmergency] = useState({ name: "", phone: "" })
   // Coach selection
   const [availableCoaches, setAvailableCoaches] = useState<CoachRow[]>([])
@@ -151,7 +153,7 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
         packageName={selectedPackage.name}
         reference={reference}
         isEft={isOnceOff && paymentMethod === "eft"}
-        childName={child.name}
+        childNames={children.map((c) => `${c.firstName} ${c.lastName}`.trim())}
         packagePrice={selectedPackage.price}
       />
     )
@@ -166,7 +168,7 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
       const { error: signUpError } = await authClient.signUp.email({
         email: parent.email,
         password: parent.password,
-        name: parent.name,
+        name: `${parent.firstName} ${parent.lastName}`.trim(),
       })
       if (signUpError) {
         setError(signUpError.message ?? "Could not create your account.")
@@ -174,40 +176,46 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
         return
       }
 
-      // 2. Persist the enrollment scoped to the new user
-      const { referenceNumber } = await createEnrollment({
-        parentName: parent.name,
-        parentEmail: parent.email,
-        parentMobile: parent.mobile,
-        childName: child.name,
-        childDob: child.dob,
-        childAge: child.dob ? Math.floor((Date.now() - new Date(child.dob).getTime()) / (1000 * 60 * 60 * 24 * 365.25)) : 0,
-        packageName: selectedPackage.name,
-        packagePrice: selectedPackage.price,
-        club: selectedClub?.name ?? "",
-        clubId: clubId,
-        slotWeekday: slot?.weekday ?? null,
-        slotHour: slot?.hour ?? null,
-        slotAgeGroup: ageGroup,
-        // Debit fields — only passed for monthly
-        ...(isOnceOff ? {} : {
-          debitAccountHolder: debit.accountHolder,
-          debitBankName: debit.bankName,
-          debitAccountNumber: debit.accountNumber,
-          debitAccountType: debit.accountType,
-          debitDay: Number(debit.debitDay),
-        }),
-        emergencyContactName: emergency.name,
-        emergencyContactPhone: emergency.phone,
-        agreedTerms,
-        consentMedia,
-        signatureData,
-        signedName: parent.name,
-        paymentType: isOnceOff ? "once-off" : "monthly",
-        ...prefs,
-        coachId: coachId ?? null,
-        coachName: availableCoaches.find((c) => c.id === coachId)?.name ?? null,
-      })
+      // 2. Persist one enrollment per child
+      const refs: string[] = []
+      for (const child of children) {
+        const childFullName = `${child.firstName} ${child.lastName}`.trim()
+        const { referenceNumber } = await createEnrollment({
+          parentName: `${parent.firstName} ${parent.lastName}`.trim(),
+          parentEmail: parent.email,
+          parentMobile: parent.mobile,
+          childName: childFullName,
+          childDob: child.dob,
+          childAge: child.dob ? Math.floor((Date.now() - new Date(child.dob).getTime()) / (1000 * 60 * 60 * 24 * 365.25)) : 0,
+          packageName: selectedPackage.name,
+          packagePrice: selectedPackage.price,
+          club: selectedClub?.name ?? "",
+          clubId: clubId,
+          slotWeekday: slot?.weekday ?? null,
+          slotHour: slot?.hour ?? null,
+          slotAgeGroup: ageGroup,
+          // Debit fields — only passed for monthly
+          ...(isOnceOff ? {} : {
+            debitAccountHolder: debit.accountHolder,
+            debitBankName: debit.bankName,
+            debitAccountNumber: debit.accountNumber,
+            debitAccountType: debit.accountType,
+            debitDay: Number(debit.debitDay),
+          }),
+          emergencyContactName: emergency.name,
+          emergencyContactPhone: emergency.phone,
+          agreedTerms,
+          consentMedia,
+          signatureData,
+          signedName: `${parent.firstName} ${parent.lastName}`.trim(),
+          paymentType: isOnceOff ? "once-off" : "monthly",
+          ...prefs,
+          coachId: coachId ?? null,
+          coachName: availableCoaches.find((c) => c.id === coachId)?.name ?? null,
+        })
+        refs.push(referenceNumber)
+      }
+      const referenceNumber = refs.join(", ")
 
       if (isOnceOff) {
         if (paymentMethod === "eft") {
@@ -216,10 +224,11 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
           router.refresh()
           return
         }
-        // 3a. PayFast: redirect via hidden form POST
+        // 3a. PayFast: use the first child's reference for the redirect
+        const firstRef = referenceNumber.split(", ")[0]
         const { payfastUrl, formData } = await buildPayfastPayment({
-          referenceNumber,
-          parentName: parent.name,
+          referenceNumber: firstRef,
+          parentName: `${parent.firstName} ${parent.lastName}`.trim(),
           parentEmail: parent.email,
           packageName: selectedPackage.name,
           packagePrice: selectedPackage.price,
@@ -292,39 +301,114 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
       </ol>
 
       <div className="mt-10">
-        {step === 0 ? (
-          /* ── Step 0: Child details + age group ── */
+        {renderStep()}
+      </div>
+
+      <div className="relative mx-auto mt-12 aspect-[3/4] w-full max-w-xs overflow-hidden">
+        <Image src="/images/mascots.png" alt="Next Gen Padel Academy Mascots" fill className="object-contain" />
+      </div>
+    </section>
+  )
+
+  function renderStep() {
+    if (step === 0) return (
           <div>
-            <h2 className="text-xl font-bold text-navy">Your Child&apos;s Details</h2>
-            <p className="mt-1 text-sm text-muted-foreground">Tell us who will be joining the academy</p>
-            <div className="mt-6 space-y-5">
-              <Field label="Child's Full Name" value={child.name} onChange={(v) => setChild({ ...child, name: v })} />
-
-              <div>
-                <p className="mb-2 text-sm font-semibold text-navy">Date of Birth</p>
-                <DobPicker value={child.dob} onChange={(v) => setChild({ ...child, dob: v })} />
-              </div>
+            <h2 className="text-xl font-bold text-navy">How many children are you enrolling?</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              You can enroll up to 5 children in one go. Each child will get their own enrollment record.
+            </p>
+            <div className="mt-6 grid grid-cols-5 gap-3">
+              {[1, 2, 3, 4, 5].map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => {
+                    setChildCount(n)
+                    setChildren((prev) => {
+                      const updated = [...prev]
+                      while (updated.length < n) updated.push({ firstName: "", lastName: "", dob: "" })
+                      return updated.slice(0, n)
+                    })
+                  }}
+                  className={`flex flex-col items-center justify-center rounded-2xl border-2 py-5 font-black text-3xl transition-all ${
+                    childCount === n
+                      ? "border-lime bg-lime/10 scale-105 shadow-md text-navy"
+                      : "border-border bg-card text-muted-foreground hover:border-lime/50"
+                  }`}
+                >
+                  {n}
+                  <span className="mt-1 text-xs font-semibold">{n === 1 ? "child" : "children"}</span>
+                </button>
+              ))}
             </div>
-
-            {/* Age-group category selector */}
+            <StepNav onNext={() => setStep(1)} />
+          </div>
+    )
+    if (step === 1) return (
+          /* ── Step 1: Child details (one section per child) ── */
+          <div>
+            <h2 className="text-xl font-bold text-navy">
+              {childCount === 1 ? "Your Child's Details" : "Children's Details"}
+            </h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {childCount === 1
+                ? "Tell us who will be joining the academy"
+                : `Tell us about all ${childCount} children joining the academy`}
+            </p>
+            <div className="mt-6 space-y-6">
+              {children.map((child, idx) => (
+                <div key={idx} className="rounded-card border border-border bg-card p-5 shadow-sm">
+                  {childCount > 1 && (
+                    <p className="mb-4 text-sm font-black text-navy">Child {idx + 1}</p>
+                  )}
+                  <div className="space-y-4">
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <Field
+                        label={childCount > 1 ? `Child ${idx + 1} First Name` : "Child's First Name"}
+                        value={child.firstName}
+                        onChange={(v) =>
+                          setChildren((prev) => prev.map((c, i) => (i === idx ? { ...c, firstName: v } : c)))
+                        }
+                        placeholder="First name"
+                      />
+                      <Field
+                        label="Last Name / Surname"
+                        value={child.lastName}
+                        onChange={(v) =>
+                          setChildren((prev) => prev.map((c, i) => (i === idx ? { ...c, lastName: v } : c)))
+                        }
+                        placeholder="Last name"
+                      />
+                    </div>
+                    <div>
+                      <p className="mb-2 text-sm font-semibold text-navy">Date of Birth</p>
+                      <DobPicker
+                        value={child.dob}
+                        onChange={(v) =>
+                          setChildren((prev) => prev.map((c, i) => (i === idx ? { ...c, dob: v } : c)))
+                        }
+                      />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {/* Age-group category selector — applies to all children (same class) */}
             <div className="mt-6">
               <p className="text-sm font-semibold text-navy">Age Category</p>
               <p className="mt-0.5 text-xs text-muted-foreground">
-                Select the age group that best fits your child — this determines which time slots are available.
+                {childCount > 1
+                  ? "Select the age group for this enrollment — all children will join the same session."
+                  : "Select the age group that best fits your child — this determines which time slots are available."}
               </p>
               <div className="mt-3 grid grid-cols-3 gap-3">
                 {(["5-8", "9-13", "14-17"] as const).map((ag) => (
                   <button
                     key={ag}
                     type="button"
-                    onClick={() => {
-                      setAgeGroup(ag)
-                      setSlot(null)
-                    }}
+                    onClick={() => { setAgeGroup(ag); setSlot(null) }}
                     className={`rounded-2xl border-2 p-4 text-center transition-all ${
-                      ageGroup === ag
-                        ? "border-lime bg-lime/10 scale-105 shadow-md"
-                        : "border-border bg-card hover:border-lime/50"
+                      ageGroup === ag ? "border-lime bg-lime/10 scale-105 shadow-md" : "border-border bg-card hover:border-lime/50"
                     }`}
                   >
                     <span className="block text-2xl font-black text-navy">{ag}</span>
@@ -333,14 +417,15 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
                 ))}
               </div>
             </div>
-
             <StepNav
-              onNext={() => setStep(1)}
-              nextDisabled={!child.name || !child.dob || !ageGroup}
+              onBack={() => setStep(0)}
+              onNext={() => setStep(2)}
+              nextDisabled={children.some((c) => !c.firstName || !c.lastName || !c.dob) || !ageGroup}
             />
           </div>
-        ) : step === 1 ? (
-          /* ── Step 1: Club + coach + time slot ── */
+    )
+    if (step === 2) return (
+          /* ── Step 2: Club + coach + time slot ── */
           <div>
             <h2 className="text-xl font-bold text-navy">Choose Your Club &amp; Schedule</h2>
             <p className="mt-1 text-sm text-muted-foreground">
@@ -357,10 +442,7 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
               {availableClubs.map((c) => (
                 <button
                   key={c.id}
-                  onClick={() => {
-                    setClubId(c.id)
-                    setSlot(null)
-                  }}
+                  onClick={() => { setClubId(c.id); setSlot(null) }}
                   className={`w-full rounded-card border p-4 text-left transition-colors ${
                     clubId === c.id ? "border-lime bg-lime/10" : "border-border bg-card hover:border-lime/50"
                   }`}
@@ -370,17 +452,12 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
                 </button>
               ))}
             </div>
-
-            {/* Coach picker — shown once a club is selected */}
+            {/* Coach picker */}
             {clubId && (
               <div className="mt-6">
                 <p className="block text-sm font-semibold text-navy">Select a Coach</p>
                 <p className="mb-3 text-xs text-muted-foreground">
-                  {coachesLoading
-                    ? "Loading coaches…"
-                    : availableCoaches.length === 0
-                    ? "No coaches are currently assigned to this venue."
-                    : "Pick the coach you would like to train with."}
+                  {coachesLoading ? "Loading coaches…" : availableCoaches.length === 0 ? "No coaches are currently assigned to this venue." : "Pick the coach you would like to train with."}
                 </p>
                 {!coachesLoading && availableCoaches.length > 0 && (
                   <div className="grid gap-3 sm:grid-cols-2">
@@ -389,15 +466,12 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
                         key={coach.id}
                         type="button"
                         onClick={() => setCoachId(coach.id === coachId ? null : coach.id)}
-                        className={`flex items-center gap-3 rounded-card border p-3 text-left transition-colors ${
-                          coachId === coach.id
-                            ? "border-lime bg-lime/10"
-                            : "border-border bg-card hover:border-lime/50"
-                        }`}
+                        className={`flex items-center gap-3 rounded-card border p-3 text-left transition-colors ${coachId === coach.id ? "border-lime bg-lime/10" : "border-border bg-card hover:border-lime/50"}`}
                       >
                         <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-full bg-muted">
                           {coach.imageUrl ? (
-                            <Image src={blobUrl(coach.imageUrl)!} alt={coach.name} fill className="object-cover" />
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={coach.imageUrl} alt={coach.name} className="h-full w-full object-cover" />
                           ) : (
                             <div className="flex h-full w-full items-center justify-center text-sm font-black text-muted-foreground">
                               {coach.name[0]?.toUpperCase() ?? "?"}
@@ -408,52 +482,54 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
                           <p className="truncate font-bold text-navy text-sm">{coach.name}</p>
                           <p className="truncate text-xs text-muted-foreground">{coach.role}</p>
                         </div>
-                        {coachId === coach.id && (
-                          <Check className="ml-auto h-4 w-4 shrink-0 text-lime-foreground" />
-                        )}
+                        {coachId === coach.id && <Check className="ml-auto h-4 w-4 shrink-0 text-lime-foreground" />}
                       </button>
                     ))}
                   </div>
                 )}
               </div>
             )}
-
             {clubId && selectedPackage?.slotType === "custom" ? (
               <div className="mt-6">
                 <p className="block text-sm font-semibold text-navy">Available Time Slots</p>
-                <p className="mb-3 text-xs text-muted-foreground">
-                  This package runs at fixed times. Pick a slot below.
-                </p>
+                <p className="mb-3 text-xs text-muted-foreground">This package runs at fixed times. Pick a slot below.</p>
                 <PackageSlotPicker packageId={selectedPackage.id} ageGroup={ageGroup ?? "5-8"} selected={slot} onSelect={setSlot} />
               </div>
             ) : clubId && ageGroup ? (
               <div className="mt-6">
                 <p className="block text-sm font-semibold text-navy">Available Time Slots</p>
-                <p className="mb-3 text-xs text-muted-foreground">
-                  Only times with open places for ages {ageGroup} are shown.
-                </p>
+                <p className="mb-3 text-xs text-muted-foreground">Only times with open places for ages {ageGroup} are shown.</p>
                 <SlotPicker clubId={clubId} ageGroup={ageGroup} selected={slot} onSelect={setSlot} />
               </div>
             ) : null}
-            <StepNav onBack={() => setStep(0)} onNext={() => setStep(2)} nextDisabled={!clubId || !slot} />
+            <StepNav onBack={() => setStep(1)} onNext={() => setStep(3)} nextDisabled={!clubId || !slot} />
           </div>
-        ) : step === 2 ? (
+    )
+    if (step === 3) return (
+          /* ── Step 3: Parent account (for both monthly & once-off) ── */
           <div>
             <h2 className="text-xl font-bold text-navy">Parent / Guardian Account</h2>
             <p className="mt-1 text-sm text-muted-foreground">
               We&apos;ll create your account so you can track sessions and manage your enrollment.
             </p>
             <div className="mt-6 grid gap-4 sm:grid-cols-2">
-              <Field label="Parent / Guardian Name" value={parent.name} onChange={(v) => setParent({ ...parent, name: v })} />
+              <Field label="First Name" value={parent.firstName} onChange={(v) => setParent({ ...parent, firstName: v })} placeholder="First name" />
+              <Field label="Last Name / Surname" value={parent.lastName} onChange={(v) => setParent({ ...parent, lastName: v })} placeholder="Last name" />
               <Field label="Mobile Number" type="tel" value={parent.mobile} onChange={(v) => setParent({ ...parent, mobile: v })} />
               <Field label="Email" type="email" value={parent.email} onChange={(v) => setParent({ ...parent, email: v })} />
-              <Field
-                label="Password"
-                type="password"
-                value={parent.password}
-                onChange={(v) => setParent({ ...parent, password: v })}
-                placeholder="At least 8 characters"
-              />
+              <div className="space-y-1">
+                <Field label="Password" type="password" value={parent.password} onChange={(v) => setParent({ ...parent, password: v })} placeholder="At least 8 characters" />
+                {parent.password.length > 0 && parent.password.length < 8 && (
+                  <p className="text-xs font-semibold text-destructive">
+                    Password is too short — must be at least 8 characters ({parent.password.length}/8)
+                  </p>
+                )}
+                {parent.password.length >= 8 && (
+                  <p className="text-xs font-semibold text-lime-600">
+                    Password looks good
+                  </p>
+                )}
+              </div>
             </div>
             <div className="mt-6 rounded-card border border-border bg-muted/40 p-4">
               <p className="text-sm font-semibold text-navy">Emergency Contact</p>
@@ -463,124 +539,85 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
               </div>
             </div>
             <StepNav
-              onBack={() => setStep(1)}
-              onNext={() => setStep(3)}
-              nextDisabled={
-                !parent.name || !parent.email || !parent.mobile || parent.password.length < 8 || !emergency.name || !emergency.phone
-              }
+              onBack={() => setStep(2)}
+              onNext={() => setStep(4)}
+              nextDisabled={!parent.firstName || !parent.lastName || !parent.email || !parent.mobile || parent.password.length < 8 || !emergency.name || !emergency.phone}
             />
           </div>
-        ) : step === 3 && !isOnceOff ? (
+    )
+    if (step === 4 && !isOnceOff) return (
+          /* ── Step 4 (monthly only): Debit order ── */
           <div>
-            <h2 className="text-xl font-bold text-navy">Debit Order Details</h2>            <p className="mt-1 text-sm text-muted-foreground">
-              Monthly fees are collected by debit order. Please provide the account to be debited.
-            </p>
+            <h2 className="text-xl font-bold text-navy">Debit Order Details</h2>
+            <p className="mt-1 text-sm text-muted-foreground">Monthly fees are collected by debit order. Please provide the account to be debited.</p>
             <div className="mt-6 grid gap-4 sm:grid-cols-2">
-              <Field
-                label="Account Holder Name"
-                value={debit.accountHolder}
-                onChange={(v) => setDebit({ ...debit, accountHolder: v })}
-              />
+              <Field label="Account Holder Name" value={debit.accountHolder} onChange={(v) => setDebit({ ...debit, accountHolder: v })} />
               <label className="block">
                 <span className="block text-sm font-semibold text-navy">Bank Name</span>
-                <select
-                  value={debit.bankName}
-                  onChange={(e) => setDebit({ ...debit, bankName: e.target.value })}
-                  className="mt-2 w-full rounded-md border border-border bg-card px-3 py-2 outline-none focus:border-lime"
-                >
+                <select value={debit.bankName} onChange={(e) => setDebit({ ...debit, bankName: e.target.value })} className="mt-2 w-full rounded-md border border-border bg-card px-3 py-2 outline-none focus:border-lime">
                   <option value="">Select your bank</option>
-                  {BANKS.map((b) => (
-                    <option key={b} value={b}>
-                      {b}
-                    </option>
-                  ))}
+                  {BANKS.map((b) => <option key={b} value={b}>{b}</option>)}
                 </select>
               </label>
-              <Field
-                label="Account Number"
-                type="text"
-                value={debit.accountNumber}
-                onChange={(v) => setDebit({ ...debit, accountNumber: v.replace(/[^0-9]/g, "") })}
-                placeholder="Digits only"
-              />
+              <Field label="Account Number" type="text" value={debit.accountNumber} onChange={(v) => setDebit({ ...debit, accountNumber: v.replace(/[^0-9]/g, "") })} placeholder="Digits only" />
               <label className="block">
                 <span className="block text-sm font-semibold text-navy">Account Type</span>
-                <select
-                  value={debit.accountType}
-                  onChange={(e) => setDebit({ ...debit, accountType: e.target.value })}
-                  className="mt-2 w-full rounded-md border border-border bg-card px-3 py-2 outline-none focus:border-lime"
-                >
+                <select value={debit.accountType} onChange={(e) => setDebit({ ...debit, accountType: e.target.value })} className="mt-2 w-full rounded-md border border-border bg-card px-3 py-2 outline-none focus:border-lime">
                   <option value="Cheque">Cheque / Current</option>
                   <option value="Savings">Savings</option>
                 </select>
               </label>
               <label className="block">
                 <span className="block text-sm font-semibold text-navy">Day of Debit Order</span>
-                <select
-                  value={debit.debitDay}
-                  onChange={(e) => setDebit({ ...debit, debitDay: e.target.value })}
-                  className="mt-2 w-full rounded-md border border-border bg-card px-3 py-2 outline-none focus:border-lime"
-                >
+                <select value={debit.debitDay} onChange={(e) => setDebit({ ...debit, debitDay: e.target.value })} className="mt-2 w-full rounded-md border border-border bg-card px-3 py-2 outline-none focus:border-lime">
                   {Array.from({ length: 28 }, (_, i) => i + 1).map((d) => (
                     <option key={d} value={String(d)}>
-                      {d}
-                      {d === 1 || d === 21 ? "st" : d === 2 || d === 22 ? "nd" : d === 3 || d === 23 ? "rd" : "th"} of each
-                      month
+                      {d}{d === 1 || d === 21 ? "st" : d === 2 || d === 22 ? "nd" : d === 3 || d === 23 ? "rd" : "th"} of each month
                     </option>
                   ))}
                 </select>
               </label>
             </div>
-            <StepNav
-              onBack={() => setStep(2)}
-              onNext={() => setStep(4)}
-              nextDisabled={!debit.accountHolder || !debit.bankName || debit.accountNumber.length < 5}
-            />
+            <StepNav onBack={() => setStep(3)} onNext={() => setStep(5)} nextDisabled={!debit.accountHolder || !debit.bankName || debit.accountNumber.length < 5} />
           </div>
-        ) : (step === 4 && !isOnceOff) || (step === 3 && isOnceOff) ? (
+    )
+    if ((step === 5 && !isOnceOff) || (step === 4 && isOnceOff)) return (
+          /* ── Preferences step ── */
           <div>
             <h2 className="text-xl font-bold text-navy">Communication Preferences</h2>
             <p className="mt-1 text-sm text-muted-foreground">Choose how you&apos;d like to hear from us</p>
             <div className="mt-6 space-y-2">
               <PrefToggle label="Email updates" checked={prefs.prefEmail} onChange={(v) => setPrefs({ ...prefs, prefEmail: v })} />
               <PrefToggle label="WhatsApp messages" checked={prefs.prefWhatsapp} onChange={(v) => setPrefs({ ...prefs, prefWhatsapp: v })} />
-              <PrefToggle
-                label="Session reminders"
-                checked={prefs.prefSessionReminders}
-                onChange={(v) => setPrefs({ ...prefs, prefSessionReminders: v })}
-              />
-              <PrefToggle
-                label="Academy announcements"
-                checked={prefs.prefAnnouncements}
-                onChange={(v) => setPrefs({ ...prefs, prefAnnouncements: v })}
-              />
-              <PrefToggle label="Events & tournaments" checked={prefs.prefEvents} onChange={(v) => setPrefs({ ...prefs, prefEvents: v })} />
-              <PrefToggle
-                label="Holiday clinics"
-                checked={prefs.prefHolidayClinics}
-                onChange={(v) => setPrefs({ ...prefs, prefHolidayClinics: v })}
-              />
+              <PrefToggle label="Session reminders" checked={prefs.prefSessionReminders} onChange={(v) => setPrefs({ ...prefs, prefSessionReminders: v })} />
+              <PrefToggle label="Academy announcements" checked={prefs.prefAnnouncements} onChange={(v) => setPrefs({ ...prefs, prefAnnouncements: v })} />
+              <PrefToggle label="Events &amp; tournaments" checked={prefs.prefEvents} onChange={(v) => setPrefs({ ...prefs, prefEvents: v })} />
+              <PrefToggle label="Holiday clinics" checked={prefs.prefHolidayClinics} onChange={(v) => setPrefs({ ...prefs, prefHolidayClinics: v })} />
             </div>
-            {/* For once-off packages step 3 is Preferences, for monthly it's step 4 */}
-            <StepNav
-              onBack={() => setStep(isOnceOff ? 2 : 3)}
-              onNext={() => setStep(isOnceOff ? 4 : 5)}
-            />
+            <StepNav onBack={() => setStep(isOnceOff ? 3 : 4)} onNext={() => setStep(isOnceOff ? 5 : 6)} />
           </div>
-        ) : (
+    )
+    // Review step (default)
+    return (
           <div>
             <h2 className="text-xl font-bold text-navy">Review &amp; Confirm</h2>
             <p className="mt-1 text-sm text-muted-foreground">Check your details, then create your account to finish.</p>
             <dl className="mt-6 space-y-2 rounded-card border border-border bg-card p-5 text-sm shadow-sm">
               <Row
                 label="Package"
-                value={`${selectedPackage.name} — R${selectedPackage.price.toLocaleString()} ${isOnceOff ? "(once off)" : "/month"}`}
+                value={`${selectedPackage?.name} — R${selectedPackage?.price.toLocaleString()} ${isOnceOff ? "(once off)" : "/month"}`}
               />
               <Row label="Club" value={selectedClub?.name ?? ""} />
               <Row label="Time Slot" value={slot ? formatSlot(slot.weekday, slot.hour) : ""} />
               {coachId && <Row label="Coach" value={availableCoaches.find((c) => c.id === coachId)?.name ?? ""} />}
-              <Row label="Child" value={`${child.name} (born ${child.dob})`} />
-              <Row label="Parent" value={parent.name} />
+              {children.map((child, idx) => (
+                <Row
+                  key={idx}
+                  label={childCount > 1 ? `Child ${idx + 1}` : "Child"}
+                  value={`${child.firstName} ${child.lastName}`.trim() + ` (born ${child.dob})`}
+                />
+              ))}
+              <Row label="Parent" value={`${parent.firstName} ${parent.lastName}`.trim()} />
               <Row label="Email" value={parent.email} />
               <Row label="Mobile" value={parent.mobile} />
               <Row label="Emergency Contact" value={`${emergency.name} — ${emergency.phone}`} />
@@ -659,9 +696,11 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
                     </dl>
                     <div className="mt-4 rounded-md border border-amber-300 bg-amber-50 px-4 py-3">
                       <p className="text-xs font-semibold text-amber-800">Payment Reference</p>
-                      <p className="mt-1 text-sm font-black text-amber-900">{child.name || "Child Name"}</p>
+                      <p className="mt-1 text-sm font-black text-amber-900">
+                        {children.map((c) => `${c.firstName} ${c.lastName}`.trim()).filter(Boolean).join(" & ") || "Child Name"}
+                      </p>
                       <p className="mt-1 text-xs text-amber-700">
-                        Please use your child&apos;s full name as the payment reference so we can match your payment.
+                        Please use your {childCount > 1 ? "children's" : "child's"} full name{childCount > 1 ? "s" : ""} as the payment reference so we can match your payment.
                       </p>
                     </div>
                   </div>
@@ -702,7 +741,7 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
               <div className="mt-5">
                 <p className="text-sm font-semibold text-navy">Signature</p>
                 <p className="mb-2 text-xs text-muted-foreground">
-                  Please sign below to confirm your agreement ({parent.name || "parent/guardian"}).
+                  Please sign below to confirm your agreement ({`${parent.firstName} ${parent.lastName}`.trim() || "parent/guardian"}).
                 </p>
                 <SignaturePad value={signatureData} onChange={setSignatureData} />
               </div>
@@ -716,7 +755,7 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
 
             <div className="mt-8 flex items-center justify-between gap-4">
               <button
-                onClick={() => setStep(isOnceOff ? 3 : 4)}
+                onClick={() => setStep(isOnceOff ? 4 : 5)}
                 className="rounded-2xl border-2 border-border px-5 py-3 font-bold text-navy transition-all hover:bg-muted active:scale-95"
               >
                 Back
@@ -747,15 +786,9 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
               </Link>
             </p>
           </div>
-        )}
-      </div>
-
-      <div className="relative mx-auto mt-12 aspect-[3/4] w-full max-w-xs overflow-hidden">
-        <Image src="/images/mascots.png" alt="Next Gen Padel Academy Mascots" fill className="object-contain" />
-      </div>
-    </section>
-  )
-}
+    )
+  } // end renderStep
+} // end OnboardingWizard
 
 function PackagePicker({ packages, onSelect }: { packages: PublicPackage[]; onSelect: (p: PublicPackage) => void }) {
   const CARD_COLORS = [
@@ -941,15 +974,17 @@ function Confirmation({
   packageName,
   reference,
   isEft,
-  childName,
+  childNames = [],
   packagePrice,
 }: {
   packageName: string
   reference: string
   isEft?: boolean
-  childName?: string
+  childNames?: string[]
   packagePrice?: number
 }) {
+  const childLabel = childNames.filter(Boolean).join(" & ") || "your child"
+  const refs = reference.split(", ")
   return (
     <section className="mx-auto max-w-2xl px-4 py-16">
       <div className="rounded-card border border-lime bg-lime/10 p-8 text-center">
@@ -958,10 +993,16 @@ function Confirmation({
         </span>
         <h2 className="mt-4 text-2xl font-extrabold text-navy">Welcome to Next Gen Padel!</h2>
         <p className="mt-2 text-muted-foreground">
-          Your account is ready and your enrollment in the {packageName} has been received.
+          {childNames.length > 1
+            ? `Your account is ready and ${childNames.length} enrollments in the ${packageName} have been received.`
+            : `Your account is ready and your enrollment in the ${packageName} has been received.`}
         </p>
-        <p className="mt-4 text-sm text-muted-foreground">Your reference number</p>
-        <p className="text-lg font-extrabold tracking-wide text-navy">{reference}</p>
+        <p className="mt-4 text-sm text-muted-foreground">
+          {refs.length > 1 ? "Your reference numbers" : "Your reference number"}
+        </p>
+        {refs.map((r) => (
+          <p key={r} className="text-lg font-extrabold tracking-wide text-navy">{r}</p>
+        ))}
 
         {isEft && (
           <div className="mt-6 rounded-card border border-border bg-card p-5 text-left shadow-sm">
@@ -994,13 +1035,13 @@ function Confirmation({
               )}
               <div className="flex justify-between gap-4">
                 <dt className="text-muted-foreground">Payment Reference</dt>
-                <dd className="font-black text-navy">{childName || "Child's full name"}</dd>
+                <dd className="font-black text-navy">{childLabel}</dd>
               </div>
             </dl>
             <div className="mt-4 rounded-md border border-amber-300 bg-amber-50 px-4 py-3">
               <p className="text-xs font-semibold text-amber-800">Important</p>
               <p className="mt-1 text-xs text-amber-700">
-                Use <strong>{childName || "your child's full name"}</strong> as the payment reference so we can match
+                Use <strong>{childLabel}</strong> as the payment reference so we can match
                 your payment and confirm your enrollment.
               </p>
             </div>

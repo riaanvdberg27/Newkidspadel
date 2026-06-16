@@ -151,7 +151,7 @@ export async function createPackage(input: PackageInput) {
   const [row] = await db.insert(packages).values(values).returning({ id: packages.id })
   if (values.slotType === "custom" && input.customSlots?.length) {
     await db.insert(packageSlots).values(
-      input.customSlots.map((s) => ({ packageId: row.id, weekday: s.weekday, hour: s.hour, capacity: s.capacity, ageGroup: s.ageGroup })),
+      input.customSlots.map((s) => ({ packageId: row.id, weekday: s.weekday, hour: String(s.hour), capacity: s.capacity, ageGroup: s.ageGroup })),
     )
   }
   await syncPackageClubs(row.id, input.clubIds ?? [])
@@ -167,7 +167,7 @@ export async function updatePackage(id: number, input: PackageInput) {
   await db.delete(packageSlots).where(eq(packageSlots.packageId, id))
   if (values.slotType === "custom" && input.customSlots?.length) {
     await db.insert(packageSlots).values(
-      input.customSlots.map((s) => ({ packageId: id, weekday: s.weekday, hour: s.hour, capacity: s.capacity, ageGroup: s.ageGroup })),
+      input.customSlots.map((s) => ({ packageId: id, weekday: s.weekday, hour: String(s.hour), capacity: s.capacity, ageGroup: s.ageGroup })),
     )
   }
   await syncPackageClubs(id, input.clubIds ?? [])
