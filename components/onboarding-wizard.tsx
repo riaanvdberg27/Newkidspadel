@@ -397,7 +397,7 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
                       >
                         <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-full bg-muted">
                           {coach.imageUrl ? (
-                            <Image src={blobUrl(coach.imageUrl)!} alt={coach.name} fill className="object-cover" />
+                            <Image src={blobUrl(coach.imageUrl)!} alt={coach.name} fill unoptimized className="object-cover" />
                           ) : (
                             <div className="flex h-full w-full items-center justify-center text-sm font-black text-muted-foreground">
                               {coach.name[0]?.toUpperCase() ?? "?"}

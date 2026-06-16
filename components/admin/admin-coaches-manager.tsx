@@ -196,7 +196,7 @@ function CoachCard({
         <div className="sm:col-span-2 flex items-center gap-4">
           <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-full border-2 border-border bg-muted">
             {coach.imageUrl ? (
-              <Image src={blobUrl(coach.imageUrl)!} alt={coach.name || "Coach"} fill className="object-cover" />
+              <Image src={blobUrl(coach.imageUrl)!} alt={coach.name || "Coach"} fill unoptimized className="object-cover" />
             ) : (
               <div className="flex h-full w-full items-center justify-center text-xl font-black text-muted-foreground">
                 {coach.name ? coach.name[0].toUpperCase() : "?"}

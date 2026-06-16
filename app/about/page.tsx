@@ -94,7 +94,7 @@ export default async function AboutPage() {
                 <div className="flex items-center gap-4">
                   <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-full bg-lime shadow-md">
                     {blobUrl(coach.imageUrl) ? (
-                      <Image src={blobUrl(coach.imageUrl)!} alt={coach.name} fill className="object-cover" />
+                      <Image src={blobUrl(coach.imageUrl)!} alt={coach.name} fill unoptimized className="object-cover" />
                     ) : (
                       <div className="flex h-full w-full items-center justify-center">
                         <Image src="/images/tennis-ball.png" alt="" width={28} height={28} className="h-7 w-7" />

@@ -39,6 +39,7 @@ export async function ClubsSection({ heading = true }: { heading?: boolean }) {
                           src={imgSrc}
                           alt={`${club.name}`}
                           fill
+                          unoptimized
                           className="object-cover"
                         />
                       ) : (
