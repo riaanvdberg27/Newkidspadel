@@ -580,7 +580,7 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
             <dl className="mt-6 space-y-2 rounded-card border border-border bg-card p-5 text-sm shadow-sm">
               <Row
                 label="Package"
-                value={`${selectedPackage.name} — R${selectedPackage.price.toLocaleString()} ${isOnceOff ? "(once off)" : "/month"}`}
+                value={`${selectedPackage?.name} — R${selectedPackage?.price.toLocaleString()} ${isOnceOff ? "(once off)" : "/month"}`}
               />
               <Row label="Club" value={selectedClub?.name ?? ""} />
               <Row label="Time Slot" value={slot ? formatSlot(slot.weekday, slot.hour) : ""} />
@@ -763,6 +763,7 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
           </div>
     )
   } // end renderStep
+} // end OnboardingWizard
 
 function PackagePicker({ packages, onSelect }: { packages: PublicPackage[]; onSelect: (p: PublicPackage) => void }) {
   const CARD_COLORS = [
