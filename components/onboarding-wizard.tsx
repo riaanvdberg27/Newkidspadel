@@ -78,13 +78,13 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
 
   // Step data
   const [childCount, setChildCount] = useState<number>(1)
-  const [children, setChildren] = useState<Array<{ name: string; dob: string }>>(
-    Array.from({ length: 1 }, () => ({ name: "", dob: "" })),
+  const [children, setChildren] = useState<Array<{ firstName: string; lastName: string; dob: string }>>(
+    Array.from({ length: 1 }, () => ({ firstName: "", lastName: "", dob: "" })),
   )
   const [clubId, setClubId] = useState<number | null>(null)
   const [slot, setSlot] = useState<SelectedSlot | null>(null)
   const [ageGroup, setAgeGroup] = useState<AgeGroup | null>(null)
-  const [parent, setParent] = useState({ name: "", email: "", mobile: "", password: "" })
+  const [parent, setParent] = useState({ firstName: "", lastName: "", email: "", mobile: "", password: "" })
   const [emergency, setEmergency] = useState({ name: "", phone: "" })
   // Coach selection
   const [availableCoaches, setAvailableCoaches] = useState<CoachRow[]>([])
@@ -154,7 +154,7 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
         packageName={selectedPackage.name}
         reference={reference}
         isEft={isOnceOff && paymentMethod === "eft"}
-        childNames={children.map((c) => c.name)}
+        childNames={children.map((c) => `${c.firstName} ${c.lastName}`.trim())}
         packagePrice={selectedPackage.price}
       />
     )
@@ -169,7 +169,7 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
       const { error: signUpError } = await authClient.signUp.email({
         email: parent.email,
         password: parent.password,
-        name: parent.name,
+        name: `${parent.firstName} ${parent.lastName}`.trim(),
       })
       if (signUpError) {
         setError(signUpError.message ?? "Could not create your account.")
@@ -180,11 +180,12 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
       // 2. Persist one enrollment per child
       const refs: string[] = []
       for (const child of children) {
+        const childFullName = `${child.firstName} ${child.lastName}`.trim()
         const { referenceNumber } = await createEnrollment({
-          parentName: parent.name,
+          parentName: `${parent.firstName} ${parent.lastName}`.trim(),
           parentEmail: parent.email,
           parentMobile: parent.mobile,
-          childName: child.name,
+          childName: childFullName,
           childDob: child.dob,
           childAge: child.dob ? Math.floor((Date.now() - new Date(child.dob).getTime()) / (1000 * 60 * 60 * 24 * 365.25)) : 0,
           packageName: selectedPackage.name,
@@ -207,7 +208,7 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
           agreedTerms,
           consentMedia,
           signatureData,
-          signedName: parent.name,
+          signedName: `${parent.firstName} ${parent.lastName}`.trim(),
           paymentType: isOnceOff ? "once-off" : "monthly",
           ...prefs,
           coachId: coachId ?? null,
@@ -228,7 +229,7 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
         const firstRef = referenceNumber.split(", ")[0]
         const { payfastUrl, formData } = await buildPayfastPayment({
           referenceNumber: firstRef,
-          parentName: parent.name,
+          parentName: `${parent.firstName} ${parent.lastName}`.trim(),
           parentEmail: parent.email,
           packageName: selectedPackage.name,
           packagePrice: selectedPackage.price,
@@ -326,7 +327,7 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
                     setChildCount(n)
                     setChildren((prev) => {
                       const updated = [...prev]
-                      while (updated.length < n) updated.push({ name: "", dob: "" })
+                      while (updated.length < n) updated.push({ firstName: "", lastName: "", dob: "" })
                       return updated.slice(0, n)
                     })
                   }}
@@ -362,13 +363,24 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
                     <p className="mb-4 text-sm font-black text-navy">Child {idx + 1}</p>
                   )}
                   <div className="space-y-4">
-                    <Field
-                      label={childCount > 1 ? `Child ${idx + 1} Full Name` : "Child's Full Name"}
-                      value={child.name}
-                      onChange={(v) =>
-                        setChildren((prev) => prev.map((c, i) => (i === idx ? { ...c, name: v } : c)))
-                      }
-                    />
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <Field
+                        label={childCount > 1 ? `Child ${idx + 1} First Name` : "Child's First Name"}
+                        value={child.firstName}
+                        onChange={(v) =>
+                          setChildren((prev) => prev.map((c, i) => (i === idx ? { ...c, firstName: v } : c)))
+                        }
+                        placeholder="First name"
+                      />
+                      <Field
+                        label="Last Name / Surname"
+                        value={child.lastName}
+                        onChange={(v) =>
+                          setChildren((prev) => prev.map((c, i) => (i === idx ? { ...c, lastName: v } : c)))
+                        }
+                        placeholder="Last name"
+                      />
+                    </div>
                     <div>
                       <p className="mb-2 text-sm font-semibold text-navy">Date of Birth</p>
                       <DobPicker
@@ -409,7 +421,7 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
             <StepNav
               onBack={() => setStep(0)}
               onNext={() => setStep(2)}
-              nextDisabled={children.some((c) => !c.name || !c.dob) || !ageGroup}
+              nextDisabled={children.some((c) => !c.firstName || !c.lastName || !c.dob) || !ageGroup}
             />
           </div>
     )
@@ -501,10 +513,23 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
               We&apos;ll create your account so you can track sessions and manage your enrollment.
             </p>
             <div className="mt-6 grid gap-4 sm:grid-cols-2">
-              <Field label="Parent / Guardian Name" value={parent.name} onChange={(v) => setParent({ ...parent, name: v })} />
+              <Field label="First Name" value={parent.firstName} onChange={(v) => setParent({ ...parent, firstName: v })} placeholder="First name" />
+              <Field label="Last Name / Surname" value={parent.lastName} onChange={(v) => setParent({ ...parent, lastName: v })} placeholder="Last name" />
               <Field label="Mobile Number" type="tel" value={parent.mobile} onChange={(v) => setParent({ ...parent, mobile: v })} />
               <Field label="Email" type="email" value={parent.email} onChange={(v) => setParent({ ...parent, email: v })} />
-              <Field label="Password" type="password" value={parent.password} onChange={(v) => setParent({ ...parent, password: v })} placeholder="At least 8 characters" />
+              <div className="space-y-1">
+                <Field label="Password" type="password" value={parent.password} onChange={(v) => setParent({ ...parent, password: v })} placeholder="At least 8 characters" />
+                {parent.password.length > 0 && parent.password.length < 8 && (
+                  <p className="text-xs font-semibold text-destructive">
+                    Password is too short — must be at least 8 characters ({parent.password.length}/8)
+                  </p>
+                )}
+                {parent.password.length >= 8 && (
+                  <p className="text-xs font-semibold text-lime-600">
+                    Password looks good
+                  </p>
+                )}
+              </div>
             </div>
             <div className="mt-6 rounded-card border border-border bg-muted/40 p-4">
               <p className="text-sm font-semibold text-navy">Emergency Contact</p>
@@ -516,7 +541,7 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
             <StepNav
               onBack={() => setStep(2)}
               onNext={() => setStep(4)}
-              nextDisabled={!parent.name || !parent.email || !parent.mobile || parent.password.length < 8 || !emergency.name || !emergency.phone}
+              nextDisabled={!parent.firstName || !parent.lastName || !parent.email || !parent.mobile || parent.password.length < 8 || !emergency.name || !emergency.phone}
             />
           </div>
     )
@@ -589,10 +614,10 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
                 <Row
                   key={idx}
                   label={childCount > 1 ? `Child ${idx + 1}` : "Child"}
-                  value={`${child.name} (born ${child.dob})`}
+                  value={`${child.firstName} ${child.lastName}`.trim() + ` (born ${child.dob})`}
                 />
               ))}
-              <Row label="Parent" value={parent.name} />
+              <Row label="Parent" value={`${parent.firstName} ${parent.lastName}`.trim()} />
               <Row label="Email" value={parent.email} />
               <Row label="Mobile" value={parent.mobile} />
               <Row label="Emergency Contact" value={`${emergency.name} — ${emergency.phone}`} />
@@ -672,7 +697,7 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
                     <div className="mt-4 rounded-md border border-amber-300 bg-amber-50 px-4 py-3">
                       <p className="text-xs font-semibold text-amber-800">Payment Reference</p>
                       <p className="mt-1 text-sm font-black text-amber-900">
-                        {children.map((c) => c.name).filter(Boolean).join(" & ") || "Child Name"}
+                        {children.map((c) => `${c.firstName} ${c.lastName}`.trim()).filter(Boolean).join(" & ") || "Child Name"}
                       </p>
                       <p className="mt-1 text-xs text-amber-700">
                         Please use your {childCount > 1 ? "children's" : "child's"} full name{childCount > 1 ? "s" : ""} as the payment reference so we can match your payment.
@@ -716,7 +741,7 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
               <div className="mt-5">
                 <p className="text-sm font-semibold text-navy">Signature</p>
                 <p className="mb-2 text-xs text-muted-foreground">
-                  Please sign below to confirm your agreement ({parent.name || "parent/guardian"}).
+                  Please sign below to confirm your agreement ({`${parent.firstName} ${parent.lastName}`.trim() || "parent/guardian"}).
                 </p>
                 <SignaturePad value={signatureData} onChange={setSignatureData} />
               </div>

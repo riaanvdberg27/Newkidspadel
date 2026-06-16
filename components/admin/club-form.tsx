@@ -24,6 +24,8 @@ export function ClubForm({
   const [address, setAddress] = useState(club?.address ?? "")
   const [phone, setPhone] = useState(club?.phone ?? "")
   const [hours, setHours] = useState(club?.hours ?? "")
+  const [contactPerson, setContactPerson] = useState(club?.contactPerson ?? "")
+  const [contactEmail, setContactEmail] = useState(club?.contactEmail ?? "")
   const [featuresText, setFeaturesText] = useState(
     Array.isArray(club?.features) ? (club!.features as string[]).join(", ") : "",
   )
@@ -83,6 +85,8 @@ export function ClubForm({
       hours: hours.trim(),
       image: null,
       imageUrl,
+      contactPerson: contactPerson.trim(),
+      contactEmail: contactEmail.trim(),
       features: featuresText
         .split(",")
         .map((f) => f.trim())
@@ -115,6 +119,20 @@ export function ClubForm({
           value={hours}
           onChange={setHours}
           placeholder="Mon-Fri: 10:00-16:00"
+        />
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <TextField
+          label="Contact Person (optional)"
+          value={contactPerson}
+          onChange={setContactPerson}
+          placeholder="Full name"
+        />
+        <TextField
+          label="Contact Email (optional)"
+          value={contactEmail}
+          onChange={setContactEmail}
+          placeholder="contact@club.co.za"
         />
       </div>
       <label className="block">

@@ -93,6 +93,8 @@ export const clubs = pgTable("clubs", {
   features: jsonb("features").notNull().default([]),
   image: text("image"),
   imageUrl: text("imageUrl"),
+  contactPerson: text("contactPerson"),
+  contactEmail: text("contactEmail"),
   published: boolean("published").notNull().default(true),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
   updatedAt: timestamp("updatedAt").notNull().defaultNow(),
