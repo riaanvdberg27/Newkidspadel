@@ -39,6 +39,8 @@ export async function getClubAvailability(clubId: number, ageGroup: AgeGroup): P
       and(
         eq(enrollments.clubId, clubId),
         eq(enrollments.slotAgeGroup, ageGroup),
+        // Only active enrollments consume a slot; inactive/cancelled/pending release it
+        eq(enrollments.status, "active"),
       ),
     )
     .groupBy(enrollments.slotWeekday, enrollments.slotHour)
@@ -46,16 +48,17 @@ export async function getClubAvailability(clubId: number, ageGroup: AgeGroup): P
   const bookedMap = new Map<string, number>()
   for (const r of allBooked) {
     if (r.weekday == null || r.hour == null) continue
-    bookedMap.set(`${r.weekday}-${r.hour}`, r.count)
+    bookedMap.set(`${r.weekday}-${parseFloat(String(r.hour))}`, r.count)
   }
 
   return slots.map((s: ClubSlot) => {
-    const booked = bookedMap.get(`${s.weekday}-${s.hour}`) ?? 0
+    const h = parseFloat(String(s.hour))
+    const booked = bookedMap.get(`${s.weekday}-${h}`) ?? 0
     return {
       id: s.id,
       clubId: s.clubId,
       weekday: s.weekday,
-      hour: s.hour,
+      hour: h,
       capacity: s.capacity,
       booked,
       remaining: Math.max(0, s.capacity - booked),

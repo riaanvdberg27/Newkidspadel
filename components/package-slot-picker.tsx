@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { Loader2 } from "lucide-react"
 import { getPublicPackageSlots } from "@/app/actions/packages"
-import { formatHour, WEEKDAYS } from "@/lib/slots"
+import { formatHour, formatEndHour, WEEKDAYS } from "@/lib/slots"
 import type { SelectedSlot } from "@/components/slot-picker"
 import type { CustomSlot } from "@/app/actions/packages"
 
@@ -64,21 +64,22 @@ export function PackageSlotPicker({
           <div className="mt-2 flex flex-wrap gap-2">
             {byWeekday
               .get(wd)!
-              .sort((a, b) => a.hour - b.hour)
+              .sort((a, b) => Number(a.hour) - Number(b.hour))
               .map((s) => {
-                const isSelected = selected?.weekday === s.weekday && selected?.hour === s.hour
+                const hourNum = Number(s.hour)
+                const isSelected = selected?.weekday === s.weekday && selected?.hour === hourNum
                 return (
                   <button
                     key={`${s.weekday}-${s.hour}`}
                     type="button"
-                    onClick={() => onSelect({ weekday: s.weekday, hour: s.hour })}
+                    onClick={() => onSelect({ weekday: s.weekday, hour: hourNum })}
                     className={`rounded-md border px-3 py-2 text-left text-sm transition-colors ${
                       isSelected
                         ? "border-lime bg-lime/15 text-navy"
                         : "border-border bg-card text-navy hover:border-lime/60"
                     }`}
                   >
-                    <span className="font-semibold">{formatHour(s.hour)}</span>
+                    <span className="font-semibold">{formatHour(hourNum)} – {formatEndHour(hourNum)}</span>
                     <span className="ml-2 text-xs text-muted-foreground">{s.capacity} spots</span>
                   </button>
                 )

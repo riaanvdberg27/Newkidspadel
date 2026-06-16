@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { Loader2 } from "lucide-react"
 import { getClubAvailability } from "@/app/actions/clubs"
-import { formatHour, WEEKDAYS, type SlotAvailability } from "@/lib/slots"
+import { formatHour, formatEndHour, WEEKDAYS, type SlotAvailability } from "@/lib/slots"
 import type { AgeGroup } from "@/lib/db/schema"
 
 export type SelectedSlot = { weekday: number; hour: number }
@@ -91,7 +91,7 @@ export function SlotPicker({
                           : "border-border bg-card text-navy hover:border-lime/60"
                     }`}
                   >
-                    <span className="font-semibold">{formatHour(s.hour)}</span>
+                    <span className="font-semibold">{formatHour(s.hour)} – {formatEndHour(s.hour)}</span>
                     <span className="ml-2 text-xs text-muted-foreground">
                       {full ? "Full" : `${s.remaining} left`}
                     </span>

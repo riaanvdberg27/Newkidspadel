@@ -2,8 +2,11 @@ import { Resend } from "resend"
 
 const apiKey = process.env.RESEND_API_KEY
 const FROM = process.env.RESEND_FROM_EMAIL || "NextGen Padel Academy <onboarding@resend.dev>"
-// Where admin notifications are sent — defaults to the FROM address if not set separately
-const ADMIN_EMAIL = process.env.ADMIN_NOTIFICATION_EMAIL || process.env.RESEND_FROM_EMAIL || ""
+// Supports comma-separated list: "admin@club.co.za,info@club.co.za"
+const ADMIN_EMAILS = (process.env.ADMIN_NOTIFICATION_EMAIL || process.env.RESEND_FROM_EMAIL || "")
+  .split(",")
+  .map((e) => e.trim())
+  .filter(Boolean)
 
 const resend = apiKey ? new Resend(apiKey) : null
 
@@ -29,7 +32,7 @@ function escapeHtml(value: string): string {
 
 export async function sendWelcomeEmail(data: WelcomeEmailData): Promise<{ ok: boolean; error?: string }> {
   if (!resend) {
-    console.log("[v0] RESEND_API_KEY not set — skipping welcome email")
+    console.log("[email] RESEND_API_KEY not set — skipping welcome email")
     return { ok: false, error: "RESEND_API_KEY not configured" }
   }
 
@@ -79,12 +82,13 @@ export async function sendWelcomeEmail(data: WelcomeEmailData): Promise<{ ok: bo
     })
 
     if (error) {
-      console.log("[v0] Resend error:", error)
+      console.log("[email] Resend welcome email error:", error)
       return { ok: false, error: String(error) }
     }
+    console.log("[email] Welcome email sent to", data.to)
     return { ok: true }
   } catch (err) {
-    console.log("[v0] sendWelcomeEmail threw:", err)
+    console.log("[email] sendWelcomeEmail threw:", err)
     return { ok: false, error: err instanceof Error ? err.message : "Unknown error" }
   }
 }
@@ -110,11 +114,11 @@ export async function sendAdminNotificationEmail(
   data: AdminNotificationEmailData,
 ): Promise<{ ok: boolean; error?: string }> {
   if (!resend) {
-    console.log("[v0] RESEND_API_KEY not set — skipping admin notification email")
+    console.log("[email] RESEND_API_KEY not set — skipping admin notification email")
     return { ok: false, error: "RESEND_API_KEY not configured" }
   }
-  if (!ADMIN_EMAIL) {
-    console.log("[v0] ADMIN_NOTIFICATION_EMAIL not set — skipping admin notification email")
+  if (ADMIN_EMAILS.length === 0) {
+    console.log("[email] ADMIN_NOTIFICATION_EMAIL not set — skipping admin notification email")
     return { ok: false, error: "ADMIN_NOTIFICATION_EMAIL not configured" }
   }
 
@@ -155,17 +159,18 @@ export async function sendAdminNotificationEmail(
   try {
     const { error } = await resend.emails.send({
       from: FROM,
-      to: ADMIN_EMAIL,
+      to: ADMIN_EMAILS,
       subject: `New sign-up: ${data.childName} (${data.referenceNumber})`,
       html,
     })
     if (error) {
-      console.log("[v0] Admin notification Resend error:", error)
+      console.log("[email] Admin notification Resend error:", error)
       return { ok: false, error: String(error) }
     }
+    console.log("[email] Admin notification sent to", ADMIN_EMAILS.join(", "))
     return { ok: true }
   } catch (err) {
-    console.log("[v0] sendAdminNotificationEmail threw:", err)
+    console.log("[email] sendAdminNotificationEmail threw:", err)
     return { ok: false, error: err instanceof Error ? err.message : "Unknown error" }
   }
 }

@@ -24,7 +24,8 @@ export type AdminSignup = {
   club: string | null
   coachName: string | null
   slotWeekday: number | null
-  slotHour: number | null
+  // numeric column returns string from Drizzle; parse with parseFloat before display
+  slotHour: string | null
   slotLabel: string | null
   emergencyContactName: string | null
   emergencyContactPhone: string | null
@@ -75,7 +76,7 @@ export async function getAllSignups(): Promise<AdminSignup[]> {
     coachName: r.coachName ?? null,
     slotWeekday: r.slotWeekday ?? null,
     slotHour: r.slotHour ?? null,
-    slotLabel: r.slotWeekday != null && r.slotHour != null ? formatSlot(r.slotWeekday, r.slotHour) : null,
+    slotLabel: r.slotWeekday != null && r.slotHour != null ? formatSlot(r.slotWeekday, parseFloat(String(r.slotHour))) : null,
     emergencyContactName: r.emergencyContactName ?? null,
     emergencyContactPhone: r.emergencyContactPhone ?? null,
     debitAccountHolder: r.debitAccountHolder ?? null,
@@ -112,7 +113,7 @@ export async function updateSignup(
         club: input.club.trim(),
         coachName: input.coachName.trim() || null,
         slotWeekday: input.slotWeekday ?? undefined,
-        slotHour: input.slotHour ?? undefined,
+        slotHour: input.slotHour != null ? String(input.slotHour) : undefined,
         emergencyContactName: input.emergencyContactName.trim() || undefined,
         emergencyContactPhone: input.emergencyContactPhone.trim() || undefined,
         status: input.status,
@@ -145,7 +146,7 @@ export async function regenerateContract(id: number): Promise<{ pathname: string
   await requireAdmin()
   const r = await loadEnrollment(id)
   const slotLabel =
-    r.slotWeekday != null && r.slotHour != null ? formatSlot(r.slotWeekday, r.slotHour) : "To be confirmed"
+    r.slotWeekday != null && r.slotHour != null ? formatSlot(r.slotWeekday, parseFloat(String(r.slotHour))) : "To be confirmed"
 
   const pdf = await generateContractPdf({
     referenceNumber: r.referenceNumber,
@@ -181,7 +182,7 @@ export async function regenerateContract(id: number): Promise<{ pathname: string
 export async function resendWelcome(id: number): Promise<{ ok: boolean; error?: string }> {  await requireAdmin()
   const r = await loadEnrollment(id)
   const slotLabel =
-    r.slotWeekday != null && r.slotHour != null ? formatSlot(r.slotWeekday, r.slotHour) : "To be confirmed"
+    r.slotWeekday != null && r.slotHour != null ? formatSlot(r.slotWeekday, parseFloat(String(r.slotHour))) : "To be confirmed"
 
   let pdf: Uint8Array | null = null
   try {
@@ -270,7 +271,7 @@ export async function createSignup(input: CreateSignupInput): Promise<{ ok: bool
         club: input.club.trim(),
         coachName: input.coachName.trim() || null,
         slotWeekday: input.slotWeekday ?? undefined,
-        slotHour: input.slotHour ?? undefined,
+        slotHour: input.slotHour != null ? String(input.slotHour) : undefined,
         emergencyContactName: input.emergencyContactName.trim() || undefined,
         emergencyContactPhone: input.emergencyContactPhone.trim() || undefined,
         status: input.status,

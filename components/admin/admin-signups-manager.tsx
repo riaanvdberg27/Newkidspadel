@@ -19,6 +19,7 @@ import {
 import type { CoachRow } from "@/app/actions/coaches"
 import type { PublicPackage } from "@/app/actions/packages"
 import type { Club } from "@/lib/db/schema"
+import { WEEKDAYS, formatSlot } from "@/lib/slots"
 
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
 const HOURS = Array.from({ length: 11 }, (_, i) => i + 8)
@@ -161,10 +162,10 @@ export function AdminSignupsManager({
           club: input.club,
           coachName: input.coachName || null,
           slotWeekday: input.slotWeekday,
-          slotHour: input.slotHour,
+          slotHour: input.slotHour != null ? String(input.slotHour) : null,
           slotLabel:
             input.slotWeekday != null && input.slotHour != null
-              ? `${WEEKDAYS[input.slotWeekday]} ${String(input.slotHour).padStart(2, "0")}:00`
+              ? formatSlot(input.slotWeekday, input.slotHour)
               : null,
           emergencyContactName: input.emergencyContactName || null,
           emergencyContactPhone: input.emergencyContactPhone || null,

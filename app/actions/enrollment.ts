@@ -85,7 +85,7 @@ export async function createEnrollment(input: EnrollmentInput) {
       club: input.club,
       clubId: input.clubId ?? undefined,
       slotWeekday: input.slotWeekday ?? undefined,
-      slotHour: input.slotHour ?? undefined,
+      slotHour: input.slotHour != null ? String(input.slotHour) : undefined,
       slotAgeGroup: input.slotAgeGroup ?? undefined,
       debitAccountHolder: input.debitAccountHolder ?? undefined,
       debitBankName: input.debitBankName ?? undefined,
@@ -221,7 +221,7 @@ export async function updateEnrollmentSlot(input: {
 
   await db
     .update(enrollments)
-    .set({ slotWeekday: input.slotWeekday, slotHour: input.slotHour, updatedAt: new Date() })
+    .set({ slotWeekday: input.slotWeekday, slotHour: String(input.slotHour), updatedAt: new Date() })
     .where(and(eq(enrollments.id, input.enrollmentId), eq(enrollments.userId, userId)))
 
   revalidatePath("/dashboard")

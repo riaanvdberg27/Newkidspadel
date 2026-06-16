@@ -263,7 +263,7 @@ function PackageForm({
   const [customSlots, setCustomSlots] = useState<Record<SlotKey, number>>(() => {
     const m: Record<SlotKey, number> = {}
     for (const s of initialSlots) {
-      m[slotKey(s.ageGroup, s.weekday, s.hour)] = s.capacity
+      m[slotKey(s.ageGroup, s.weekday, parseFloat(String(s.hour)))] = s.capacity
     }
     return m
   })

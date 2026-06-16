@@ -28,13 +28,14 @@ function AgeGroupGrid({ clubId, ageGroup }: { clubId: number; ageGroup: AgeGroup
       .then((slots: ClubSlot[]) => {
         if (!active) return
         const next: Record<string, number> = {}
-        for (const s of slots) next[`${s.weekday}-${s.hour}`] = s.capacity
+        for (const s of slots) {
+          const h = parseFloat(String(s.hour))
+          next[`${s.weekday}-${h}`] = s.capacity
+        }
         setGrid(next)
       })
       .finally(() => active && setLoading(false))
-    return () => {
-      active = false
-    }
+    return () => { active = false }
   }, [clubId, ageGroup])
 
   function updateCell(weekday: number, hour: number, value: number) {
@@ -61,14 +62,14 @@ function AgeGroupGrid({ clubId, ageGroup }: { clubId: number; ageGroup: AgeGroup
       <p className="text-sm text-muted-foreground">
         Set available places per time slot for{" "}
         <span className="font-semibold text-navy">{AGE_GROUP_LABELS[ageGroup]}</span>. Enter{" "}
-        <span className="font-semibold">0</span> to close a time slot. Changes save automatically.
+        <span className="font-semibold">0</span> to close a time slot. Changes save automatically. Classes run for 1 hour (e.g. 13:30 – 14:30).
       </p>
 
       <div className="mt-4 overflow-x-auto">
         <table className="w-full border-collapse text-center text-sm">
           <thead>
             <tr>
-              <th className="sticky left-0 bg-card p-2 text-left font-semibold text-navy">Time</th>
+              <th className="sticky left-0 bg-card p-2 text-left font-semibold text-navy">Start time</th>
               {WEEKDAY_ORDER.map((wd) => (
                 <th key={wd} className="p-2 font-semibold text-navy">
                   {WEEKDAYS[wd].slice(0, 3)}
@@ -79,7 +80,7 @@ function AgeGroupGrid({ clubId, ageGroup }: { clubId: number; ageGroup: AgeGroup
           <tbody>
             {SLOT_HOURS.map((hour) => (
               <tr key={hour} className="border-t border-border">
-                <td className="sticky left-0 bg-card p-2 text-left font-semibold text-muted-foreground">
+                <td className="sticky left-0 bg-card p-2 text-left font-semibold text-muted-foreground whitespace-nowrap">
                   {formatHour(hour)}
                 </td>
                 {WEEKDAY_ORDER.map((wd) => {
