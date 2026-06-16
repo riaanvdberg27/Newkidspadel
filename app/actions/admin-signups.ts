@@ -9,6 +9,7 @@ import { sendWelcomeEmail } from "@/lib/email"
 import { formatSlot } from "@/lib/slots"
 import { put } from "@vercel/blob"
 import { revalidatePath } from "next/cache"
+import { nanoid } from "nanoid"
 
 export type AdminSignup = {
   id: number
@@ -21,6 +22,7 @@ export type AdminSignup = {
   childAge: number | null
   packageName: string
   club: string | null
+  coachName: string | null
   slotWeekday: number | null
   slotHour: number | null
   slotLabel: string | null
@@ -48,6 +50,7 @@ export type UpdateSignupInput = {
   childAge: number
   packageName: string
   club: string
+  coachName: string
   slotWeekday: number | null
   slotHour: number | null
   emergencyContactName: string
@@ -69,6 +72,7 @@ export async function getAllSignups(): Promise<AdminSignup[]> {
     childAge: r.childAge ?? null,
     packageName: r.packageName,
     club: r.club ?? null,
+    coachName: r.coachName ?? null,
     slotWeekday: r.slotWeekday ?? null,
     slotHour: r.slotHour ?? null,
     slotLabel: r.slotWeekday != null && r.slotHour != null ? formatSlot(r.slotWeekday, r.slotHour) : null,
@@ -106,6 +110,7 @@ export async function updateSignup(
         childAge: input.childAge,
         packageName: input.packageName.trim(),
         club: input.club.trim(),
+        coachName: input.coachName.trim() || null,
         slotWeekday: input.slotWeekday ?? undefined,
         slotHour: input.slotHour ?? undefined,
         emergencyContactName: input.emergencyContactName.trim() || undefined,
@@ -173,8 +178,7 @@ export async function regenerateContract(id: number): Promise<{ pathname: string
 }
 
 /** Resend the welcome email (with the contract) for an existing signup. */
-export async function resendWelcome(id: number): Promise<{ ok: boolean; error?: string }> {
-  await requireAdmin()
+export async function resendWelcome(id: number): Promise<{ ok: boolean; error?: string }> {  await requireAdmin()
   const r = await loadEnrollment(id)
   const slotLabel =
     r.slotWeekday != null && r.slotHour != null ? formatSlot(r.slotWeekday, r.slotHour) : "To be confirmed"
@@ -215,4 +219,68 @@ export async function resendWelcome(id: number): Promise<{ ok: boolean; error?: 
     referenceNumber: r.referenceNumber,
     contractPdf: pdf,
   })
+}
+
+/** Permanently delete a sign-up record. */
+export async function deleteSignup(id: number): Promise<{ ok: boolean; error?: string }> {
+  await requireAdmin()
+  try {
+    await db.delete(enrollments).where(eq(enrollments.id, id))
+    revalidatePath("/admin")
+    return { ok: true }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Delete failed" }
+  }
+}
+
+export type CreateSignupInput = {
+  parentName: string
+  parentEmail: string
+  parentMobile: string
+  childName: string
+  childDob: string
+  childAge: number
+  packageName: string
+  club: string
+  coachName: string
+  slotWeekday: number | null
+  slotHour: number | null
+  emergencyContactName: string
+  emergencyContactPhone: string
+  status: string
+}
+
+/** Manually create a sign-up from the admin dashboard. */
+export async function createSignup(input: CreateSignupInput): Promise<{ ok: boolean; id?: number; referenceNumber?: string; error?: string }> {
+  await requireAdmin()
+  try {
+    const referenceNumber = `NGP-${nanoid(8).toUpperCase()}`
+    const [row] = await db
+      .insert(enrollments)
+      .values({
+        userId: "admin",
+        referenceNumber,
+        parentName: input.parentName.trim(),
+        parentEmail: input.parentEmail.trim(),
+        parentMobile: input.parentMobile.trim(),
+        childName: input.childName.trim(),
+        childDob: input.childDob,
+        childAge: input.childAge,
+        packageName: input.packageName.trim(),
+        club: input.club.trim(),
+        coachName: input.coachName.trim() || null,
+        slotWeekday: input.slotWeekday ?? undefined,
+        slotHour: input.slotHour ?? undefined,
+        emergencyContactName: input.emergencyContactName.trim() || undefined,
+        emergencyContactPhone: input.emergencyContactPhone.trim() || undefined,
+        status: input.status,
+        agreedTerms: false,
+        consentMedia: false,
+      })
+      .returning({ id: enrollments.id })
+    revalidatePath("/admin")
+    return { ok: true, id: row.id, referenceNumber }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Create failed" }
+  }
 }

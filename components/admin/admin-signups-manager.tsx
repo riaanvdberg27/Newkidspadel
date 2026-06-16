@@ -1,21 +1,44 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { useState, useTransition, useMemo } from "react"
 import { useRouter } from "next/navigation"
-import { FileText, Mail, RefreshCw, Check, X, Pencil, ChevronDown, ChevronUp } from "lucide-react"
+import {
+  FileText, Mail, RefreshCw, Check, X, Pencil,
+  ChevronDown, ChevronUp, Trash2, Plus, Filter,
+} from "lucide-react"
 import {
   type AdminSignup,
   type UpdateSignupInput,
+  type CreateSignupInput,
   regenerateContract,
   resendWelcome,
   updateSignup,
+  deleteSignup,
+  createSignup,
 } from "@/app/actions/admin-signups"
+import type { CoachRow } from "@/app/actions/coaches"
+import type { PublicPackage } from "@/app/actions/packages"
+import type { Club } from "@/lib/db/schema"
 
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
-const HOURS = Array.from({ length: 11 }, (_, i) => i + 8) // 08-18
+const HOURS = Array.from({ length: 11 }, (_, i) => i + 8)
 const STATUS_OPTIONS = ["active", "pending", "cancelled", "on-hold"]
 
-export function AdminSignupsManager({ initialSignups }: { initialSignups: AdminSignup[] }) {
+// ---------------------------------------------------------------------------
+// Main component
+// ---------------------------------------------------------------------------
+
+export function AdminSignupsManager({
+  initialSignups,
+  allCoaches,
+  allPackages,
+  allClubs,
+}: {
+  initialSignups: AdminSignup[]
+  allCoaches: CoachRow[]
+  allPackages: PublicPackage[]
+  allClubs: Club[]
+}) {
   const router = useRouter()
   const [signups, setSignups] = useState(initialSignups)
   const [pending, startTransition] = useTransition()
@@ -23,6 +46,14 @@ export function AdminSignupsManager({ initialSignups }: { initialSignups: AdminS
   const [toast, setToast] = useState<{ id: number; ok: boolean; msg: string } | null>(null)
   const [editing, setEditing] = useState<AdminSignup | null>(null)
   const [expanded, setExpanded] = useState<number | null>(null)
+  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null)
+  const [showAddModal, setShowAddModal] = useState(false)
+
+  // Filters
+  const [filterCoach, setFilterCoach] = useState("")
+  const [filterPackage, setFilterPackage] = useState("")
+  const [filterClub, setFilterClub] = useState("")
+  const [filterStatus, setFilterStatus] = useState("")
 
   function flash(id: number, ok: boolean, msg: string) {
     setToast({ id, ok, msg })
@@ -79,6 +110,7 @@ export function AdminSignupsManager({ initialSignups }: { initialSignups: AdminS
                   childAge: input.childAge,
                   packageName: input.packageName,
                   club: input.club,
+                  coachName: input.coachName,
                   slotWeekday: input.slotWeekday,
                   slotHour: input.slotHour,
                   slotLabel: slotLabel ?? null,
@@ -98,6 +130,93 @@ export function AdminSignupsManager({ initialSignups }: { initialSignups: AdminS
     })
   }
 
+  function handleConfirmDelete(id: number) {
+    startTransition(async () => {
+      const res = await deleteSignup(id)
+      if (res.ok) {
+        setSignups((prev) => prev.filter((s) => s.id !== id))
+        setConfirmDeleteId(null)
+        router.refresh()
+      } else {
+        flash(id, false, res.error ?? "Delete failed")
+        setConfirmDeleteId(null)
+      }
+    })
+  }
+
+  function handleCreate(input: CreateSignupInput) {
+    startTransition(async () => {
+      const res = await createSignup(input)
+      if (res.ok && res.id && res.referenceNumber) {
+        const newSignup: AdminSignup = {
+          id: res.id,
+          referenceNumber: res.referenceNumber,
+          parentName: input.parentName,
+          parentEmail: input.parentEmail,
+          parentMobile: input.parentMobile,
+          childName: input.childName,
+          childDob: input.childDob,
+          childAge: input.childAge,
+          packageName: input.packageName,
+          club: input.club,
+          coachName: input.coachName || null,
+          slotWeekday: input.slotWeekday,
+          slotHour: input.slotHour,
+          slotLabel:
+            input.slotWeekday != null && input.slotHour != null
+              ? `${WEEKDAYS[input.slotWeekday]} ${String(input.slotHour).padStart(2, "0")}:00`
+              : null,
+          emergencyContactName: input.emergencyContactName || null,
+          emergencyContactPhone: input.emergencyContactPhone || null,
+          debitAccountHolder: null,
+          debitBankName: null,
+          debitAccountNumber: null,
+          debitAccountType: null,
+          debitDay: null,
+          agreedTerms: false,
+          consentMedia: false,
+          contractUrl: null,
+          status: input.status,
+          signedAt: null,
+          createdAt: new Date().toISOString(),
+        }
+        setSignups((prev) => [newSignup, ...prev])
+        setShowAddModal(false)
+        router.refresh()
+      } else {
+        alert(res.error ?? "Could not create sign-up")
+      }
+    })
+  }
+
+  // Derive unique option lists from live signups data
+  const coachOptions = useMemo(() => {
+    const names = Array.from(new Set(signups.map((s) => s.coachName).filter(Boolean) as string[]))
+    return names.sort()
+  }, [signups])
+
+  const packageOptions = useMemo(() => {
+    const names = Array.from(new Set(signups.map((s) => s.packageName).filter(Boolean)))
+    return names.sort()
+  }, [signups])
+
+  const clubOptions = useMemo(() => {
+    const names = Array.from(new Set(signups.map((s) => s.club).filter(Boolean) as string[]))
+    return names.sort()
+  }, [signups])
+
+  const filtered = useMemo(() => {
+    return signups.filter((s) => {
+      if (filterCoach && s.coachName !== filterCoach) return false
+      if (filterPackage && s.packageName !== filterPackage) return false
+      if (filterClub && s.club !== filterClub) return false
+      if (filterStatus && s.status !== filterStatus) return false
+      return true
+    })
+  }, [signups, filterCoach, filterPackage, filterClub, filterStatus])
+
+  const hasFilters = filterCoach || filterPackage || filterClub || filterStatus
+
   function statusColor(status: string) {
     switch (status) {
       case "active": return "bg-lime/20 text-navy"
@@ -110,24 +229,86 @@ export function AdminSignupsManager({ initialSignups }: { initialSignups: AdminS
 
   return (
     <div>
-      <h2 className="text-xl font-bold text-navy">Sign-ups ({signups.length})</h2>
-      <p className="mt-1 text-sm text-muted-foreground">
-        Every enrollment with its signed contract. Edit details, download the PDF, or resend the welcome email.
-      </p>
+      {/* Header */}
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-bold text-navy">
+            Sign-ups ({filtered.length}{hasFilters ? ` of ${signups.length}` : ""})
+          </h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Every enrollment with its signed contract. Edit details, download the PDF, or resend the welcome email.
+          </p>
+        </div>
+        <button
+          onClick={() => setShowAddModal(true)}
+          className="inline-flex items-center gap-2 rounded-md bg-lime px-4 py-2 text-sm font-bold text-lime-foreground hover:bg-lime/90"
+        >
+          <Plus className="h-4 w-4" />
+          Add sign-up
+        </button>
+      </div>
 
-      <div className="mt-6 overflow-x-auto rounded-card border border-border bg-card shadow-sm">
-        <table className="w-full min-w-[800px] text-left text-sm">
+      {/* Filters */}
+      <div className="mt-5 flex flex-wrap items-center gap-3 rounded-lg border border-border bg-muted/30 px-4 py-3">
+        <span className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+          <Filter className="h-3.5 w-3.5" />
+          Filter
+        </span>
+
+        <FilterSelect
+          label="Coach"
+          value={filterCoach}
+          onChange={setFilterCoach}
+          options={coachOptions}
+          placeholder="All coaches"
+        />
+        <FilterSelect
+          label="Package"
+          value={filterPackage}
+          onChange={setFilterPackage}
+          options={packageOptions}
+          placeholder="All packages"
+        />
+        <FilterSelect
+          label="Club"
+          value={filterClub}
+          onChange={setFilterClub}
+          options={clubOptions}
+          placeholder="All clubs"
+        />
+        <FilterSelect
+          label="Status"
+          value={filterStatus}
+          onChange={setFilterStatus}
+          options={STATUS_OPTIONS}
+          placeholder="All statuses"
+        />
+
+        {hasFilters && (
+          <button
+            onClick={() => { setFilterCoach(""); setFilterPackage(""); setFilterClub(""); setFilterStatus("") }}
+            className="ml-auto text-xs font-semibold text-muted-foreground underline-offset-2 hover:text-navy hover:underline"
+          >
+            Clear filters
+          </button>
+        )}
+      </div>
+
+      {/* Table */}
+      <div className="mt-4 overflow-x-auto rounded-card border border-border bg-card shadow-sm">
+        <table className="w-full min-w-[860px] text-left text-sm">
           <thead className="border-b border-border bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
             <tr>
               <th className="px-4 py-3">Reference</th>
               <th className="px-4 py-3">Child / Parent</th>
               <th className="px-4 py-3">Package &amp; Club</th>
+              <th className="px-4 py-3">Coach</th>
               <th className="px-4 py-3">Status</th>
               <th className="px-4 py-3 text-right">Actions</th>
             </tr>
           </thead>
           <tbody>
-            {signups.map((s) => (
+            {filtered.map((s) => (
               <>
                 <tr key={s.id} className="border-b border-border last:border-0 align-top">
                   <td className="px-4 py-3">
@@ -156,6 +337,9 @@ export function AdminSignupsManager({ initialSignups }: { initialSignups: AdminS
                     <p className="font-medium text-navy">{s.packageName}</p>
                     <p className="text-xs text-muted-foreground">{s.club ?? "—"}</p>
                     <p className="text-xs text-muted-foreground">{s.slotLabel ?? "Slot TBC"}</p>
+                  </td>
+                  <td className="px-4 py-3">
+                    <p className="text-xs text-navy">{s.coachName ?? "—"}</p>
                   </td>
                   <td className="px-4 py-3">
                     <span className={`rounded-full px-2 py-0.5 text-xs font-semibold capitalize ${statusColor(s.status)}`}>
@@ -187,6 +371,13 @@ export function AdminSignupsManager({ initialSignups }: { initialSignups: AdminS
                         {busyId === s.id ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Mail className="h-3.5 w-3.5 text-lime" />}
                         Resend welcome
                       </button>
+                      <button
+                        onClick={() => setConfirmDeleteId(s.id)}
+                        className="inline-flex items-center gap-1.5 rounded-md border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-600 transition-colors hover:bg-red-50"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                        Remove
+                      </button>
                       {toast?.id === s.id && (
                         <span className={`text-xs font-semibold ${toast.ok ? "text-lime-foreground" : "text-destructive"}`}>
                           {toast.msg}
@@ -199,7 +390,7 @@ export function AdminSignupsManager({ initialSignups }: { initialSignups: AdminS
                 {/* Expandable detail row */}
                 {expanded === s.id && (
                   <tr key={`${s.id}-detail`} className="border-b border-border bg-muted/20">
-                    <td colSpan={5} className="px-6 py-4">
+                    <td colSpan={6} className="px-6 py-4">
                       <div className="grid gap-4 text-sm sm:grid-cols-3">
                         <dl>
                           <dt className="font-semibold text-navy">Emergency contact</dt>
@@ -228,10 +419,10 @@ export function AdminSignupsManager({ initialSignups }: { initialSignups: AdminS
                 )}
               </>
             ))}
-            {signups.length === 0 && (
+            {filtered.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-4 py-10 text-center text-muted-foreground">
-                  No sign-ups yet.
+                <td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">
+                  {hasFilters ? "No sign-ups match the current filters." : "No sign-ups yet."}
                 </td>
               </tr>
             )}
@@ -244,13 +435,124 @@ export function AdminSignupsManager({ initialSignups }: { initialSignups: AdminS
         <EditModal
           signup={editing}
           pending={pending}
+          allCoaches={allCoaches}
+          allPackages={allPackages}
+          allClubs={allClubs}
           onSave={(input) => handleSaveEdit(editing, input)}
           onClose={() => setEditing(null)}
+        />
+      )}
+
+      {/* Add modal */}
+      {showAddModal && (
+        <AddModal
+          pending={pending}
+          allCoaches={allCoaches}
+          allPackages={allPackages}
+          allClubs={allClubs}
+          onCreate={handleCreate}
+          onClose={() => setShowAddModal(false)}
+        />
+      )}
+
+      {/* Delete confirmation dialog */}
+      {confirmDeleteId != null && (
+        <ConfirmDialog
+          message="Are you sure you want to permanently remove this sign-up? This cannot be undone."
+          confirmLabel="Yes, remove"
+          pending={pending}
+          onConfirm={() => handleConfirmDelete(confirmDeleteId)}
+          onCancel={() => setConfirmDeleteId(null)}
         />
       )}
     </div>
   )
 }
+
+// ---------------------------------------------------------------------------
+// Filter select
+// ---------------------------------------------------------------------------
+
+function FilterSelect({
+  label,
+  value,
+  onChange,
+  options,
+  placeholder,
+}: {
+  label: string
+  value: string
+  onChange: (v: string) => void
+  options: string[]
+  placeholder: string
+}) {
+  return (
+    <div className="flex items-center gap-1.5">
+      <span className="text-xs text-muted-foreground">{label}:</span>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className={`rounded-md border px-2 py-1 text-xs font-medium outline-none focus:border-lime ${
+          value ? "border-lime bg-lime/10 text-navy" : "border-border bg-background text-muted-foreground"
+        }`}
+      >
+        <option value="">{placeholder}</option>
+        {options.map((o) => (
+          <option key={o} value={o}>{o}</option>
+        ))}
+      </select>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Confirm dialog
+// ---------------------------------------------------------------------------
+
+function ConfirmDialog({
+  message,
+  confirmLabel,
+  pending,
+  onConfirm,
+  onCancel,
+}: {
+  message: string
+  confirmLabel: string
+  pending: boolean
+  onConfirm: () => void
+  onCancel: () => void
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="w-full max-w-sm rounded-xl bg-card p-6 shadow-2xl">
+        <h3 className="text-base font-bold text-navy">Confirm removal</h3>
+        <p className="mt-2 text-sm text-muted-foreground">{message}</p>
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            onClick={onCancel}
+            className="rounded-md border border-border px-4 py-2 text-sm font-semibold text-navy hover:bg-muted"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={pending}
+            className="rounded-md bg-red-600 px-4 py-2 text-sm font-bold text-white hover:bg-red-700 disabled:opacity-50"
+          >
+            {pending ? "Removing…" : confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Shared form sections (used in both Edit and Add modals)
+// ---------------------------------------------------------------------------
+
+const inputCls = "mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-lime"
+const selectCls = "mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-lime"
 
 // ---------------------------------------------------------------------------
 // Edit modal
@@ -259,11 +561,17 @@ export function AdminSignupsManager({ initialSignups }: { initialSignups: AdminS
 function EditModal({
   signup,
   pending,
+  allCoaches,
+  allPackages,
+  allClubs,
   onSave,
   onClose,
 }: {
   signup: AdminSignup
   pending: boolean
+  allCoaches: CoachRow[]
+  allPackages: PublicPackage[]
+  allClubs: Club[]
   onSave: (input: UpdateSignupInput) => void
   onClose: () => void
 }) {
@@ -275,6 +583,7 @@ function EditModal({
   const [childAge, setChildAge] = useState(String(signup.childAge ?? ""))
   const [packageName, setPackageName] = useState(signup.packageName)
   const [club, setClub] = useState(signup.club ?? "")
+  const [coachName, setCoachName] = useState(signup.coachName ?? "")
   const [slotWeekday, setSlotWeekday] = useState<string>(
     signup.slotWeekday != null ? String(signup.slotWeekday) : "",
   )
@@ -288,14 +597,9 @@ function EditModal({
   function submit(e: React.FormEvent) {
     e.preventDefault()
     onSave({
-      parentName,
-      parentEmail,
-      parentMobile,
-      childName,
-      childDob,
-      childAge: Number(childAge) || 0,
-      packageName,
-      club,
+      parentName, parentEmail, parentMobile,
+      childName, childDob, childAge: Number(childAge) || 0,
+      packageName, club, coachName,
       slotWeekday: slotWeekday !== "" ? Number(slotWeekday) : null,
       slotHour: slotHour !== "" ? Number(slotHour) : null,
       emergencyContactName: emergencyName,
@@ -307,193 +611,285 @@ function EditModal({
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 pt-10">
       <div className="w-full max-w-2xl rounded-xl bg-card shadow-2xl">
-        <div className="flex items-center justify-between border-b border-border px-6 py-4">
-          <div>
-            <h2 className="text-lg font-bold text-navy">Edit Sign-up</h2>
-            <p className="text-xs text-muted-foreground">{signup.referenceNumber}</p>
-          </div>
-          <button
-            onClick={onClose}
-            className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-navy"
-            aria-label="Close"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-
+        <ModalHeader title="Edit Sign-up" subtitle={signup.referenceNumber} onClose={onClose} />
         <form onSubmit={submit} className="space-y-5 px-6 py-5">
-          {/* Parent / guardian */}
-          <fieldset className="space-y-3">
-            <legend className="text-sm font-bold text-navy">Parent / Guardian</legend>
-            <div className="grid gap-3 sm:grid-cols-3">
-              <Field label="Full name" required>
-                <input
-                  type="text"
-                  required
-                  value={parentName}
-                  onChange={(e) => setParentName(e.target.value)}
-                  className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-lime"
-                />
-              </Field>
-              <Field label="Email" required>
-                <input
-                  type="email"
-                  required
-                  value={parentEmail}
-                  onChange={(e) => setParentEmail(e.target.value)}
-                  className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-lime"
-                />
-              </Field>
-              <Field label="Mobile" required>
-                <input
-                  type="tel"
-                  required
-                  value={parentMobile}
-                  onChange={(e) => setParentMobile(e.target.value)}
-                  className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-lime"
-                />
-              </Field>
-            </div>
-          </fieldset>
-
-          {/* Child */}
-          <fieldset className="space-y-3">
-            <legend className="text-sm font-bold text-navy">Child</legend>
-            <div className="grid gap-3 sm:grid-cols-3">
-              <Field label="Full name" required>
-                <input
-                  type="text"
-                  required
-                  value={childName}
-                  onChange={(e) => setChildName(e.target.value)}
-                  className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-lime"
-                />
-              </Field>
-              <Field label="Date of birth">
-                <input
-                  type="date"
-                  value={childDob}
-                  onChange={(e) => setChildDob(e.target.value)}
-                  className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-lime"
-                />
-              </Field>
-              <Field label="Age">
-                <input
-                  type="number"
-                  min={1}
-                  max={17}
-                  value={childAge}
-                  onChange={(e) => setChildAge(e.target.value)}
-                  className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-lime"
-                />
-              </Field>
-            </div>
-          </fieldset>
-
-          {/* Programme */}
-          <fieldset className="space-y-3">
-            <legend className="text-sm font-bold text-navy">Programme</legend>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Field label="Package">
-                <input
-                  type="text"
-                  value={packageName}
-                  onChange={(e) => setPackageName(e.target.value)}
-                  className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-lime"
-                />
-              </Field>
-              <Field label="Club">
-                <input
-                  type="text"
-                  value={club}
-                  onChange={(e) => setClub(e.target.value)}
-                  className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-lime"
-                />
-              </Field>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Field label="Session day">
-                <select
-                  value={slotWeekday}
-                  onChange={(e) => setSlotWeekday(e.target.value)}
-                  className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-lime"
-                >
-                  <option value="">— not set —</option>
-                  {WEEKDAYS.map((d, i) => (
-                    <option key={i} value={i}>{d}</option>
-                  ))}
-                </select>
-              </Field>
-              <Field label="Session time">
-                <select
-                  value={slotHour}
-                  onChange={(e) => setSlotHour(e.target.value)}
-                  className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-lime"
-                >
-                  <option value="">— not set —</option>
-                  {HOURS.map((h) => (
-                    <option key={h} value={h}>{String(h).padStart(2, "0")}:00</option>
-                  ))}
-                </select>
-              </Field>
-            </div>
-          </fieldset>
-
-          {/* Emergency contact */}
-          <fieldset className="space-y-3">
-            <legend className="text-sm font-bold text-navy">Emergency Contact</legend>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Field label="Name">
-                <input
-                  type="text"
-                  value={emergencyName}
-                  onChange={(e) => setEmergencyName(e.target.value)}
-                  className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-lime"
-                />
-              </Field>
-              <Field label="Phone">
-                <input
-                  type="tel"
-                  value={emergencyPhone}
-                  onChange={(e) => setEmergencyPhone(e.target.value)}
-                  className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-lime"
-                />
-              </Field>
-            </div>
-          </fieldset>
-
-          {/* Status */}
+          <ParentFields
+            parentName={parentName} setParentName={setParentName}
+            parentEmail={parentEmail} setParentEmail={setParentEmail}
+            parentMobile={parentMobile} setParentMobile={setParentMobile}
+          />
+          <ChildFields
+            childName={childName} setChildName={setChildName}
+            childDob={childDob} setChildDob={setChildDob}
+            childAge={childAge} setChildAge={setChildAge}
+          />
+          <ProgrammeFields
+            packageName={packageName} setPackageName={setPackageName}
+            club={club} setClub={setClub}
+            coachName={coachName} setCoachName={setCoachName}
+            slotWeekday={slotWeekday} setSlotWeekday={setSlotWeekday}
+            slotHour={slotHour} setSlotHour={setSlotHour}
+            allPackages={allPackages} allClubs={allClubs} allCoaches={allCoaches}
+          />
+          <EmergencyFields
+            emergencyName={emergencyName} setEmergencyName={setEmergencyName}
+            emergencyPhone={emergencyPhone} setEmergencyPhone={setEmergencyPhone}
+          />
           <Field label="Enrollment status">
-            <select
-              value={status}
-              onChange={(e) => setStatus(e.target.value)}
-              className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-lime"
-            >
-              {STATUS_OPTIONS.map((s) => (
-                <option key={s} value={s} className="capitalize">{s}</option>
-              ))}
+            <select value={status} onChange={(e) => setStatus(e.target.value)} className={selectCls}>
+              {STATUS_OPTIONS.map((s) => <option key={s} value={s} className="capitalize">{s}</option>)}
             </select>
           </Field>
-
-          <div className="flex justify-end gap-2 border-t border-border pt-4">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-md border border-border px-4 py-2 text-sm font-semibold text-navy hover:bg-muted"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={pending}
-              className="rounded-md bg-lime px-5 py-2 text-sm font-bold text-lime-foreground hover:bg-lime/90 disabled:opacity-50"
-            >
-              {pending ? "Saving…" : "Save changes"}
-            </button>
-          </div>
+          <ModalFooter pending={pending} onClose={onClose} submitLabel="Save changes" />
         </form>
       </div>
     </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Add modal
+// ---------------------------------------------------------------------------
+
+function AddModal({
+  pending,
+  allCoaches,
+  allPackages,
+  allClubs,
+  onCreate,
+  onClose,
+}: {
+  pending: boolean
+  allCoaches: CoachRow[]
+  allPackages: PublicPackage[]
+  allClubs: Club[]
+  onCreate: (input: CreateSignupInput) => void
+  onClose: () => void
+}) {
+  const [parentName, setParentName] = useState("")
+  const [parentEmail, setParentEmail] = useState("")
+  const [parentMobile, setParentMobile] = useState("")
+  const [childName, setChildName] = useState("")
+  const [childDob, setChildDob] = useState("")
+  const [childAge, setChildAge] = useState("")
+  const [packageName, setPackageName] = useState(allPackages[0]?.name ?? "")
+  const [club, setClub] = useState(allClubs[0]?.name ?? "")
+  const [coachName, setCoachName] = useState("")
+  const [slotWeekday, setSlotWeekday] = useState("")
+  const [slotHour, setSlotHour] = useState("")
+  const [emergencyName, setEmergencyName] = useState("")
+  const [emergencyPhone, setEmergencyPhone] = useState("")
+  const [status, setStatus] = useState("pending")
+
+  function submit(e: React.FormEvent) {
+    e.preventDefault()
+    onCreate({
+      parentName, parentEmail, parentMobile,
+      childName, childDob, childAge: Number(childAge) || 0,
+      packageName, club, coachName,
+      slotWeekday: slotWeekday !== "" ? Number(slotWeekday) : null,
+      slotHour: slotHour !== "" ? Number(slotHour) : null,
+      emergencyContactName: emergencyName,
+      emergencyContactPhone: emergencyPhone,
+      status,
+    })
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 pt-10">
+      <div className="w-full max-w-2xl rounded-xl bg-card shadow-2xl">
+        <ModalHeader title="Add Sign-up" subtitle="Manually create a new enrollment record" onClose={onClose} />
+        <form onSubmit={submit} className="space-y-5 px-6 py-5">
+          <ParentFields
+            parentName={parentName} setParentName={setParentName}
+            parentEmail={parentEmail} setParentEmail={setParentEmail}
+            parentMobile={parentMobile} setParentMobile={setParentMobile}
+          />
+          <ChildFields
+            childName={childName} setChildName={setChildName}
+            childDob={childDob} setChildDob={setChildDob}
+            childAge={childAge} setChildAge={setChildAge}
+          />
+          <ProgrammeFields
+            packageName={packageName} setPackageName={setPackageName}
+            club={club} setClub={setClub}
+            coachName={coachName} setCoachName={setCoachName}
+            slotWeekday={slotWeekday} setSlotWeekday={setSlotWeekday}
+            slotHour={slotHour} setSlotHour={setSlotHour}
+            allPackages={allPackages} allClubs={allClubs} allCoaches={allCoaches}
+          />
+          <EmergencyFields
+            emergencyName={emergencyName} setEmergencyName={setEmergencyName}
+            emergencyPhone={emergencyPhone} setEmergencyPhone={setEmergencyPhone}
+          />
+          <Field label="Enrollment status">
+            <select value={status} onChange={(e) => setStatus(e.target.value)} className={selectCls}>
+              {STATUS_OPTIONS.map((s) => <option key={s} value={s} className="capitalize">{s}</option>)}
+            </select>
+          </Field>
+          <ModalFooter pending={pending} onClose={onClose} submitLabel="Create sign-up" />
+        </form>
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Shared form sub-components
+// ---------------------------------------------------------------------------
+
+function ModalHeader({ title, subtitle, onClose }: { title: string; subtitle: string; onClose: () => void }) {
+  return (
+    <div className="flex items-center justify-between border-b border-border px-6 py-4">
+      <div>
+        <h2 className="text-lg font-bold text-navy">{title}</h2>
+        <p className="text-xs text-muted-foreground">{subtitle}</p>
+      </div>
+      <button onClick={onClose} className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-navy" aria-label="Close">
+        <X className="h-5 w-5" />
+      </button>
+    </div>
+  )
+}
+
+function ModalFooter({ pending, onClose, submitLabel }: { pending: boolean; onClose: () => void; submitLabel: string }) {
+  return (
+    <div className="flex justify-end gap-2 border-t border-border pt-4">
+      <button type="button" onClick={onClose} className="rounded-md border border-border px-4 py-2 text-sm font-semibold text-navy hover:bg-muted">
+        Cancel
+      </button>
+      <button type="submit" disabled={pending} className="rounded-md bg-lime px-5 py-2 text-sm font-bold text-lime-foreground hover:bg-lime/90 disabled:opacity-50">
+        {pending ? "Saving…" : submitLabel}
+      </button>
+    </div>
+  )
+}
+
+function ParentFields({ parentName, setParentName, parentEmail, setParentEmail, parentMobile, setParentMobile }: {
+  parentName: string; setParentName: (v: string) => void
+  parentEmail: string; setParentEmail: (v: string) => void
+  parentMobile: string; setParentMobile: (v: string) => void
+}) {
+  return (
+    <fieldset className="space-y-3">
+      <legend className="text-sm font-bold text-navy">Parent / Guardian</legend>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Field label="Full name" required>
+          <input type="text" required value={parentName} onChange={(e) => setParentName(e.target.value)} className={inputCls} />
+        </Field>
+        <Field label="Email" required>
+          <input type="email" required value={parentEmail} onChange={(e) => setParentEmail(e.target.value)} className={inputCls} />
+        </Field>
+        <Field label="Mobile" required>
+          <input type="tel" required value={parentMobile} onChange={(e) => setParentMobile(e.target.value)} className={inputCls} />
+        </Field>
+      </div>
+    </fieldset>
+  )
+}
+
+function ChildFields({ childName, setChildName, childDob, setChildDob, childAge, setChildAge }: {
+  childName: string; setChildName: (v: string) => void
+  childDob: string; setChildDob: (v: string) => void
+  childAge: string; setChildAge: (v: string) => void
+}) {
+  return (
+    <fieldset className="space-y-3">
+      <legend className="text-sm font-bold text-navy">Child</legend>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Field label="Full name" required>
+          <input type="text" required value={childName} onChange={(e) => setChildName(e.target.value)} className={inputCls} />
+        </Field>
+        <Field label="Date of birth">
+          <input type="date" value={childDob} onChange={(e) => setChildDob(e.target.value)} className={inputCls} />
+        </Field>
+        <Field label="Age">
+          <input type="number" min={1} max={17} value={childAge} onChange={(e) => setChildAge(e.target.value)} className={inputCls} />
+        </Field>
+      </div>
+    </fieldset>
+  )
+}
+
+function ProgrammeFields({
+  packageName, setPackageName,
+  club, setClub,
+  coachName, setCoachName,
+  slotWeekday, setSlotWeekday,
+  slotHour, setSlotHour,
+  allPackages, allClubs, allCoaches,
+}: {
+  packageName: string; setPackageName: (v: string) => void
+  club: string; setClub: (v: string) => void
+  coachName: string; setCoachName: (v: string) => void
+  slotWeekday: string; setSlotWeekday: (v: string) => void
+  slotHour: string; setSlotHour: (v: string) => void
+  allPackages: PublicPackage[]
+  allClubs: Club[]
+  allCoaches: CoachRow[]
+}) {
+  return (
+    <fieldset className="space-y-3">
+      <legend className="text-sm font-bold text-navy">Programme</legend>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Field label="Package">
+          <select value={packageName} onChange={(e) => setPackageName(e.target.value)} className={selectCls}>
+            {allPackages.map((p) => <option key={p.id} value={p.name}>{p.name}</option>)}
+            {/* Allow free-text fallback if packageName isn't in the list */}
+            {packageName && !allPackages.find((p) => p.name === packageName) && (
+              <option value={packageName}>{packageName}</option>
+            )}
+          </select>
+        </Field>
+        <Field label="Club">
+          <select value={club} onChange={(e) => setClub(e.target.value)} className={selectCls}>
+            {allClubs.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
+            {club && !allClubs.find((c) => c.name === club) && (
+              <option value={club}>{club}</option>
+            )}
+          </select>
+        </Field>
+        <Field label="Coach">
+          <select value={coachName} onChange={(e) => setCoachName(e.target.value)} className={selectCls}>
+            <option value="">— not assigned —</option>
+            {allCoaches.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
+          </select>
+        </Field>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label="Session day">
+          <select value={slotWeekday} onChange={(e) => setSlotWeekday(e.target.value)} className={selectCls}>
+            <option value="">— not set —</option>
+            {WEEKDAYS.map((d, i) => <option key={i} value={i}>{d}</option>)}
+          </select>
+        </Field>
+        <Field label="Session time">
+          <select value={slotHour} onChange={(e) => setSlotHour(e.target.value)} className={selectCls}>
+            <option value="">— not set —</option>
+            {HOURS.map((h) => <option key={h} value={h}>{String(h).padStart(2, "0")}:00</option>)}
+          </select>
+        </Field>
+      </div>
+    </fieldset>
+  )
+}
+
+function EmergencyFields({ emergencyName, setEmergencyName, emergencyPhone, setEmergencyPhone }: {
+  emergencyName: string; setEmergencyName: (v: string) => void
+  emergencyPhone: string; setEmergencyPhone: (v: string) => void
+}) {
+  return (
+    <fieldset className="space-y-3">
+      <legend className="text-sm font-bold text-navy">Emergency Contact</legend>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label="Name">
+          <input type="text" value={emergencyName} onChange={(e) => setEmergencyName(e.target.value)} className={inputCls} />
+        </Field>
+        <Field label="Phone">
+          <input type="tel" value={emergencyPhone} onChange={(e) => setEmergencyPhone(e.target.value)} className={inputCls} />
+        </Field>
+      </div>
+    </fieldset>
   )
 }
 
@@ -515,11 +911,7 @@ function Field({ label, required, children }: { label: string; required?: boolea
 
 function Badge({ ok, label }: { ok: boolean; label: string }) {
   return (
-    <span
-      className={`mr-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${
-        ok ? "bg-lime/15 text-navy" : "bg-muted text-muted-foreground"
-      }`}
-    >
+    <span className={`mr-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${ok ? "bg-lime/15 text-navy" : "bg-muted text-muted-foreground"}`}>
       {ok ? <Check className="h-3 w-3 text-lime" /> : <X className="h-3 w-3" />}
       {label}
     </span>
