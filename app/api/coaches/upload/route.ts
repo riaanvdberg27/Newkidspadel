@@ -28,8 +28,8 @@ export async function POST(request: NextRequest) {
 
     const blob = await put(filename, file, { access: "private" })
 
-    // Return pathname; callers resolve it via /api/blob
-    return NextResponse.json({ url: blob.pathname })
+    // Return the full blob URL so next/image can load it directly
+    return NextResponse.json({ url: blob.url })
   } catch (error) {
     console.error("Coach image upload error:", error)
     return NextResponse.json({ error: "Upload failed" }, { status: 500 })
