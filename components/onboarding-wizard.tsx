@@ -128,6 +128,8 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [reference, setReference] = useState<string | null>(null)
+  // Payment method for once-off packages
+  const [paymentMethod, setPaymentMethod] = useState<"eft" | "payfast">("eft")
 
   const selectedClub = clubs.find((c) => c.id === clubId) ?? null
 
@@ -144,7 +146,15 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
   }
 
   if (reference) {
-    return <Confirmation packageName={selectedPackage.name} reference={reference} />
+    return (
+      <Confirmation
+        packageName={selectedPackage.name}
+        reference={reference}
+        isEft={isOnceOff && paymentMethod === "eft"}
+        childName={child.name}
+        packagePrice={selectedPackage.price}
+      />
+    )
   }
 
   async function handleSubmit() {
@@ -200,7 +210,13 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
       })
 
       if (isOnceOff) {
-        // 3a. Once-off: redirect to PayFast checkout via a hidden form POST
+        if (paymentMethod === "eft") {
+          // EFT: just show the confirmation screen with banking details
+          setReference(referenceNumber)
+          router.refresh()
+          return
+        }
+        // 3a. PayFast: redirect via hidden form POST
         const { payfastUrl, formData } = await buildPayfastPayment({
           referenceNumber,
           parentName: parent.name,
@@ -576,13 +592,80 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
               )}
             </dl>
             {isOnceOff && (
-              <div className="mt-4 flex items-start gap-3 rounded-card border border-lime bg-lime/10 p-4 text-sm">
-                <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-lime text-lime-foreground text-xs font-black">!</span>
-                <p className="text-navy">
-                  After creating your account you will be redirected to <strong>PayFast</strong> to complete your
-                  once-off payment of <strong>R{selectedPackage.price.toLocaleString()}</strong>. Your enrollment is
-                  confirmed once payment is received.
-                </p>
+              <div className="mt-5 space-y-3">
+                <p className="text-sm font-semibold text-navy">How would you like to pay?</p>
+                {/* EFT option */}
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod("eft")}
+                  className={`w-full rounded-card border-2 p-4 text-left transition-colors ${
+                    paymentMethod === "eft"
+                      ? "border-lime bg-lime/10"
+                      : "border-border bg-card hover:border-lime/50"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-navy">EFT / Bank Transfer</span>
+                    {paymentMethod === "eft" && <Check className="h-5 w-5 text-lime-foreground" />}
+                  </div>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    Pay directly into our bank account. Your spot is reserved once payment is confirmed.
+                  </p>
+                </button>
+                {/* PayFast option */}
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod("payfast")}
+                  className={`w-full rounded-card border-2 p-4 text-left transition-colors ${
+                    paymentMethod === "payfast"
+                      ? "border-lime bg-lime/10"
+                      : "border-border bg-card hover:border-lime/50"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-navy">PayFast (Card / Instant EFT)</span>
+                    {paymentMethod === "payfast" && <Check className="h-5 w-5 text-lime-foreground" />}
+                  </div>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    Pay securely online via card, instant EFT, or SnapScan through PayFast.
+                  </p>
+                </button>
+
+                {/* EFT banking details */}
+                {paymentMethod === "eft" && (
+                  <div className="rounded-card border border-border bg-card p-5 shadow-sm">
+                    <p className="text-sm font-bold text-navy">Banking Details</p>
+                    <dl className="mt-3 space-y-2 text-sm">
+                      <div className="flex justify-between gap-4 border-b border-border pb-2">
+                        <dt className="text-muted-foreground">Account Name</dt>
+                        <dd className="text-right font-semibold text-navy">NEXT GEN PADEL ACADEMY</dd>
+                      </div>
+                      <div className="flex justify-between gap-4 border-b border-border pb-2">
+                        <dt className="text-muted-foreground">Bank</dt>
+                        <dd className="text-right font-semibold text-navy">First National Bank</dd>
+                      </div>
+                      <div className="flex justify-between gap-4 border-b border-border pb-2">
+                        <dt className="text-muted-foreground">Account Number</dt>
+                        <dd className="text-right font-semibold text-navy">63214278441</dd>
+                      </div>
+                      <div className="flex justify-between gap-4 border-b border-border pb-2">
+                        <dt className="text-muted-foreground">Branch Code</dt>
+                        <dd className="text-right font-semibold text-navy">252445</dd>
+                      </div>
+                      <div className="flex justify-between gap-4">
+                        <dt className="text-muted-foreground">Amount</dt>
+                        <dd className="text-right font-semibold text-navy">R{selectedPackage.price.toLocaleString()}</dd>
+                      </div>
+                    </dl>
+                    <div className="mt-4 rounded-md border border-amber-300 bg-amber-50 px-4 py-3">
+                      <p className="text-xs font-semibold text-amber-800">Payment Reference</p>
+                      <p className="mt-1 text-sm font-black text-amber-900">{child.name || "Child Name"}</p>
+                      <p className="mt-1 text-xs text-amber-700">
+                        Please use your child&apos;s full name as the payment reference so we can match your payment.
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -644,8 +727,12 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
                 className="rounded-2xl bg-lime px-6 py-3 font-black text-lime-foreground shadow-sm transition-all hover:scale-105 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-40 active:scale-95"
               >
                 {submitting
-                  ? isOnceOff ? "Redirecting to PayFast…" : "Creating account…"
-                  : isOnceOff ? "Create Account & Pay via PayFast" : "Create Account & Enroll"}
+                  ? isOnceOff
+                    ? paymentMethod === "eft" ? "Creating account…" : "Redirecting to PayFast…"
+                    : "Creating account…"
+                  : isOnceOff
+                    ? paymentMethod === "eft" ? "Create Account & Get Banking Details" : "Create Account & Pay via PayFast"
+                    : "Create Account & Enroll"}
               </button>
             </div>
             {(!agreedTerms || !signatureData) && (
@@ -850,7 +937,19 @@ function ConsentCheck({
   )
 }
 
-function Confirmation({ packageName, reference }: { packageName: string; reference: string }) {
+function Confirmation({
+  packageName,
+  reference,
+  isEft,
+  childName,
+  packagePrice,
+}: {
+  packageName: string
+  reference: string
+  isEft?: boolean
+  childName?: string
+  packagePrice?: number
+}) {
   return (
     <section className="mx-auto max-w-2xl px-4 py-16">
       <div className="rounded-card border border-lime bg-lime/10 p-8 text-center">
@@ -863,6 +962,51 @@ function Confirmation({ packageName, reference }: { packageName: string; referen
         </p>
         <p className="mt-4 text-sm text-muted-foreground">Your reference number</p>
         <p className="text-lg font-extrabold tracking-wide text-navy">{reference}</p>
+
+        {isEft && (
+          <div className="mt-6 rounded-card border border-border bg-card p-5 text-left shadow-sm">
+            <p className="text-sm font-bold text-navy">Complete your payment via EFT</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Your enrollment is reserved. Please make payment within 48 hours to confirm your spot.
+            </p>
+            <dl className="mt-4 space-y-2 text-sm">
+              <div className="flex justify-between gap-4 border-b border-border pb-2">
+                <dt className="text-muted-foreground">Account Name</dt>
+                <dd className="font-semibold text-navy">NEXT GEN PADEL ACADEMY</dd>
+              </div>
+              <div className="flex justify-between gap-4 border-b border-border pb-2">
+                <dt className="text-muted-foreground">Bank</dt>
+                <dd className="font-semibold text-navy">First National Bank</dd>
+              </div>
+              <div className="flex justify-between gap-4 border-b border-border pb-2">
+                <dt className="text-muted-foreground">Account Number</dt>
+                <dd className="font-semibold text-navy">63214278441</dd>
+              </div>
+              <div className="flex justify-between gap-4 border-b border-border pb-2">
+                <dt className="text-muted-foreground">Branch Code</dt>
+                <dd className="font-semibold text-navy">252445</dd>
+              </div>
+              {packagePrice !== undefined && (
+                <div className="flex justify-between gap-4 border-b border-border pb-2">
+                  <dt className="text-muted-foreground">Amount</dt>
+                  <dd className="font-semibold text-navy">R{packagePrice.toLocaleString()}</dd>
+                </div>
+              )}
+              <div className="flex justify-between gap-4">
+                <dt className="text-muted-foreground">Payment Reference</dt>
+                <dd className="font-black text-navy">{childName || "Child's full name"}</dd>
+              </div>
+            </dl>
+            <div className="mt-4 rounded-md border border-amber-300 bg-amber-50 px-4 py-3">
+              <p className="text-xs font-semibold text-amber-800">Important</p>
+              <p className="mt-1 text-xs text-amber-700">
+                Use <strong>{childName || "your child's full name"}</strong> as the payment reference so we can match
+                your payment and confirm your enrollment.
+              </p>
+            </div>
+          </div>
+        )}
+
         <div className="mt-6 flex flex-wrap justify-center gap-3">
           <Link
             href="/dashboard"
