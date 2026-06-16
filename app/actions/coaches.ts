@@ -4,7 +4,7 @@ import { db } from "@/lib/db"
 import { coaches, coachClubs, clubs } from "@/lib/db/schema"
 import { eq, asc, inArray } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
-import { del, list, head } from "@vercel/blob"
+import { del } from "@vercel/blob"
 
 export type CoachRow = {
   id: number
@@ -28,19 +28,12 @@ export type CoachRow = {
  */
 async function resolveImageUrl(imageUrl: string | null | undefined): Promise<string | null> {
   if (!imageUrl) return null
+  // Already a full URL — use as-is (new uploads store blob.url directly)
   if (imageUrl.startsWith("http://") || imageUrl.startsWith("https://")) return imageUrl
-  try {
-    console.log("[v0] resolveImageUrl: listing blobs with prefix:", imageUrl)
-    const { blobs } = await list({ prefix: imageUrl, limit: 1 })
-    console.log("[v0] resolveImageUrl: blobs found:", blobs.length, blobs[0]?.url)
-    if (!blobs.length) return null
-    const blob = await head(blobs[0].url)
-    console.log("[v0] resolveImageUrl: downloadUrl:", blob.downloadUrl)
-    return blob.downloadUrl
-  } catch (err) {
-    console.error("[v0] resolveImageUrl error:", err)
-    return null
-  }
+  // Bare pathname (legacy data) — find via list() and return the blob URL
+  // We use /api/blob proxy which calls list()+head() internally,
+  // so just return the proxy URL — the browser will follow the redirect.
+  return `/api/blob?p=${encodeURIComponent(imageUrl)}`
 }
 
 async function attachClubIds(rows: Omit<CoachRow, "clubIds">[]): Promise<CoachRow[]> {
