@@ -1,12 +1,13 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { get } from "@vercel/blob"
+import { head } from "@vercel/blob"
 
 /**
  * Proxy private Vercel Blob files.
  * Usage: /api/blob?p=<pathname>
  *
- * Club and coach photos are stored in a private Blob store but shown publicly
- * on the site, so no auth check is applied here.
+ * Calls head() to get a short-lived pre-signed downloadUrl, then
+ * redirects the browser to it. This is more reliable than streaming
+ * via get() and works in all environments including production.
  */
 export async function GET(request: NextRequest) {
   const pathname = request.nextUrl.searchParams.get("p")
@@ -16,33 +17,12 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const result = await get(pathname, {
-      access: "private",
-      ifNoneMatch: request.headers.get("if-none-match") ?? undefined,
-    })
+    const blob = await head(pathname)
 
-    if (!result) {
-      return new NextResponse("Not found", { status: 404 })
-    }
-
-    // 304 — browser can use its cached copy
-    if (result.statusCode === 304) {
-      return new NextResponse(null, {
-        status: 304,
-        headers: {
-          ETag: result.blob.etag,
-          "Cache-Control": "public, max-age=31536000, immutable",
-        },
-      })
-    }
-
-    return new NextResponse(result.stream, {
-      headers: {
-        "Content-Type": result.blob.contentType,
-        ETag: result.blob.etag,
-        "Cache-Control": "public, max-age=31536000, immutable",
-      },
-    })
+    // Redirect to the pre-signed download URL — the browser fetches
+    // the image directly from Blob storage. Use 302 (not 301) so
+    // browsers always re-check (the signed URL expires).
+    return NextResponse.redirect(blob.downloadUrl, { status: 302 })
   } catch (error) {
     console.error("[blob proxy] error:", error)
     return new NextResponse("Not found", { status: 404 })
