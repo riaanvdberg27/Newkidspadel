@@ -4,7 +4,7 @@ import { db } from "@/lib/db"
 import { coaches, coachClubs, clubs } from "@/lib/db/schema"
 import { eq, asc, inArray } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
-import { del } from "@vercel/blob"
+import { del, list, head } from "@vercel/blob"
 
 export type CoachRow = {
   id: number
@@ -15,6 +15,28 @@ export type CoachRow = {
   sortOrder: number
   published: boolean
   clubIds: number[]
+}
+
+/**
+ * Resolve a stored imageUrl (may be a bare pathname like "coaches/abc.jpg"
+ * or a full https:// URL) to a usable https:// URL for next/image.
+ *
+ * - Full URL → returned as-is (already usable)
+ * - Bare pathname → find the blob via list() and return its downloadUrl
+ *   (a short-lived pre-signed URL that works in all environments)
+ * - null → null
+ */
+async function resolveImageUrl(imageUrl: string | null | undefined): Promise<string | null> {
+  if (!imageUrl) return null
+  if (imageUrl.startsWith("http://") || imageUrl.startsWith("https://")) return imageUrl
+  try {
+    const { blobs } = await list({ prefix: imageUrl, limit: 1 })
+    if (!blobs.length) return null
+    const blob = await head(blobs[0].url)
+    return blob.downloadUrl
+  } catch {
+    return null
+  }
 }
 
 async function attachClubIds(rows: Omit<CoachRow, "clubIds">[]): Promise<CoachRow[]> {
@@ -46,7 +68,11 @@ export async function getCoaches(): Promise<CoachRow[]> {
     sortOrder: r.sortOrder,
     published: r.published,
   }))
-  return attachClubIds(base)
+  // Resolve image URLs in parallel
+  const resolved = await Promise.all(
+    base.map(async (r) => ({ ...r, imageUrl: await resolveImageUrl(r.imageUrl) }))
+  )
+  return attachClubIds(resolved)
 }
 
 export async function getPublishedCoaches(): Promise<CoachRow[]> {
@@ -64,7 +90,11 @@ export async function getPublishedCoaches(): Promise<CoachRow[]> {
     sortOrder: r.sortOrder,
     published: r.published,
   }))
-  return attachClubIds(base)
+  // Resolve image URLs in parallel
+  const resolved = await Promise.all(
+    base.map(async (r) => ({ ...r, imageUrl: await resolveImageUrl(r.imageUrl) }))
+  )
+  return attachClubIds(resolved)
 }
 
 /** Return published coaches assigned to a specific club — used in the enrollment wizard. */
@@ -90,7 +120,11 @@ export async function getCoachesByClub(clubId: number): Promise<CoachRow[]> {
     sortOrder: r.sortOrder,
     published: r.published,
   }))
-  return base.map((r) => ({ ...r, clubIds: [clubId] }))
+  // Resolve image URLs in parallel
+  const resolved = await Promise.all(
+    base.map(async (r) => ({ ...r, imageUrl: await resolveImageUrl(r.imageUrl) }))
+  )
+  return resolved.map((r) => ({ ...r, clubIds: [clubId] }))
 }
 
 export async function saveCoach(input: {
@@ -149,8 +183,7 @@ export async function saveCoach(input: {
 }
 
 export async function deleteCoach(id: number, imageUrl: string | null): Promise<{ ok: boolean }> {
-  // imageUrl stores the blob pathname (e.g. "coaches/123-abc.jpg")
-  // del() accepts a pathname for private stores
+  // imageUrl may be a full https:// URL or a bare pathname
   if (imageUrl) {
     try {
       await del(imageUrl)
