@@ -30,11 +30,15 @@ async function resolveImageUrl(imageUrl: string | null | undefined): Promise<str
   if (!imageUrl) return null
   if (imageUrl.startsWith("http://") || imageUrl.startsWith("https://")) return imageUrl
   try {
+    console.log("[v0] resolveImageUrl: listing blobs with prefix:", imageUrl)
     const { blobs } = await list({ prefix: imageUrl, limit: 1 })
+    console.log("[v0] resolveImageUrl: blobs found:", blobs.length, blobs[0]?.url)
     if (!blobs.length) return null
     const blob = await head(blobs[0].url)
+    console.log("[v0] resolveImageUrl: downloadUrl:", blob.downloadUrl)
     return blob.downloadUrl
-  } catch {
+  } catch (err) {
+    console.error("[v0] resolveImageUrl error:", err)
     return null
   }
 }
