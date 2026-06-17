@@ -206,7 +206,7 @@ export async function resendWelcome(id: number): Promise<{ ok: boolean; error?: 
       signatureDataUrl: r.signatureData,
     })
   } catch (err) {
-    console.log("[v0] resendWelcome PDF failed:", err)
+    console.error("[email] resendWelcome PDF generation failed:", err)
   }
 
   return sendWelcomeEmail({
