@@ -85,9 +85,21 @@ export function EditProfile({
           <input
             type="tel"
             value={newMobile}
-            onChange={(e) => setNewMobile(e.target.value)}
+            onChange={(e) => setNewMobile(e.target.value.replace(/[^\d]/g, ""))}
+            placeholder="0812345678"
+            maxLength={10}
             className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-lime"
           />
+          <span className="mt-1 block text-xs text-muted-foreground">
+            Start with 0, no +27 or spaces — e.g. 0812345678 (10 digits)
+          </span>
+          {newMobile.length > 0 && !/^0\d{9}$/.test(newMobile) && (
+            <span className="mt-0.5 block text-xs font-semibold text-destructive">
+              {!newMobile.startsWith("0")
+                ? "Must start with 0 — e.g. 0812345678"
+                : `Must be exactly 10 digits (${newMobile.length}/10)`}
+            </span>
+          )}
         </label>
       </div>
       {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
@@ -100,7 +112,7 @@ export function EditProfile({
         </button>
         <button
           onClick={save}
-          disabled={!newName.trim() || pending}
+          disabled={!newName.trim() || !/^0\d{9}$/.test(newMobile) || pending}
           className="inline-flex items-center gap-1.5 rounded-md bg-lime px-4 py-1.5 text-sm font-bold text-lime-foreground transition-colors hover:bg-lime/90 disabled:opacity-50"
         >
           <Check className="h-4 w-4" />

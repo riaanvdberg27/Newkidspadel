@@ -5,7 +5,6 @@ import { useRef, useState } from "react"
 import { Upload, X } from "lucide-react"
 import type { Club } from "@/lib/db/schema"
 import type { ClubInput } from "@/app/actions/admin"
-import { blobUrl } from "@/lib/blob"
 
 export function ClubForm({
   club,
@@ -33,8 +32,9 @@ export function ClubForm({
 
   // Image — prefer the new Blob pathname, fall back to legacy path
   const [imageUrl, setImageUrl] = useState<string | null>(club?.imageUrl ?? null)
+  // imagePreview is either a data: URL (local preview) or a proxied /api/blob URL
   const [imagePreview, setImagePreview] = useState<string | null>(
-    blobUrl(club?.imageUrl) ?? club?.image ?? null,
+    club?.imageUrl ? `/api/blob?p=${encodeURIComponent(club.imageUrl)}` : (club?.image ?? null),
   )
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
@@ -61,7 +61,7 @@ export function ClubForm({
       setImageUrl(json.url)
     } catch (err) {
       setUploadError(err instanceof Error ? err.message : "Upload failed")
-      setImagePreview(club?.imageUrl ? blobUrl(club.imageUrl) : club?.image ?? null)
+      setImagePreview(club?.imageUrl ? `/api/blob?p=${encodeURIComponent(club.imageUrl)}` : (club?.image ?? null))
       setImageUrl(club?.imageUrl ?? null)
     } finally {
       setUploading(false)

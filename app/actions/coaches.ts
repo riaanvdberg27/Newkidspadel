@@ -18,21 +18,14 @@ export type CoachRow = {
 }
 
 /**
- * Resolve a stored imageUrl (may be a bare pathname like "coaches/abc.jpg"
- * or a full https:// URL) to a usable https:// URL for next/image.
- *
- * - Full URL → returned as-is (already usable)
- * - Bare pathname → find the blob via list() and return its downloadUrl
- *   (a short-lived pre-signed URL that works in all environments)
- * - null → null
+ * Resolve a stored imageUrl to a browser-loadable URL via the /api/blob proxy.
+ * Private blobs (*.private.blob.vercel-storage.com) cannot be fetched directly
+ * — the proxy adds the Authorization header server-side.
+ * Accepts both full https:// URLs and bare pathnames (legacy).
  */
 async function resolveImageUrl(imageUrl: string | null | undefined): Promise<string | null> {
   if (!imageUrl) return null
-  // Already a full URL — use as-is (new uploads store blob.url directly)
-  if (imageUrl.startsWith("http://") || imageUrl.startsWith("https://")) return imageUrl
-  // Bare pathname (legacy data) — find via list() and return the blob URL
-  // We use /api/blob proxy which calls list()+head() internally,
-  // so just return the proxy URL — the browser will follow the redirect.
+  // Always route through the proxy — it handles full URLs and bare paths.
   return `/api/blob?p=${encodeURIComponent(imageUrl)}`
 }
 

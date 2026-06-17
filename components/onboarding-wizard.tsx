@@ -515,7 +515,20 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
             <div className="mt-6 grid gap-4 sm:grid-cols-2">
               <Field label="First Name" value={parent.firstName} onChange={(v) => setParent({ ...parent, firstName: v })} placeholder="First name" />
               <Field label="Last Name / Surname" value={parent.lastName} onChange={(v) => setParent({ ...parent, lastName: v })} placeholder="Last name" />
-              <Field label="Mobile Number" type="tel" value={parent.mobile} onChange={(v) => setParent({ ...parent, mobile: v })} />
+              <div className="flex flex-col gap-1">
+                <Field label="Mobile Number" type="tel" value={parent.mobile} onChange={(v) => setParent({ ...parent, mobile: v.replace(/[^\d]/g, "") })} placeholder="0812345678" />
+                <p className="text-xs text-muted-foreground">South African number — start with 0, no spaces or +27. e.g. 0812345678</p>
+                {parent.mobile.length > 0 && !/^0\d{9}$/.test(parent.mobile) && (
+                  <p className="text-xs font-semibold text-destructive">
+                    {!parent.mobile.startsWith("0")
+                      ? "Must start with 0 — e.g. 0812345678"
+                      : `Must be exactly 10 digits (${parent.mobile.length}/10)`}
+                  </p>
+                )}
+                {/^0\d{9}$/.test(parent.mobile) && (
+                  <p className="text-xs font-semibold text-lime-600">Looks good</p>
+                )}
+              </div>
               <Field label="Email" type="email" value={parent.email} onChange={(v) => setParent({ ...parent, email: v })} />
               <div className="space-y-1">
                 <Field label="Password" type="password" value={parent.password} onChange={(v) => setParent({ ...parent, password: v })} placeholder="At least 8 characters" />
@@ -541,7 +554,7 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
             <StepNav
               onBack={() => setStep(2)}
               onNext={() => setStep(4)}
-              nextDisabled={!parent.firstName || !parent.lastName || !parent.email || !parent.mobile || parent.password.length < 8 || !emergency.name || !emergency.phone}
+              nextDisabled={!parent.firstName || !parent.lastName || !parent.email || !/^0\d{9}$/.test(parent.mobile) || parent.password.length < 8 || !emergency.name || !emergency.phone}
             />
           </div>
     )

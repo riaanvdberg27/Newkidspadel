@@ -1,12 +1,14 @@
 /**
- * Converts a private Blob pathname (e.g. "clubs/123-abc.jpg") into a
- * URL that proxies through /api/blob so the image can be served to browsers.
+ * Returns a browser-loadable URL for any stored image value.
  *
- * If the value is already a full https:// URL (legacy public URLs or external),
- * it is returned unchanged so old data keeps working.
+ * Private Vercel Blob URLs (*.private.blob.vercel-storage.com) cannot be
+ * fetched directly by browsers — they require an Authorization header.
+ * This function always routes through the /api/blob proxy which adds the
+ * token server-side, regardless of whether the stored value is a full URL
+ * or a bare pathname.
  */
 export function blobUrl(pathname: string | null | undefined): string | null {
   if (!pathname) return null
-  if (pathname.startsWith("http://") || pathname.startsWith("https://")) return pathname
+  // Always proxy — the route handler accepts both full URLs and bare paths.
   return `/api/blob?p=${encodeURIComponent(pathname)}`
 }

@@ -1,12 +1,10 @@
 "use client"
 
 import { useState, useTransition, useRef } from "react"
-import Image from "next/image"
 import { Plus, Trash2, Save, Check, Upload, Eye, EyeOff, GripVertical, ChevronDown } from "lucide-react"
 import type { CoachRow } from "@/app/actions/coaches"
 import { saveCoach, deleteCoach } from "@/app/actions/coaches"
 import type { Club } from "@/lib/db/schema"
-import { blobUrl } from "@/lib/blob"
 
 function makeTemp(): CoachRow {
   return {
@@ -196,7 +194,9 @@ function CoachCard({
         <div className="sm:col-span-2 flex items-center gap-4">
           <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-full border-2 border-border bg-muted">
             {coach.imageUrl ? (
-              <Image src={blobUrl(coach.imageUrl)!} alt={coach.name || "Coach"} fill unoptimized className="object-cover" />
+              // imageUrl is already resolved to /api/blob?p=... by getCoaches() server-side
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={coach.imageUrl} alt={coach.name || "Coach"} className="h-full w-full object-cover" />
             ) : (
               <div className="flex h-full w-full items-center justify-center text-xl font-black text-muted-foreground">
                 {coach.name ? coach.name[0].toUpperCase() : "?"}
