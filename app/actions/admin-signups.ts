@@ -1,8 +1,8 @@
 "use server"
 
-import { desc, eq } from "drizzle-orm"
+import { desc, eq, ilike, or } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { enrollments } from "@/lib/db/schema"
+import { enrollments, user } from "@/lib/db/schema"
 import { requireAdmin } from "@/lib/admin-auth"
 import { generateContractPdf } from "@/lib/contract-pdf"
 import { sendWelcomeEmail } from "@/lib/email"
@@ -234,6 +234,29 @@ export async function deleteSignup(id: number): Promise<{ ok: boolean; error?: s
   }
 }
 
+export type UserSearchResult = {
+  id: string
+  name: string
+  email: string
+}
+
+/**
+ * Search registered user accounts by name or email.
+ * Used in the admin Add Sign-up modal to link a new enrollment to an
+ * existing parent account so they see all their children on login.
+ */
+export async function searchUsers(query: string): Promise<UserSearchResult[]> {
+  await requireAdmin()
+  if (!query || query.trim().length < 2) return []
+  const q = `%${query.trim()}%`
+  const rows = await db
+    .select({ id: user.id, name: user.name, email: user.email })
+    .from(user)
+    .where(or(ilike(user.name, q), ilike(user.email, q)))
+    .limit(8)
+  return rows
+}
+
 export type CreateSignupInput = {
   parentName: string
   parentEmail: string
@@ -249,6 +272,11 @@ export type CreateSignupInput = {
   emergencyContactName: string
   emergencyContactPhone: string
   status: string
+  /**
+   * When set, the enrollment is linked to this user account so the parent
+   * can see it on their dashboard. Leave undefined to create an unlinked record.
+   */
+  linkUserId?: string
 }
 
 /** Manually create a sign-up from the admin dashboard. */
@@ -256,10 +284,13 @@ export async function createSignup(input: CreateSignupInput): Promise<{ ok: bool
   await requireAdmin()
   try {
     const referenceNumber = `NGP-${nanoid(8).toUpperCase()}`
+    // Use the linked user's ID so the parent sees this on their dashboard,
+    // or fall back to "admin" for unlinked / new-account enrollments.
+    const userId = input.linkUserId ?? "admin"
     const [row] = await db
       .insert(enrollments)
       .values({
-        userId: "admin",
+        userId,
         referenceNumber,
         parentName: input.parentName.trim(),
         parentEmail: input.parentEmail.trim(),

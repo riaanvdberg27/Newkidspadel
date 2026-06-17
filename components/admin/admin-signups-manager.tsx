@@ -1,20 +1,22 @@
 "use client"
 
-import { useState, useTransition, useMemo } from "react"
+import { useState, useTransition, useMemo, useRef, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import {
   FileText, Mail, RefreshCw, Check, X, Pencil,
-  ChevronDown, ChevronUp, Trash2, Plus, Filter,
+  ChevronDown, ChevronUp, Trash2, Plus, Filter, Search, Link2, UserPlus,
 } from "lucide-react"
 import {
   type AdminSignup,
   type UpdateSignupInput,
   type CreateSignupInput,
+  type UserSearchResult,
   regenerateContract,
   resendWelcome,
   updateSignup,
   deleteSignup,
   createSignup,
+  searchUsers,
 } from "@/app/actions/admin-signups"
 import type { CoachRow } from "@/app/actions/coaches"
 import type { PublicPackage } from "@/app/actions/packages"
@@ -667,6 +669,15 @@ function AddModal({
   onCreate: (input: CreateSignupInput) => void
   onClose: () => void
 }) {
+  // --- Account link mode ---
+  const [linkMode, setLinkMode] = useState<"link" | "new">("link")
+  const [userQuery, setUserQuery] = useState("")
+  const [userResults, setUserResults] = useState<UserSearchResult[]>([])
+  const [linkedUser, setLinkedUser] = useState<UserSearchResult | null>(null)
+  const [searching, setSearching] = useState(false)
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // --- Enrollment fields ---
   const [parentName, setParentName] = useState("")
   const [parentEmail, setParentEmail] = useState("")
   const [parentMobile, setParentMobile] = useState("")
@@ -682,6 +693,51 @@ function AddModal({
   const [emergencyPhone, setEmergencyPhone] = useState("")
   const [status, setStatus] = useState("pending")
 
+  // Debounced user search
+  useEffect(() => {
+    if (linkMode !== "link" || userQuery.trim().length < 2) {
+      setUserResults([])
+      return
+    }
+    if (searchTimer.current) clearTimeout(searchTimer.current)
+    searchTimer.current = setTimeout(async () => {
+      setSearching(true)
+      try {
+        const results = await searchUsers(userQuery)
+        setUserResults(results)
+      } finally {
+        setSearching(false)
+      }
+    }, 300)
+    return () => { if (searchTimer.current) clearTimeout(searchTimer.current) }
+  }, [userQuery, linkMode])
+
+  // When a user is selected, auto-fill parent name + email (read-only)
+  function selectUser(u: UserSearchResult) {
+    setLinkedUser(u)
+    setParentName(u.name)
+    setParentEmail(u.email)
+    setUserResults([])
+    setUserQuery("")
+  }
+
+  function clearLinkedUser() {
+    setLinkedUser(null)
+    setParentName("")
+    setParentEmail("")
+  }
+
+  function switchMode(mode: "link" | "new") {
+    setLinkMode(mode)
+    setLinkedUser(null)
+    setUserQuery("")
+    setUserResults([])
+    if (mode === "new") {
+      setParentName("")
+      setParentEmail("")
+    }
+  }
+
   function submit(e: React.FormEvent) {
     e.preventDefault()
     onCreate({
@@ -693,6 +749,7 @@ function AddModal({
       emergencyContactName: emergencyName,
       emergencyContactPhone: emergencyPhone,
       status,
+      linkUserId: linkMode === "link" && linkedUser ? linkedUser.id : undefined,
     })
   }
 
@@ -701,10 +758,104 @@ function AddModal({
       <div className="w-full max-w-2xl rounded-xl bg-card shadow-2xl">
         <ModalHeader title="Add Sign-up" subtitle="Manually create a new enrollment record" onClose={onClose} />
         <form onSubmit={submit} className="space-y-5 px-6 py-5">
+
+          {/* ── Account link mode toggle ── */}
+          <fieldset className="space-y-3">
+            <legend className="text-sm font-bold text-navy">Link to account</legend>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => switchMode("link")}
+                className={`flex items-center justify-center gap-2 rounded-lg border px-4 py-3 text-sm font-semibold transition-colors ${
+                  linkMode === "link"
+                    ? "border-lime bg-lime/10 text-navy"
+                    : "border-border bg-background text-muted-foreground hover:bg-muted"
+                }`}
+              >
+                <Link2 className="h-4 w-4" />
+                Link existing account
+              </button>
+              <button
+                type="button"
+                onClick={() => switchMode("new")}
+                className={`flex items-center justify-center gap-2 rounded-lg border px-4 py-3 text-sm font-semibold transition-colors ${
+                  linkMode === "new"
+                    ? "border-lime bg-lime/10 text-navy"
+                    : "border-border bg-background text-muted-foreground hover:bg-muted"
+                }`}
+              >
+                <UserPlus className="h-4 w-4" />
+                New / no account
+              </button>
+            </div>
+
+            {linkMode === "link" && (
+              <div className="space-y-2">
+                {linkedUser ? (
+                  /* Linked account chip */
+                  <div className="flex items-center justify-between rounded-lg border border-lime bg-lime/10 px-3 py-2.5">
+                    <div>
+                      <p className="text-sm font-bold text-navy">{linkedUser.name}</p>
+                      <p className="text-xs text-muted-foreground">{linkedUser.email}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={clearLinkedUser}
+                      className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-navy"
+                      aria-label="Remove linked account"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                ) : (
+                  /* Search box */
+                  <div className="relative">
+                    <div className="pointer-events-none absolute inset-y-0 left-3 flex items-center">
+                      <Search className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                    <input
+                      type="text"
+                      placeholder="Search by name or email…"
+                      value={userQuery}
+                      onChange={(e) => setUserQuery(e.target.value)}
+                      className="w-full rounded-lg border border-border bg-background py-2 pl-9 pr-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-lime"
+                    />
+                    {searching && (
+                      <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center">
+                        <RefreshCw className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                      </div>
+                    )}
+                    {userResults.length > 0 && (
+                      <ul className="absolute z-10 mt-1 w-full overflow-hidden rounded-lg border border-border bg-card shadow-lg">
+                        {userResults.map((u) => (
+                          <li key={u.id}>
+                            <button
+                              type="button"
+                              onClick={() => selectUser(u)}
+                              className="flex w-full flex-col px-4 py-2.5 text-left hover:bg-muted"
+                            >
+                              <span className="text-sm font-semibold text-navy">{u.name}</span>
+                              <span className="text-xs text-muted-foreground">{u.email}</span>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    {userQuery.trim().length >= 2 && !searching && userResults.length === 0 && (
+                      <p className="mt-1.5 text-xs text-muted-foreground">No accounts found — switch to &quot;New / no account&quot; to add manually.</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </fieldset>
+
+          {/* ── Parent / Guardian ── */}
           <ParentFields
             parentName={parentName} setParentName={setParentName}
             parentEmail={parentEmail} setParentEmail={setParentEmail}
             parentMobile={parentMobile} setParentMobile={setParentMobile}
+            readOnly={linkMode === "link" && linkedUser != null}
           />
           <ChildFields
             childName={childName} setChildName={setChildName}
@@ -766,20 +917,25 @@ function ModalFooter({ pending, onClose, submitLabel }: { pending: boolean; onCl
   )
 }
 
-function ParentFields({ parentName, setParentName, parentEmail, setParentEmail, parentMobile, setParentMobile }: {
+function ParentFields({ parentName, setParentName, parentEmail, setParentEmail, parentMobile, setParentMobile, readOnly = false }: {
   parentName: string; setParentName: (v: string) => void
   parentEmail: string; setParentEmail: (v: string) => void
   parentMobile: string; setParentMobile: (v: string) => void
+  readOnly?: boolean
 }) {
+  const roClass = readOnly ? "opacity-60 cursor-not-allowed bg-muted" : ""
   return (
     <fieldset className="space-y-3">
-      <legend className="text-sm font-bold text-navy">Parent / Guardian</legend>
+      <legend className="flex items-center gap-2 text-sm font-bold text-navy">
+        Parent / Guardian
+        {readOnly && <span className="rounded-full bg-lime/20 px-2 py-0.5 text-xs font-normal text-navy">auto-filled from account</span>}
+      </legend>
       <div className="grid gap-3 sm:grid-cols-3">
         <Field label="Full name" required>
-          <input type="text" required value={parentName} onChange={(e) => setParentName(e.target.value)} className={inputCls} />
+          <input type="text" required readOnly={readOnly} value={parentName} onChange={(e) => setParentName(e.target.value)} className={`${inputCls} ${roClass}`} />
         </Field>
         <Field label="Email" required>
-          <input type="email" required value={parentEmail} onChange={(e) => setParentEmail(e.target.value)} className={inputCls} />
+          <input type="email" required readOnly={readOnly} value={parentEmail} onChange={(e) => setParentEmail(e.target.value)} className={`${inputCls} ${roClass}`} />
         </Field>
         <Field label="Mobile" required>
           <input type="tel" required value={parentMobile} onChange={(e) => setParentMobile(e.target.value)} className={inputCls} />

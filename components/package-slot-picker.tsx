@@ -2,33 +2,35 @@
 
 import { useEffect, useState } from "react"
 import { Loader2 } from "lucide-react"
-import { getPublicPackageSlots } from "@/app/actions/packages"
+import { getPublicPackageSlotAvailability } from "@/app/actions/packages"
 import { formatHour, formatEndHour, WEEKDAYS } from "@/lib/slots"
 import type { SelectedSlot } from "@/components/slot-picker"
-import type { CustomSlot } from "@/app/actions/packages"
+import type { CustomSlotWithAvailability } from "@/app/actions/packages"
 
 export function PackageSlotPicker({
   packageId,
+  packageName,
   ageGroup,
   selected,
   onSelect,
 }: {
   packageId: number
+  packageName: string
   ageGroup: string
   selected: SelectedSlot | null
   onSelect: (slot: SelectedSlot) => void
 }) {
-  const [slots, setSlots] = useState<CustomSlot[] | null>(null)
+  const [slots, setSlots] = useState<CustomSlotWithAvailability[] | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     let active = true
     setLoading(true)
-    getPublicPackageSlots(packageId, ageGroup)
+    getPublicPackageSlotAvailability(packageId, packageName, ageGroup)
       .then((data) => { if (active) setSlots(data) })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
-  }, [packageId, ageGroup])
+  }, [packageId, packageName, ageGroup])
 
   if (loading) {
     return (
@@ -48,7 +50,7 @@ export function PackageSlotPicker({
     )
   }
 
-  const byWeekday = new Map<number, CustomSlot[]>()
+  const byWeekday = new Map<number, CustomSlotWithAvailability[]>()
   for (const s of offered) {
     if (!byWeekday.has(s.weekday)) byWeekday.set(s.weekday, [])
     byWeekday.get(s.weekday)!.push(s)
@@ -68,19 +70,30 @@ export function PackageSlotPicker({
               .map((s) => {
                 const hourNum = Number(s.hour)
                 const isSelected = selected?.weekday === s.weekday && selected?.hour === hourNum
+                const isFull = s.remaining <= 0
+
                 return (
                   <button
                     key={`${s.weekday}-${s.hour}`}
                     type="button"
-                    onClick={() => onSelect({ weekday: s.weekday, hour: hourNum })}
+                    disabled={isFull}
+                    onClick={() => !isFull && onSelect({ weekday: s.weekday, hour: hourNum })}
                     className={`rounded-md border px-3 py-2 text-left text-sm transition-colors ${
-                      isSelected
-                        ? "border-lime bg-lime/15 text-navy"
-                        : "border-border bg-card text-navy hover:border-lime/60"
+                      isFull
+                        ? "cursor-not-allowed border-border bg-muted/40 opacity-50"
+                        : isSelected
+                          ? "border-lime bg-lime/15 text-navy"
+                          : "border-border bg-card text-navy hover:border-lime/60"
                     }`}
                   >
                     <span className="font-semibold">{formatHour(hourNum)} – {formatEndHour(hourNum)}</span>
-                    <span className="ml-2 text-xs text-muted-foreground">{s.capacity} spots</span>
+                    {isFull ? (
+                      <span className="ml-2 text-xs text-muted-foreground">Full</span>
+                    ) : (
+                      <span className="ml-2 text-xs text-muted-foreground">
+                        {s.remaining} / {s.capacity} spot{s.capacity !== 1 ? "s" : ""} left
+                      </span>
+                    )}
                   </button>
                 )
               })}
