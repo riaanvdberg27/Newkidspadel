@@ -937,9 +937,27 @@ function ParentFields({ parentName, setParentName, parentEmail, setParentEmail, 
         <Field label="Email" required>
           <input type="email" required readOnly={readOnly} value={parentEmail} onChange={(e) => setParentEmail(e.target.value)} className={`${inputCls} ${roClass}`} />
         </Field>
-        <Field label="Mobile" required>
-          <input type="tel" required value={parentMobile} onChange={(e) => setParentMobile(e.target.value)} className={inputCls} />
-        </Field>
+        <div className="flex flex-col gap-1">
+          <Field label="Mobile" required>
+            <input
+              type="tel"
+              required
+              value={parentMobile}
+              onChange={(e) => setParentMobile(e.target.value.replace(/[^\d]/g, ""))}
+              placeholder="0812345678"
+              maxLength={10}
+              className={inputCls}
+            />
+          </Field>
+          <p className="text-xs text-muted-foreground">Start with 0, no +27 — e.g. 0812345678 (10 digits)</p>
+          {parentMobile.length > 0 && !/^0\d{9}$/.test(parentMobile) && (
+            <p className="text-xs font-semibold text-destructive">
+              {!parentMobile.startsWith("0")
+                ? "Must start with 0"
+                : `${parentMobile.length}/10 digits`}
+            </p>
+          )}
+        </div>
       </div>
     </fieldset>
   )
