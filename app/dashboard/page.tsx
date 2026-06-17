@@ -93,6 +93,7 @@ export default async function DashboardPage() {
                       weekday={e.slotWeekday}
                       hour={e.slotHour != null ? parseFloat(String(e.slotHour)) : null}
                       ageGroup={(e.slotAgeGroup as import("@/lib/db/schema").AgeGroup) ?? null}
+                      packageName={e.packageName ?? null}
                     />
                     <Detail icon={User} label="Age" value={`${e.childAge} years`} />
                     <Detail icon={Mail} label="Email" value={e.parentEmail} />

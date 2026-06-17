@@ -59,6 +59,32 @@ async function attachClubIds(rows: (typeof packages.$inferSelect)[]): Promise<Pu
   return rows.map((r) => toPublic(r, map[r.id] ?? []))
 }
 
+/** Returns the slotType ("standard" | "custom") for a package by its id. */
+export async function getPackageSlotType(packageId: number): Promise<"standard" | "custom"> {
+  const rows = await db
+    .select({ slotType: packages.slotType })
+    .from(packages)
+    .where(eq(packages.id, packageId))
+    .limit(1)
+  return (rows[0]?.slotType ?? "standard") as "standard" | "custom"
+}
+
+/**
+ * Looks up a package by name and returns its id + slotType.
+ * Used on the parent dashboard where enrollments only store packageName.
+ */
+export async function getPackageByName(
+  name: string,
+): Promise<{ id: number; slotType: "standard" | "custom" } | null> {
+  const rows = await db
+    .select({ id: packages.id, slotType: packages.slotType })
+    .from(packages)
+    .where(eq(packages.name, name))
+    .limit(1)
+  if (!rows[0]) return null
+  return { id: rows[0].id, slotType: (rows[0].slotType ?? "standard") as "standard" | "custom" }
+}
+
 /** Published packages for the public site (homepage + enrollment). */
 export async function getPublishedPackages(): Promise<PublicPackage[]> {
   const rows = await db
