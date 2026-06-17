@@ -12,10 +12,11 @@ import {
   type PackageInput,
   type CustomSlot,
 } from "@/app/actions/packages"
+import { SLOT_HOURS, formatHour, formatEndHour } from "@/lib/slots"
 import { AGE_GROUPS, type AgeGroup, type Club } from "@/lib/db/schema"
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
-const HOURS = [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]
+// SLOT_HOURS is imported from lib/slots — half-hour increments 08:00–18:00
 
 const AGE_GROUP_LABELS: Record<AgeGroup, string> = {
   "5-8": "Ages 5 – 8",
@@ -471,10 +472,10 @@ function PackageForm({
                 </tr>
               </thead>
               <tbody>
-                {HOURS.map((hour) => (
+                {SLOT_HOURS.map((hour) => (
                   <tr key={hour} className="border-b border-border last:border-0 odd:bg-muted/20">
                     <td className="whitespace-nowrap px-3 py-2 font-medium text-navy">
-                      {String(hour).padStart(2, "0")}:00
+                      {formatHour(hour)} – {formatEndHour(hour)}
                     </td>
                     {WEEKDAYS.map((_, wd) => {
                       const k = slotKey(activeAgeGroup, wd, hour)
@@ -497,7 +498,7 @@ function PackageForm({
                                 max={99}
                                 value={cap}
                                 onChange={(e) => setCapacity(activeAgeGroup, wd, hour, Number(e.target.value))}
-                                aria-label={`Capacity for ${WEEKDAYS[wd]} ${hour}:00 (${activeAgeGroup})`}
+                                aria-label={`Capacity for ${WEEKDAYS[wd]} ${formatHour(hour)} (${activeAgeGroup})`}
                                 className="w-12 rounded border border-border bg-background px-1 py-0.5 text-center text-xs outline-none focus:border-lime"
                               />
                             </div>

@@ -164,7 +164,7 @@ function PackageCard({ pkg, colorIdx = 0 }: { pkg: PublicPackage; colorIdx?: num
         )}
 
         {pkg.description && (
-          <p className="mt-4 text-sm leading-relaxed text-muted-foreground border-t border-border pt-4">
+          <p className="mt-4 whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground border-t border-border pt-4">
             {pkg.description}
           </p>
         )}
