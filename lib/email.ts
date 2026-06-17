@@ -1,6 +1,5 @@
 import { Resend } from "resend"
 
-const apiKey = process.env.RESEND_API_KEY
 const FROM = process.env.RESEND_FROM_EMAIL || "NextGen Padel Academy <onboarding@resend.dev>"
 // Supports comma-separated list: "admin@club.co.za,info@club.co.za"
 const ADMIN_EMAILS = (process.env.ADMIN_NOTIFICATION_EMAIL || process.env.RESEND_FROM_EMAIL || "")
@@ -8,7 +7,15 @@ const ADMIN_EMAILS = (process.env.ADMIN_NOTIFICATION_EMAIL || process.env.RESEND
   .map((e) => e.trim())
   .filter(Boolean)
 
-const resend = apiKey ? new Resend(apiKey) : null
+/**
+ * Lazy client — created on first call so it always reads the current
+ * RESEND_API_KEY value rather than a stale module-load-time snapshot.
+ */
+function getResend(): Resend | null {
+  const apiKey = process.env.RESEND_API_KEY
+  if (!apiKey) return null
+  return new Resend(apiKey)
+}
 
 export type WelcomeEmailData = {
   to: string
@@ -31,6 +38,7 @@ function escapeHtml(value: string): string {
 }
 
 export async function sendWelcomeEmail(data: WelcomeEmailData): Promise<{ ok: boolean; error?: string }> {
+  const resend = getResend()
   if (!resend) {
     console.log("[email] RESEND_API_KEY not set — skipping welcome email")
     return { ok: false, error: "RESEND_API_KEY not configured" }
@@ -113,6 +121,7 @@ export type AdminNotificationEmailData = {
 export async function sendAdminNotificationEmail(
   data: AdminNotificationEmailData,
 ): Promise<{ ok: boolean; error?: string }> {
+  const resend = getResend()
   if (!resend) {
     console.log("[email] RESEND_API_KEY not set — skipping admin notification email")
     return { ok: false, error: "RESEND_API_KEY not configured" }

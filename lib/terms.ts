@@ -25,7 +25,7 @@ export const TERMS_SECTIONS: TermsSection[] = [
   },
   {
     heading: "4. Membership and Subscription Fees",
-    body: "Beginner Package: R600 per month (4 sessions). Advanced Package: R900 per month (8 sessions). Fees are due at the beginning of each month. No refunds for missed sessions unless cancelled 24 hours in advance.",
+    body: "Beginner Package: R600 per month (4 sessions). Advanced Package: R900 per month (8 sessions). Fees are due at the beginning of each month. No refunds for missed sessions.",
   },
   {
     heading: "5. Health and Medical Disclosure",
