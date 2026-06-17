@@ -1,12 +1,5 @@
 import { Resend } from "resend"
 
-const FROM = process.env.RESEND_FROM_EMAIL || "NextGen Padel Academy <onboarding@resend.dev>"
-// Supports comma-separated list: "admin@club.co.za,info@club.co.za"
-const ADMIN_EMAILS = (process.env.ADMIN_NOTIFICATION_EMAIL || process.env.RESEND_FROM_EMAIL || "")
-  .split(",")
-  .map((e) => e.trim())
-  .filter(Boolean)
-
 /**
  * Lazy client — created on first call so it always reads the current
  * RESEND_API_KEY value rather than a stale module-load-time snapshot.
@@ -15,6 +8,31 @@ function getResend(): Resend | null {
   const apiKey = process.env.RESEND_API_KEY
   if (!apiKey) return null
   return new Resend(apiKey)
+}
+
+/** Read FROM address at call time (not module load time). */
+function getFrom(): string {
+  return process.env.RESEND_FROM_EMAIL || "NextGen Padel Academy <onboarding@resend.dev>"
+}
+
+/** Read admin addresses at call time. Supports comma-separated list. */
+function getAdminEmails(): string[] {
+  return (process.env.ADMIN_NOTIFICATION_EMAIL || process.env.RESEND_FROM_EMAIL || "")
+    .split(",")
+    .map((e) => e.trim())
+    .filter(Boolean)
+}
+
+/** Safely extract a human-readable message from a Resend error object. */
+function resendErrorMessage(error: unknown): string {
+  if (!error) return "Unknown error"
+  if (typeof error === "string") return error
+  if (error instanceof Error) return error.message
+  if (typeof error === "object") {
+    const e = error as Record<string, unknown>
+    return String(e.message ?? e.name ?? JSON.stringify(error))
+  }
+  return String(error)
 }
 
 export type WelcomeEmailData = {
@@ -43,6 +61,7 @@ export async function sendWelcomeEmail(data: WelcomeEmailData): Promise<{ ok: bo
     console.log("[email] RESEND_API_KEY not set — skipping welcome email")
     return { ok: false, error: "RESEND_API_KEY not configured" }
   }
+  const FROM = getFrom()
 
   const name = escapeHtml(data.parentName)
   const child = escapeHtml(data.childName)
@@ -90,8 +109,8 @@ export async function sendWelcomeEmail(data: WelcomeEmailData): Promise<{ ok: bo
     })
 
     if (error) {
-      console.log("[email] Resend welcome email error:", error)
-      return { ok: false, error: String(error) }
+      console.log("[email] Resend welcome email error:", JSON.stringify(error))
+      return { ok: false, error: resendErrorMessage(error) }
     }
     console.log("[email] Welcome email sent to", data.to)
     return { ok: true }
@@ -126,6 +145,8 @@ export async function sendAdminNotificationEmail(
     console.log("[email] RESEND_API_KEY not set — skipping admin notification email")
     return { ok: false, error: "RESEND_API_KEY not configured" }
   }
+  const FROM = getFrom()
+  const ADMIN_EMAILS = getAdminEmails()
   if (ADMIN_EMAILS.length === 0) {
     console.log("[email] ADMIN_NOTIFICATION_EMAIL not set — skipping admin notification email")
     return { ok: false, error: "ADMIN_NOTIFICATION_EMAIL not configured" }
@@ -173,8 +194,8 @@ export async function sendAdminNotificationEmail(
       html,
     })
     if (error) {
-      console.log("[email] Admin notification Resend error:", error)
-      return { ok: false, error: String(error) }
+      console.log("[email] Admin notification Resend error:", JSON.stringify(error))
+      return { ok: false, error: resendErrorMessage(error) }
     }
     console.log("[email] Admin notification sent to", ADMIN_EMAILS.join(", "))
     return { ok: true }
