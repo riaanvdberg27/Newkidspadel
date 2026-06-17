@@ -493,7 +493,7 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
               <div className="mt-6">
                 <p className="block text-sm font-semibold text-navy">Available Time Slots</p>
                 <p className="mb-3 text-xs text-muted-foreground">This package runs at fixed times. Pick a slot below.</p>
-                <PackageSlotPicker packageId={selectedPackage.id} ageGroup={ageGroup ?? "5-8"} selected={slot} onSelect={setSlot} />
+                <PackageSlotPicker packageId={selectedPackage.id} packageName={selectedPackage.name} ageGroup={ageGroup ?? "5-8"} selected={slot} onSelect={setSlot} />
               </div>
             ) : clubId && ageGroup ? (
               <div className="mt-6">

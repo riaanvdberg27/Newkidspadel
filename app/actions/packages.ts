@@ -1,9 +1,9 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
-import { and, asc, eq, inArray } from "drizzle-orm"
+import { and, asc, eq, inArray, sql } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { packages, packageSlots, packageClubs, clubs } from "@/lib/db/schema"
+import { packages, packageSlots, packageClubs, clubs, enrollments } from "@/lib/db/schema"
 import { requireAdmin } from "@/lib/admin-auth"
 import type { PackageSlot } from "@/lib/db/schema"
 
@@ -67,6 +67,71 @@ export async function getPublishedPackages(): Promise<PublicPackage[]> {
     .where(eq(packages.published, true))
     .orderBy(asc(packages.sortOrder), asc(packages.id))
   return attachClubIds(rows)
+}
+
+export type CustomSlotWithAvailability = CustomSlot & { booked: number; remaining: number }
+
+/**
+ * Custom slots for a package with live remaining counts.
+ * Only enrollments with status = 'active' consume a slot.
+ * When an admin sets a sign-up inactive the spot is released.
+ */
+export async function getPublicPackageSlotAvailability(
+  packageId: number,
+  packageName: string,
+  ageGroup?: string,
+): Promise<CustomSlotWithAvailability[]> {
+  // 1. Get slot definitions
+  const conditions = [eq(packageSlots.packageId, packageId)]
+  if (ageGroup) conditions.push(eq(packageSlots.ageGroup, ageGroup))
+  const slotRows = await db
+    .select()
+    .from(packageSlots)
+    .where(and(...conditions))
+    .orderBy(asc(packageSlots.weekday), asc(packageSlots.hour))
+
+  if (!slotRows.length) return []
+
+  // 2. Count active bookings per weekday+hour+ageGroup combination for this package
+  const bookedConditions = [
+    eq(enrollments.packageName, packageName),
+    eq(enrollments.status, "active"),
+  ]
+  if (ageGroup) bookedConditions.push(eq(enrollments.slotAgeGroup, ageGroup))
+
+  const bookedRows = await db
+    .select({
+      weekday: enrollments.slotWeekday,
+      hour: enrollments.slotHour,
+      ageGroup: enrollments.slotAgeGroup,
+      count: sql<number>`cast(count(*) as int)`,
+    })
+    .from(enrollments)
+    .where(and(...bookedConditions))
+    .groupBy(enrollments.slotWeekday, enrollments.slotHour, enrollments.slotAgeGroup)
+
+  const bookedMap = new Map<string, number>()
+  for (const r of bookedRows) {
+    if (r.weekday == null || r.hour == null) continue
+    const key = `${r.weekday}-${parseFloat(String(r.hour))}-${r.ageGroup ?? ""}`
+    bookedMap.set(key, r.count)
+  }
+
+  return slotRows.map((s) => {
+    const h = parseFloat(String(s.hour))
+    const key = `${s.weekday}-${h}-${s.ageGroup}`
+    const booked = bookedMap.get(key) ?? 0
+    return {
+      id: s.id,
+      packageId: s.packageId,
+      weekday: s.weekday,
+      hour: s.hour,
+      capacity: s.capacity,
+      ageGroup: s.ageGroup,
+      booked,
+      remaining: Math.max(0, s.capacity - booked),
+    }
+  })
 }
 
 /** Custom slots for a package — usable in the enrollment wizard (no auth guard). */
