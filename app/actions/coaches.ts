@@ -117,6 +117,27 @@ export async function getCoachesByClub(clubId: number): Promise<CoachRow[]> {
   return resolved.map((r) => ({ ...r, clubIds: [clubId] }))
 }
 
+/**
+ * The client receives imageUrl already resolved to "/api/blob?p=<encoded>"
+ * for display purposes. Before writing to the DB we must unwrap it back to
+ * the original stored value, otherwise we persist the proxy URL and every
+ * subsequent load double-encodes it until images break.
+ *
+ * A fresh upload from the upload route returns the raw blob URL directly,
+ * so that passes through unchanged.
+ */
+function unwrapProxyUrl(url: string | null | undefined): string | null {
+  if (!url) return null
+  if (url.startsWith("/api/blob?p=")) {
+    try {
+      return decodeURIComponent(url.slice("/api/blob?p=".length))
+    } catch {
+      return url
+    }
+  }
+  return url
+}
+
 export async function saveCoach(input: {
   id?: number
   name: string
@@ -128,19 +149,25 @@ export async function saveCoach(input: {
   clubIds: number[]
 }): Promise<{ ok: boolean; id: number }> {
   let coachId: number
+  // Unwrap any proxy URL so we always store the original blob path/URL
+  const rawImageUrl = unwrapProxyUrl(input.imageUrl)
 
   if (input.id) {
+    // Only update imageUrl if one is present — prevents accidentally clearing
+    // an existing photo when the field was not changed.
+    const setFields: Record<string, unknown> = {
+      name: input.name,
+      role: input.role,
+      bio: input.bio,
+      sortOrder: input.sortOrder,
+      published: input.published,
+      updatedAt: new Date(),
+    }
+    if (rawImageUrl !== null) setFields.imageUrl = rawImageUrl
+
     await db
       .update(coaches)
-      .set({
-        name: input.name,
-        role: input.role,
-        bio: input.bio,
-        imageUrl: input.imageUrl ?? undefined,
-        sortOrder: input.sortOrder,
-        published: input.published,
-        updatedAt: new Date(),
-      })
+      .set(setFields)
       .where(eq(coaches.id, input.id))
     coachId = input.id
   } else {
@@ -150,7 +177,7 @@ export async function saveCoach(input: {
         name: input.name,
         role: input.role,
         bio: input.bio,
-        imageUrl: input.imageUrl ?? undefined,
+        imageUrl: rawImageUrl ?? undefined,
         sortOrder: input.sortOrder,
         published: input.published,
       })
@@ -173,10 +200,11 @@ export async function saveCoach(input: {
 }
 
 export async function deleteCoach(id: number, imageUrl: string | null): Promise<{ ok: boolean }> {
-  // imageUrl may be a full https:// URL or a bare pathname
-  if (imageUrl) {
+  // imageUrl arrives from the client as a proxy URL — unwrap before calling del()
+  const rawUrl = unwrapProxyUrl(imageUrl)
+  if (rawUrl) {
     try {
-      await del(imageUrl)
+      await del(rawUrl)
     } catch {
       // Non-fatal — blob may already be gone
     }
