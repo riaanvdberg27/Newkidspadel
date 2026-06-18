@@ -92,6 +92,32 @@ function ClubMultiSelect({
   )
 }
 
+/**
+ * Convert any image URL to a proxy URL safe for browser rendering.
+ * Raw private blob URLs (https://...private.blob.vercel-storage.com/...)
+ * require server-side auth — browsers cannot load them directly.
+ * This mirrors what resolveImageUrl() does on the server.
+ */
+function toDisplayUrl(url: string | null | undefined): string | null {
+  if (!url) return null
+  // Already a proxy URL — use as-is
+  if (url.startsWith("/api/blob?p=")) return url
+  // Raw blob or bare pathname — wrap in proxy
+  return `/api/blob?p=${encodeURIComponent(url)}`
+}
+
+/**
+ * Extract the raw underlying URL from a proxy URL so it can be saved to DB.
+ * Mirrors unwrapProxyUrl() in coaches.ts.
+ */
+function fromDisplayUrl(url: string | null | undefined): string | null {
+  if (!url) return null
+  if (url.startsWith("/api/blob?p=")) {
+    try { return decodeURIComponent(url.slice("/api/blob?p=".length)) } catch { return url }
+  }
+  return url
+}
+
 function CoachCard({
   coach,
   index,
@@ -112,6 +138,11 @@ function CoachCard({
   const [saveError, setSaveError] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
+  // Separate display URL (always proxied, safe for <img>) from the raw
+  // value stored in coach.imageUrl (which may be a raw blob URL or proxy URL).
+  // We use displayUrl for rendering and pass the raw value to saveCoach.
+  const displayUrl = toDisplayUrl(coach.imageUrl)
+
   function update<K extends keyof CoachRow>(field: K, value: CoachRow[K]) {
     onUpdate({ ...coach, [field]: value })
   }
@@ -127,6 +158,7 @@ function CoachCard({
       const res = await fetch("/api/coaches/upload", { method: "POST", body: fd })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? "Upload failed")
+      // Store the raw URL — toDisplayUrl() will make it renderable for <img>
       update("imageUrl", json.url)
     } catch (err) {
       setUploadError(err instanceof Error ? err.message : "Upload failed")
@@ -140,12 +172,15 @@ function CoachCard({
     setSaveError(null)
     setSaved(false)
     startSave(async () => {
+      // Always send the raw URL to the server — unwrapProxyUrl in saveCoach
+      // handles both raw and proxy formats correctly.
+      const rawUrl = fromDisplayUrl(coach.imageUrl)
       const res = await saveCoach({
         id: coach.id || undefined,
         name: coach.name,
         role: coach.role,
         bio: coach.bio,
-        imageUrl: coach.imageUrl,
+        imageUrl: rawUrl,
         sortOrder: coach.sortOrder,
         published: coach.published,
         clubIds: coach.clubIds,
@@ -193,10 +228,10 @@ function CoachCard({
         {/* Photo */}
         <div className="sm:col-span-2 flex items-center gap-4">
           <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-full border-2 border-border bg-muted">
-            {coach.imageUrl ? (
-              // imageUrl is already resolved to /api/blob?p=... by getCoaches() server-side
+            {displayUrl ? (
+              // Always use displayUrl (proxied) — raw private blob URLs can't be loaded by browsers
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={coach.imageUrl} alt={coach.name || "Coach"} className="h-full w-full object-cover" />
+              <img src={displayUrl} alt={coach.name || "Coach"} className="h-full w-full object-cover" />
             ) : (
               <div className="flex h-full w-full items-center justify-center text-xl font-black text-muted-foreground">
                 {coach.name ? coach.name[0].toUpperCase() : "?"}

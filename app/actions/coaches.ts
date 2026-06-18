@@ -17,17 +17,6 @@ export type CoachRow = {
   clubIds: number[]
 }
 
-/**
- * Resolve a stored imageUrl to a browser-loadable URL via the /api/blob proxy.
- * Private blobs (*.private.blob.vercel-storage.com) cannot be fetched directly
- * — the proxy adds the Authorization header server-side.
- * Accepts both full https:// URLs and bare pathnames (legacy).
- */
-async function resolveImageUrl(imageUrl: string | null | undefined): Promise<string | null> {
-  if (!imageUrl) return null
-  // Always route through the proxy — it handles full URLs and bare paths.
-  return `/api/blob?p=${encodeURIComponent(imageUrl)}`
-}
 
 async function attachClubIds(rows: Omit<CoachRow, "clubIds">[]): Promise<CoachRow[]> {
   if (rows.length === 0) return []
@@ -54,15 +43,13 @@ export async function getCoaches(): Promise<CoachRow[]> {
     name: r.name,
     role: r.role,
     bio: r.bio,
+    // Return the raw stored value — callers must use blobUrl() for display.
+    // Never resolve here to avoid proxy URLs leaking into React state on the client.
     imageUrl: r.imageUrl ?? null,
     sortOrder: r.sortOrder,
     published: r.published,
   }))
-  // Resolve image URLs in parallel
-  const resolved = await Promise.all(
-    base.map(async (r) => ({ ...r, imageUrl: await resolveImageUrl(r.imageUrl) }))
-  )
-  return attachClubIds(resolved)
+  return attachClubIds(base)
 }
 
 export async function getPublishedCoaches(): Promise<CoachRow[]> {
@@ -76,15 +63,12 @@ export async function getPublishedCoaches(): Promise<CoachRow[]> {
     name: r.name,
     role: r.role,
     bio: r.bio,
+    // Return the raw stored value — callers must use blobUrl() for display.
     imageUrl: r.imageUrl ?? null,
     sortOrder: r.sortOrder,
     published: r.published,
   }))
-  // Resolve image URLs in parallel
-  const resolved = await Promise.all(
-    base.map(async (r) => ({ ...r, imageUrl: await resolveImageUrl(r.imageUrl) }))
-  )
-  return attachClubIds(resolved)
+  return attachClubIds(base)
 }
 
 /** Return published coaches assigned to a specific club — used in the enrollment wizard. */
@@ -109,12 +93,9 @@ export async function getCoachesByClub(clubId: number): Promise<CoachRow[]> {
     imageUrl: r.imageUrl ?? null,
     sortOrder: r.sortOrder,
     published: r.published,
+    clubIds: [clubId],
   }))
-  // Resolve image URLs in parallel
-  const resolved = await Promise.all(
-    base.map(async (r) => ({ ...r, imageUrl: await resolveImageUrl(r.imageUrl) }))
-  )
-  return resolved.map((r) => ({ ...r, clubIds: [clubId] }))
+  return base
 }
 
 /**
