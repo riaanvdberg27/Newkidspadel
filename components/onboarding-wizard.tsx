@@ -471,7 +471,7 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
                         <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-full bg-muted">
                           {coach.imageUrl ? (
                             // eslint-disable-next-line @next/next/no-img-element
-                            <img src={coach.imageUrl} alt={coach.name} className="h-full w-full object-cover" />
+                            <img src={`/api/blob?p=${encodeURIComponent(coach.imageUrl)}`} alt={coach.name} className="h-full w-full object-cover" />
                           ) : (
                             <div className="flex h-full w-full items-center justify-center text-sm font-black text-muted-foreground">
                               {coach.name[0]?.toUpperCase() ?? "?"}

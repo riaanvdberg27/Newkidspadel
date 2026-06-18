@@ -95,7 +95,7 @@ export default async function AboutPage() {
                     {coach.imageUrl ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
-                        src={coach.imageUrl}
+                        src={`/api/blob?p=${encodeURIComponent(coach.imageUrl)}`}
                         alt={coach.name}
                         className="h-full w-full object-cover"
                       />

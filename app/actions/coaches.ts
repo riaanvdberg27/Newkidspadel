@@ -17,17 +17,6 @@ export type CoachRow = {
   clubIds: number[]
 }
 
-/**
- * Resolve a stored imageUrl to a browser-loadable URL via the /api/blob proxy.
- * Private blobs (*.private.blob.vercel-storage.com) cannot be fetched directly
- * — the proxy adds the Authorization header server-side.
- * Accepts both full https:// URLs and bare pathnames (legacy).
- */
-async function resolveImageUrl(imageUrl: string | null | undefined): Promise<string | null> {
-  if (!imageUrl) return null
-  // Always route through the proxy — it handles full URLs and bare paths.
-  return `/api/blob?p=${encodeURIComponent(imageUrl)}`
-}
 
 async function attachClubIds(rows: Omit<CoachRow, "clubIds">[]): Promise<CoachRow[]> {
   if (rows.length === 0) return []
@@ -54,15 +43,13 @@ export async function getCoaches(): Promise<CoachRow[]> {
     name: r.name,
     role: r.role,
     bio: r.bio,
+    // Return the raw stored value — callers must use blobUrl() for display.
+    // Never resolve here to avoid proxy URLs leaking into React state on the client.
     imageUrl: r.imageUrl ?? null,
     sortOrder: r.sortOrder,
     published: r.published,
   }))
-  // Resolve image URLs in parallel
-  const resolved = await Promise.all(
-    base.map(async (r) => ({ ...r, imageUrl: await resolveImageUrl(r.imageUrl) }))
-  )
-  return attachClubIds(resolved)
+  return attachClubIds(base)
 }
 
 export async function getPublishedCoaches(): Promise<CoachRow[]> {
@@ -76,15 +63,12 @@ export async function getPublishedCoaches(): Promise<CoachRow[]> {
     name: r.name,
     role: r.role,
     bio: r.bio,
+    // Return the raw stored value — callers must use blobUrl() for display.
     imageUrl: r.imageUrl ?? null,
     sortOrder: r.sortOrder,
     published: r.published,
   }))
-  // Resolve image URLs in parallel
-  const resolved = await Promise.all(
-    base.map(async (r) => ({ ...r, imageUrl: await resolveImageUrl(r.imageUrl) }))
-  )
-  return attachClubIds(resolved)
+  return attachClubIds(base)
 }
 
 /** Return published coaches assigned to a specific club — used in the enrollment wizard. */
@@ -109,12 +93,32 @@ export async function getCoachesByClub(clubId: number): Promise<CoachRow[]> {
     imageUrl: r.imageUrl ?? null,
     sortOrder: r.sortOrder,
     published: r.published,
+    clubIds: [clubId],
   }))
-  // Resolve image URLs in parallel
-  const resolved = await Promise.all(
-    base.map(async (r) => ({ ...r, imageUrl: await resolveImageUrl(r.imageUrl) }))
-  )
-  return resolved.map((r) => ({ ...r, clubIds: [clubId] }))
+  return base
+}
+
+/**
+ * Strip ALL layers of /api/blob?p= proxy wrapping from a URL so we always
+ * store the original raw value (bare pathname or full https:// blob URL).
+ *
+ * Loops until the value no longer starts with /api/blob?p= to handle
+ * double- or triple-encoded values that can accumulate after repeated saves.
+ */
+function unwrapProxyUrl(url: string | null | undefined): string | null {
+  if (!url) return null
+  let current = url
+  const PREFIX = "/api/blob?p="
+  // Safety limit — no legitimate URL needs more than 5 layers of wrapping
+  for (let i = 0; i < 5; i++) {
+    if (!current.startsWith(PREFIX)) break
+    try {
+      current = decodeURIComponent(current.slice(PREFIX.length))
+    } catch {
+      break
+    }
+  }
+  return current
 }
 
 export async function saveCoach(input: {
@@ -128,19 +132,25 @@ export async function saveCoach(input: {
   clubIds: number[]
 }): Promise<{ ok: boolean; id: number }> {
   let coachId: number
+  // Unwrap any proxy URL so we always store the original blob path/URL
+  const rawImageUrl = unwrapProxyUrl(input.imageUrl)
 
   if (input.id) {
+    // Only update imageUrl if one is present — prevents accidentally clearing
+    // an existing photo when the field was not changed.
+    const setFields: Record<string, unknown> = {
+      name: input.name,
+      role: input.role,
+      bio: input.bio,
+      sortOrder: input.sortOrder,
+      published: input.published,
+      updatedAt: new Date(),
+    }
+    if (rawImageUrl !== null) setFields.imageUrl = rawImageUrl
+
     await db
       .update(coaches)
-      .set({
-        name: input.name,
-        role: input.role,
-        bio: input.bio,
-        imageUrl: input.imageUrl ?? undefined,
-        sortOrder: input.sortOrder,
-        published: input.published,
-        updatedAt: new Date(),
-      })
+      .set(setFields)
       .where(eq(coaches.id, input.id))
     coachId = input.id
   } else {
@@ -150,7 +160,7 @@ export async function saveCoach(input: {
         name: input.name,
         role: input.role,
         bio: input.bio,
-        imageUrl: input.imageUrl ?? undefined,
+        imageUrl: rawImageUrl ?? undefined,
         sortOrder: input.sortOrder,
         published: input.published,
       })
@@ -173,10 +183,11 @@ export async function saveCoach(input: {
 }
 
 export async function deleteCoach(id: number, imageUrl: string | null): Promise<{ ok: boolean }> {
-  // imageUrl may be a full https:// URL or a bare pathname
-  if (imageUrl) {
+  // imageUrl arrives from the client as a proxy URL — unwrap before calling del()
+  const rawUrl = unwrapProxyUrl(imageUrl)
+  if (rawUrl) {
     try {
-      await del(imageUrl)
+      await del(rawUrl)
     } catch {
       // Non-fatal — blob may already be gone
     }
