@@ -99,24 +99,26 @@ export async function getCoachesByClub(clubId: number): Promise<CoachRow[]> {
 }
 
 /**
- * The client receives imageUrl already resolved to "/api/blob?p=<encoded>"
- * for display purposes. Before writing to the DB we must unwrap it back to
- * the original stored value, otherwise we persist the proxy URL and every
- * subsequent load double-encodes it until images break.
+ * Strip ALL layers of /api/blob?p= proxy wrapping from a URL so we always
+ * store the original raw value (bare pathname or full https:// blob URL).
  *
- * A fresh upload from the upload route returns the raw blob URL directly,
- * so that passes through unchanged.
+ * Loops until the value no longer starts with /api/blob?p= to handle
+ * double- or triple-encoded values that can accumulate after repeated saves.
  */
 function unwrapProxyUrl(url: string | null | undefined): string | null {
   if (!url) return null
-  if (url.startsWith("/api/blob?p=")) {
+  let current = url
+  const PREFIX = "/api/blob?p="
+  // Safety limit — no legitimate URL needs more than 5 layers of wrapping
+  for (let i = 0; i < 5; i++) {
+    if (!current.startsWith(PREFIX)) break
     try {
-      return decodeURIComponent(url.slice("/api/blob?p=".length))
+      current = decodeURIComponent(current.slice(PREFIX.length))
     } catch {
-      return url
+      break
     }
   }
-  return url
+  return current
 }
 
 export async function saveCoach(input: {

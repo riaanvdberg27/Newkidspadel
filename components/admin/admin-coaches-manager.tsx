@@ -107,15 +107,18 @@ function toDisplayUrl(url: string | null | undefined): string | null {
 }
 
 /**
- * Extract the raw underlying URL from a proxy URL so it can be saved to DB.
- * Mirrors unwrapProxyUrl() in coaches.ts.
+ * Strip ALL layers of /api/blob?p= wrapping before saving to DB.
+ * Mirrors the loop in unwrapProxyUrl() on the server.
  */
 function fromDisplayUrl(url: string | null | undefined): string | null {
   if (!url) return null
-  if (url.startsWith("/api/blob?p=")) {
-    try { return decodeURIComponent(url.slice("/api/blob?p=".length)) } catch { return url }
+  const PREFIX = "/api/blob?p="
+  let current = url
+  for (let i = 0; i < 5; i++) {
+    if (!current.startsWith(PREFIX)) break
+    try { current = decodeURIComponent(current.slice(PREFIX.length)) } catch { break }
   }
-  return url
+  return current
 }
 
 function CoachCard({
