@@ -38,6 +38,9 @@ export type AdminSignup = {
   consentMedia: boolean
   contractUrl: string | null
   status: string
+  paymentType: string
+  paymentStatus: string
+  payfastPaymentId: string | null
   signedAt: string | null
   createdAt: string | null
 }
@@ -88,6 +91,9 @@ export async function getAllSignups(): Promise<AdminSignup[]> {
     consentMedia: r.consentMedia,
     contractUrl: r.contractUrl ?? null,
     status: r.status,
+    paymentType: r.paymentType ?? "monthly",
+    paymentStatus: r.paymentStatus ?? "pending",
+    payfastPaymentId: r.payfastPaymentId ?? null,
     signedAt: r.signedAt ? r.signedAt.toISOString() : null,
     createdAt: r.createdAt ? r.createdAt.toISOString() : null,
   }))

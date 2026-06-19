@@ -4,7 +4,8 @@ import { useState, useTransition, useMemo, useRef, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import {
   FileText, Mail, RefreshCw, Check, X, Pencil,
-  ChevronDown, ChevronUp, Trash2, Plus, Filter, Search, Link2, UserPlus,
+  ChevronDown, ChevronUp, Trash2, Plus, Filter, Search, Link2, UserPlus, Eye,
+  CreditCard, Building2, Landmark,
 } from "lucide-react"
 import {
   type AdminSignup,
@@ -59,6 +60,7 @@ export function AdminSignupsManager({
   const [busyId, setBusyId] = useState<number | null>(null)
   const [toast, setToast] = useState<{ id: number; ok: boolean; msg: string } | null>(null)
   const [editing, setEditing] = useState<AdminSignup | null>(null)
+  const [viewing, setViewing] = useState<AdminSignup | null>(null)
   const [expanded, setExpanded] = useState<number | null>(null)
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null)
   const [showAddModal, setShowAddModal] = useState(false)
@@ -191,6 +193,9 @@ export function AdminSignupsManager({
           consentMedia: false,
           contractUrl: null,
           status: input.status,
+          paymentType: "monthly",
+          paymentStatus: "pending",
+          payfastPaymentId: null,
           signedAt: null,
           createdAt: new Date().toISOString(),
         }
@@ -308,134 +313,120 @@ export function AdminSignupsManager({
         )}
       </div>
 
-      {/* Table */}
+      {/* List */}
       <div className="mt-4 overflow-x-auto rounded-card border border-border bg-card shadow-sm">
-        <table className="w-full min-w-[860px] text-left text-sm">
+        <table className="w-full min-w-[1200px] text-left text-sm">
           <thead className="border-b border-border bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
             <tr>
-              <th className="px-4 py-3">Reference</th>
-              <th className="px-4 py-3">Child / Parent</th>
-              <th className="px-4 py-3">Package &amp; Club</th>
+              <th className="px-4 py-3">Child</th>
+              <th className="px-4 py-3">Parent</th>
+              <th className="px-4 py-3">Package</th>
+              <th className="px-4 py-3">Club</th>
+              <th className="px-4 py-3">Time slot</th>
               <th className="px-4 py-3">Coach</th>
               <th className="px-4 py-3">Status</th>
+              <th className="px-4 py-3">Payment</th>
               <th className="px-4 py-3 text-right">Actions</th>
             </tr>
           </thead>
           <tbody>
             {filtered.map((s) => (
-              <>
-                <tr key={s.id} className="border-b border-border last:border-0 align-top">
-                  <td className="px-4 py-3">
-                    <p className="font-semibold text-navy">{s.referenceNumber}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {s.signedAt ? new Date(s.signedAt).toLocaleDateString("en-ZA") : "—"}
+              <tr key={s.id} className="border-b border-border last:border-0 hover:bg-muted/20 align-middle">
+                {/* Child */}
+                <td className="px-4 py-3">
+                  <p className="font-semibold text-navy">{s.childName}</p>
+                  {s.childAge != null && (
+                    <p className="text-xs text-muted-foreground">Age {s.childAge}</p>
+                  )}
+                </td>
+                {/* Parent */}
+                <td className="px-4 py-3">
+                  <p className="font-medium text-navy">{s.parentName}</p>
+                  <p className="text-xs text-muted-foreground">{s.parentEmail}</p>
+                </td>
+                {/* Package */}
+                <td className="px-4 py-3">
+                  <p className="text-sm text-navy">{s.packageName}</p>
+                </td>
+                {/* Club */}
+                <td className="px-4 py-3">
+                  <p className="text-sm text-navy">{s.club ?? "—"}</p>
+                </td>
+                {/* Time slot */}
+                <td className="px-4 py-3">
+                  <p className="whitespace-nowrap text-sm text-navy">{s.slotLabel ?? "TBC"}</p>
+                </td>
+                {/* Coach */}
+                <td className="px-4 py-3">
+                  <p className="text-sm text-navy">{s.coachName ?? "—"}</p>
+                </td>
+                {/* Enrollment status */}
+                <td className="px-4 py-3">
+                  <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize ${statusColor(s.status)}`}>
+                    {s.status}
+                  </span>
+                </td>
+                {/* Payment */}
+                <td className="px-4 py-3">
+                  <PaymentBadge type={s.paymentType} status={s.paymentStatus} />
+                </td>
+                {/* Actions */}
+                <td className="px-4 py-3">
+                  <div className="flex items-center justify-end gap-1">
+                    {/* View */}
+                    <ActionBtn
+                      icon={<Eye className="h-3.5 w-3.5" />}
+                      label="View"
+                      title="View details"
+                      onClick={() => setViewing(s)}
+                      variant="ghost"
+                    />
+                    {/* Edit */}
+                    <ActionBtn
+                      icon={<Pencil className="h-3.5 w-3.5" />}
+                      label="Edit"
+                      title="Edit sign-up"
+                      onClick={() => setEditing(s)}
+                      variant="ghost"
+                    />
+                    {/* Contract */}
+                    <ActionBtn
+                      icon={busyId === s.id && pending ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5" />}
+                      label={s.contractUrl ? "Contract" : "PDF"}
+                      title={s.contractUrl ? "View contract" : "Generate PDF"}
+                      onClick={() => handleContract(s)}
+                      disabled={pending && busyId === s.id}
+                      variant="ghost"
+                    />
+                    {/* Resend */}
+                    <ActionBtn
+                      icon={busyId === s.id && pending ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Mail className="h-3.5 w-3.5" />}
+                      label="Email"
+                      title="Resend welcome email"
+                      onClick={() => handleResend(s)}
+                      disabled={pending && busyId === s.id}
+                      variant="ghost"
+                    />
+                    {/* Remove */}
+                    <ActionBtn
+                      icon={<Trash2 className="h-3.5 w-3.5" />}
+                      label="Remove"
+                      title="Remove sign-up"
+                      onClick={() => setConfirmDeleteId(s.id)}
+                      variant="danger"
+                    />
+                  </div>
+                  {toast?.id === s.id && (
+                    <p className={`mt-1 text-right text-xs font-semibold ${toast.ok ? "text-lime-foreground" : "text-destructive"}`}>
+                      {toast.msg}
                     </p>
-                    <button
-                      onClick={() => setExpanded(expanded === s.id ? null : s.id)}
-                      className="mt-1 flex items-center gap-1 text-xs text-lime-foreground hover:underline"
-                    >
-                      {expanded === s.id ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-                      {expanded === s.id ? "Less" : "Details"}
-                    </button>
-                  </td>
-                  <td className="px-4 py-3">
-                    <p className="font-semibold text-navy">
-                      {s.childName}
-                      {s.childAge != null ? ` (age ${s.childAge})` : ""}
-                    </p>
-                    <p className="text-xs text-muted-foreground">{s.parentName}</p>
-                    <p className="text-xs text-muted-foreground">{s.parentEmail}</p>
-                    <p className="text-xs text-muted-foreground">{s.parentMobile}</p>
-                  </td>
-                  <td className="px-4 py-3">
-                    <p className="font-medium text-navy">{s.packageName}</p>
-                    <p className="text-xs text-muted-foreground">{s.club ?? "—"}</p>
-                    <p className="text-xs text-muted-foreground">{s.slotLabel ?? "Slot TBC"}</p>
-                  </td>
-                  <td className="px-4 py-3">
-                    <p className="text-xs text-navy">{s.coachName ?? "—"}</p>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={`rounded-full px-2 py-0.5 text-xs font-semibold capitalize ${statusColor(s.status)}`}>
-                      {s.status}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex flex-col items-end gap-2">
-                      <button
-                        onClick={() => setEditing(s)}
-                        className="inline-flex items-center gap-1.5 rounded-md bg-navy px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-navy/90"
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => handleContract(s)}
-                        disabled={pending && busyId === s.id}
-                        className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-semibold text-navy transition-colors hover:bg-muted disabled:opacity-50"
-                      >
-                        <FileText className="h-3.5 w-3.5 text-lime" />
-                        {s.contractUrl ? "View contract" : busyId === s.id ? "Generating…" : "Generate PDF"}
-                      </button>
-                      <button
-                        onClick={() => handleResend(s)}
-                        disabled={pending && busyId === s.id}
-                        className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-semibold text-navy transition-colors hover:bg-muted disabled:opacity-50"
-                      >
-                        {busyId === s.id ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Mail className="h-3.5 w-3.5 text-lime" />}
-                        Resend welcome
-                      </button>
-                      <button
-                        onClick={() => setConfirmDeleteId(s.id)}
-                        className="inline-flex items-center gap-1.5 rounded-md border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-600 transition-colors hover:bg-red-50"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                        Remove
-                      </button>
-                      {toast?.id === s.id && (
-                        <span className={`text-xs font-semibold ${toast.ok ? "text-lime-foreground" : "text-destructive"}`}>
-                          {toast.msg}
-                        </span>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-
-                {/* Expandable detail row */}
-                {expanded === s.id && (
-                  <tr key={`${s.id}-detail`} className="border-b border-border bg-muted/20">
-                    <td colSpan={6} className="px-6 py-4">
-                      <div className="grid gap-4 text-sm sm:grid-cols-3">
-                        <dl>
-                          <dt className="font-semibold text-navy">Emergency contact</dt>
-                          <dd className="text-muted-foreground">{s.emergencyContactName || "—"}</dd>
-                          <dd className="text-muted-foreground">{s.emergencyContactPhone || "—"}</dd>
-                        </dl>
-                        <dl>
-                          <dt className="font-semibold text-navy">Debit order</dt>
-                          <dd className="text-muted-foreground">{s.debitAccountHolder || "—"}</dd>
-                          <dd className="text-muted-foreground">{s.debitBankName || "—"} · {s.debitAccountType || "—"}</dd>
-                          <dd className="text-muted-foreground">
-                            {s.debitAccountNumber ? `****${s.debitAccountNumber.slice(-4)}` : "—"}
-                          </dd>
-                          <dd className="text-muted-foreground">Debit day: {s.debitDay ?? "—"}</dd>
-                        </dl>
-                        <dl>
-                          <dt className="font-semibold text-navy">Consents</dt>
-                          <dd><Badge ok={s.agreedTerms} label="Terms agreed" /></dd>
-                          <dd><Badge ok={s.consentMedia} label="Media consent" /></dd>
-                          <dt className="mt-2 font-semibold text-navy">Date of birth</dt>
-                          <dd className="text-muted-foreground">{s.childDob || "—"}</dd>
-                        </dl>
-                      </div>
-                    </td>
-                  </tr>
-                )}
-              </>
+                  )}
+                </td>
+              </tr>
             ))}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">
+                <td colSpan={9} className="px-4 py-10 text-center text-muted-foreground">
                   {hasFilters ? "No sign-ups match the current filters." : "No sign-ups yet."}
                 </td>
               </tr>
@@ -443,6 +434,11 @@ export function AdminSignupsManager({
           </tbody>
         </table>
       </div>
+
+      {/* View detail modal */}
+      {viewing && (
+        <ViewModal signup={viewing} onClose={() => setViewing(null)} onEdit={() => { setEditing(viewing); setViewing(null) }} />
+      )}
 
       {/* Edit modal */}
       {editing && (
@@ -479,6 +475,202 @@ export function AdminSignupsManager({
           onCancel={() => setConfirmDeleteId(null)}
         />
       )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// PaymentBadge
+// ---------------------------------------------------------------------------
+
+function PaymentBadge({ type, status }: { type: string; status: string }) {
+  // Debit order — just show type, payment happens externally
+  if (type === "debit_order" || type === "debit") {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-semibold text-blue-700">
+        <Building2 className="h-3 w-3" />
+        Debit order
+      </span>
+    )
+  }
+  // EFT — just show type
+  if (type === "eft" || type === "EFT") {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-purple-50 px-2.5 py-0.5 text-xs font-semibold text-purple-700">
+        <Landmark className="h-3 w-3" />
+        EFT
+      </span>
+    )
+  }
+  // PayFast — show status
+  const paid = status === "paid" || status === "complete" || status === "completed"
+  return (
+    <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+      paid ? "bg-lime/20 text-navy" : "bg-amber-50 text-amber-700"
+    }`}>
+      <CreditCard className="h-3 w-3" />
+      {paid ? "PayFast · Paid" : "PayFast · Unpaid"}
+    </span>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// ActionBtn
+// ---------------------------------------------------------------------------
+
+function ActionBtn({
+  icon,
+  label,
+  title,
+  onClick,
+  disabled,
+  variant = "ghost",
+}: {
+  icon: React.ReactNode
+  label: string
+  title: string
+  onClick: () => void
+  disabled?: boolean
+  variant?: "ghost" | "danger"
+}) {
+  return (
+    <button
+      type="button"
+      title={title}
+      onClick={onClick}
+      disabled={disabled}
+      className={`inline-flex items-center gap-1 rounded-md border px-2 py-1.5 text-xs font-semibold transition-colors disabled:opacity-50 ${
+        variant === "danger"
+          ? "border-red-200 text-red-600 hover:bg-red-50"
+          : "border-border text-navy hover:bg-muted"
+      }`}
+    >
+      {icon}
+      <span className="hidden lg:inline">{label}</span>
+    </button>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// View detail modal
+// ---------------------------------------------------------------------------
+
+function ViewModal({
+  signup: s,
+  onClose,
+  onEdit,
+}: {
+  signup: AdminSignup
+  onClose: () => void
+  onEdit: () => void
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 pt-10">
+      <div className="w-full max-w-2xl rounded-xl bg-card shadow-2xl">
+        {/* Header */}
+        <div className="flex items-start justify-between gap-4 border-b border-border px-6 py-4">
+          <div>
+            <h2 className="text-base font-bold text-navy">{s.childName}</h2>
+            <p className="text-xs text-muted-foreground">{s.referenceNumber}</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onEdit}
+              className="inline-flex items-center gap-1.5 rounded-md bg-navy px-3 py-1.5 text-xs font-semibold text-white hover:bg-navy/90"
+            >
+              <Pencil className="h-3.5 w-3.5" />
+              Edit
+            </button>
+            <button onClick={onClose} className="rounded-md p-1.5 hover:bg-muted">
+              <X className="h-4 w-4 text-muted-foreground" />
+            </button>
+          </div>
+        </div>
+
+        <div className="space-y-5 px-6 py-5 text-sm">
+          {/* Status row */}
+          <div className="flex flex-wrap items-center gap-3">
+            <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize ${
+              s.status === "active" ? "bg-lime/20 text-navy"
+              : s.status === "pending" ? "bg-amber-100 text-amber-800"
+              : s.status === "cancelled" ? "bg-red-100 text-red-700"
+              : "bg-muted text-muted-foreground"
+            }`}>
+              {s.status}
+            </span>
+            <PaymentBadge type={s.paymentType} status={s.paymentStatus} />
+            {s.payfastPaymentId && (
+              <span className="text-xs text-muted-foreground">ID: {s.payfastPaymentId}</span>
+            )}
+          </div>
+
+          <div className="grid gap-5 sm:grid-cols-2">
+            {/* Child */}
+            <DetailSection title="Child">
+              <DetailRow label="Name" value={s.childName} />
+              <DetailRow label="Age" value={s.childAge != null ? String(s.childAge) : "—"} />
+              <DetailRow label="DOB" value={s.childDob || "—"} />
+            </DetailSection>
+            {/* Parent */}
+            <DetailSection title="Parent / Guardian">
+              <DetailRow label="Name" value={s.parentName} />
+              <DetailRow label="Email" value={s.parentEmail} />
+              <DetailRow label="Mobile" value={s.parentMobile} />
+            </DetailSection>
+            {/* Programme */}
+            <DetailSection title="Programme">
+              <DetailRow label="Package" value={s.packageName} />
+              <DetailRow label="Club" value={s.club || "—"} />
+              <DetailRow label="Time slot" value={s.slotLabel || "TBC"} />
+              <DetailRow label="Coach" value={s.coachName || "—"} />
+            </DetailSection>
+            {/* Payment */}
+            <DetailSection title="Payment">
+              <DetailRow label="Type" value={s.paymentType || "—"} />
+              <DetailRow label="Status" value={s.paymentStatus || "—"} />
+              {(s.paymentType === "debit_order" || s.paymentType === "debit") && (
+                <>
+                  <DetailRow label="Account holder" value={s.debitAccountHolder || "—"} />
+                  <DetailRow label="Bank" value={s.debitBankName || "—"} />
+                  <DetailRow label="Account no." value={s.debitAccountNumber ? `****${s.debitAccountNumber.slice(-4)}` : "—"} />
+                  <DetailRow label="Account type" value={s.debitAccountType || "—"} />
+                  <DetailRow label="Debit day" value={s.debitDay != null ? String(s.debitDay) : "—"} />
+                </>
+              )}
+            </DetailSection>
+            {/* Emergency */}
+            <DetailSection title="Emergency contact">
+              <DetailRow label="Name" value={s.emergencyContactName || "—"} />
+              <DetailRow label="Phone" value={s.emergencyContactPhone || "—"} />
+            </DetailSection>
+            {/* Consents & dates */}
+            <DetailSection title="Consents &amp; dates">
+              <DetailRow label="Terms agreed" value={s.agreedTerms ? "Yes" : "No"} />
+              <DetailRow label="Media consent" value={s.consentMedia ? "Yes" : "No"} />
+              <DetailRow label="Signed at" value={s.signedAt ? new Date(s.signedAt).toLocaleDateString("en-ZA") : "—"} />
+              <DetailRow label="Created" value={s.createdAt ? new Date(s.createdAt).toLocaleDateString("en-ZA") : "—"} />
+            </DetailSection>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function DetailSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-muted-foreground">{title}</h3>
+      <dl className="space-y-1">{children}</dl>
+    </div>
+  )
+}
+
+function DetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex gap-2 text-sm">
+      <dt className="w-32 shrink-0 text-muted-foreground">{label}</dt>
+      <dd className="font-medium text-navy">{value}</dd>
     </div>
   )
 }
