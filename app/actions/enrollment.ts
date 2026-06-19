@@ -275,7 +275,17 @@ export async function buildPayfastPayment(input: {
   packageName: string
   packagePrice: number
 }) {
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL ?? "https://localhost:3000"
+  // NEXT_PUBLIC_BASE_URL must be the public HTTPS URL of the deployment.
+  // VERCEL_URL is auto-set by Vercel (no https:// prefix), so we add it.
+  // PayFast CANNOT reach localhost — a real public URL is required for ITN.
+  const baseUrl =
+    process.env.NEXT_PUBLIC_BASE_URL ??
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null) ??
+    (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : null) ??
+    "https://localhost:3000"
+
+  const notifyUrl = `${baseUrl}/api/payfast/notify`
+  console.log("[v0] PayFast notifyUrl:", notifyUrl)
 
   const formData = buildPayfastFormData({
     merchantId: process.env.PAYFAST_MERCHANT_ID!,
@@ -283,7 +293,7 @@ export async function buildPayfastPayment(input: {
     passphrase: process.env.PAYFAST_PASSPHRASE ?? "",
     returnUrl: `${baseUrl}/enrollment/success?ref=${encodeURIComponent(input.referenceNumber)}&name=${encodeURIComponent(input.parentName)}`,
     cancelUrl: `${baseUrl}/enrollment?cancelled=1`,
-    notifyUrl: `${baseUrl}/api/payfast/notify`,
+    notifyUrl,
     nameFirst: input.parentName.split(" ")[0] ?? input.parentName,
     nameLast: input.parentName.split(" ").slice(1).join(" ") || undefined,
     emailAddress: input.parentEmail,
