@@ -188,6 +188,8 @@ export const packageSlots = pgTable(
   {
     id: serial("id").primaryKey(),
     packageId: integer("packageId").notNull(),
+    // 0 = applies to all clubs (legacy / no restriction); any other value = specific club
+    clubId: integer("clubId").notNull().default(0),
     weekday: integer("weekday").notNull(),
     // Start hour as decimal: 8 = 08:00, 8.5 = 08:30
     hour: numeric("hour", { precision: 4, scale: 1 }).notNull(),
@@ -197,7 +199,7 @@ export const packageSlots = pgTable(
     createdAt: timestamp("createdAt").notNull().defaultNow(),
   },
   (t) => ({
-    uniqueSlot: unique("package_slots_unique").on(t.packageId, t.weekday, t.hour, t.ageGroup),
+    uniqueSlot: unique("package_slots_unique").on(t.packageId, t.clubId, t.weekday, t.hour, t.ageGroup),
   }),
 )
 

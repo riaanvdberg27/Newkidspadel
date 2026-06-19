@@ -24,7 +24,7 @@ export type PublicPackage = {
   clubIds: number[]
 }
 
-export type CustomSlot = Pick<PackageSlot, "id" | "packageId" | "weekday" | "hour" | "capacity" | "ageGroup">
+export type CustomSlot = Pick<PackageSlot, "id" | "packageId" | "clubId" | "weekday" | "hour" | "capacity" | "ageGroup">
 
 function toPublic(row: typeof packages.$inferSelect, clubIds: number[] = []): PublicPackage {
   return {
@@ -98,18 +98,23 @@ export async function getPublishedPackages(): Promise<PublicPackage[]> {
 export type CustomSlotWithAvailability = CustomSlot & { booked: number; remaining: number }
 
 /**
- * Custom slots for a package with live remaining counts.
- * Only enrollments with status = 'active' consume a slot.
- * When an admin sets a sign-up inactive the spot is released.
+ * Custom slots for a package+club combination with live remaining counts.
+ * clubId=0 means "all clubs" (legacy rows — shown when no per-club slots exist).
+ * Only enrollments with status='active' at the same club consume a slot.
  */
 export async function getPublicPackageSlotAvailability(
   packageId: number,
   packageName: string,
   ageGroup?: string,
+  clubId?: number,
 ): Promise<CustomSlotWithAvailability[]> {
-  // 1. Get slot definitions
+  // 1. Get slot definitions scoped to this club (or fall back to clubId=0 rows)
   const conditions = [eq(packageSlots.packageId, packageId)]
   if (ageGroup) conditions.push(eq(packageSlots.ageGroup, ageGroup))
+  // If a specific club is requested, fetch rows for that club; otherwise fetch all
+  if (clubId != null && clubId !== 0) {
+    conditions.push(eq(packageSlots.clubId, clubId))
+  }
   const slotRows = await db
     .select()
     .from(packageSlots)
@@ -118,24 +123,29 @@ export async function getPublicPackageSlotAvailability(
 
   if (!slotRows.length) return []
 
-  // 2. Count active bookings per weekday+hour+ageGroup combination for this package
+  // 2. Count active bookings per weekday+hour+ageGroup+clubId for this package
   const bookedConditions = [
     eq(enrollments.packageName, packageName),
     eq(enrollments.status, "active"),
   ]
   if (ageGroup) bookedConditions.push(eq(enrollments.slotAgeGroup, ageGroup))
+  if (clubId != null && clubId !== 0) {
+    bookedConditions.push(eq(enrollments.clubId, clubId))
+  }
 
   const bookedRows = await db
     .select({
       weekday: enrollments.slotWeekday,
       hour: enrollments.slotHour,
       ageGroup: enrollments.slotAgeGroup,
+      clubId: enrollments.clubId,
       count: sql<number>`cast(count(*) as int)`,
     })
     .from(enrollments)
     .where(and(...bookedConditions))
-    .groupBy(enrollments.slotWeekday, enrollments.slotHour, enrollments.slotAgeGroup)
+    .groupBy(enrollments.slotWeekday, enrollments.slotHour, enrollments.slotAgeGroup, enrollments.clubId)
 
+  // Key: weekday-hour-ageGroup (clubId already filtered above)
   const bookedMap = new Map<string, number>()
   for (const r of bookedRows) {
     if (r.weekday == null || r.hour == null) continue
@@ -150,6 +160,7 @@ export async function getPublicPackageSlotAvailability(
     return {
       id: s.id,
       packageId: s.packageId,
+      clubId: s.clubId,
       weekday: s.weekday,
       hour: s.hour,
       capacity: s.capacity,
@@ -161,15 +172,16 @@ export async function getPublicPackageSlotAvailability(
 }
 
 /** Custom slots for a package — usable in the enrollment wizard (no auth guard). */
-export async function getPublicPackageSlots(packageId: number, ageGroup?: string): Promise<CustomSlot[]> {
+export async function getPublicPackageSlots(packageId: number, ageGroup?: string, clubId?: number): Promise<CustomSlot[]> {
   const conditions = [eq(packageSlots.packageId, packageId)]
   if (ageGroup) conditions.push(eq(packageSlots.ageGroup, ageGroup))
+  if (clubId != null && clubId !== 0) conditions.push(eq(packageSlots.clubId, clubId))
   const rows = await db
     .select()
     .from(packageSlots)
     .where(and(...conditions))
     .orderBy(asc(packageSlots.weekday), asc(packageSlots.hour))
-  return rows.map((r) => ({ id: r.id, packageId: r.packageId, weekday: r.weekday, hour: r.hour, capacity: r.capacity, ageGroup: r.ageGroup }))
+  return rows.map((r) => ({ id: r.id, packageId: r.packageId, clubId: r.clubId, weekday: r.weekday, hour: r.hour, capacity: r.capacity, ageGroup: r.ageGroup }))
 }
 
 /** All packages (incl. unpublished) for the admin dashboard. */
@@ -186,8 +198,8 @@ export async function getPackageSlots(packageId: number): Promise<CustomSlot[]> 
     .select()
     .from(packageSlots)
     .where(eq(packageSlots.packageId, packageId))
-    .orderBy(asc(packageSlots.ageGroup), asc(packageSlots.weekday), asc(packageSlots.hour))
-  return rows.map((r) => ({ id: r.id, packageId: r.packageId, weekday: r.weekday, hour: r.hour, capacity: r.capacity, ageGroup: r.ageGroup }))
+    .orderBy(asc(packageSlots.clubId), asc(packageSlots.ageGroup), asc(packageSlots.weekday), asc(packageSlots.hour))
+  return rows.map((r) => ({ id: r.id, packageId: r.packageId, clubId: r.clubId, weekday: r.weekday, hour: r.hour, capacity: r.capacity, ageGroup: r.ageGroup }))
 }
 
 export type PackageInput = {
@@ -202,7 +214,8 @@ export type PackageInput = {
   published: boolean
   slotType: string
   sortOrder: number
-  customSlots?: { weekday: number; hour: number; capacity: number; ageGroup: string }[]
+  /** clubId=0 means the slot applies to all clubs (legacy). Any other value = specific club. */
+  customSlots?: { clubId: number; weekday: number; hour: number; capacity: number; ageGroup: string }[]
   /** Club IDs this package is restricted to. Empty array = available everywhere. */
   clubIds?: number[]
 }
@@ -242,7 +255,7 @@ export async function createPackage(input: PackageInput) {
   const [row] = await db.insert(packages).values(values).returning({ id: packages.id })
   if (values.slotType === "custom" && input.customSlots?.length) {
     await db.insert(packageSlots).values(
-      input.customSlots.map((s) => ({ packageId: row.id, weekday: s.weekday, hour: String(s.hour), capacity: s.capacity, ageGroup: s.ageGroup })),
+      input.customSlots.map((s) => ({ packageId: row.id, clubId: s.clubId ?? 0, weekday: s.weekday, hour: String(s.hour), capacity: s.capacity, ageGroup: s.ageGroup })),
     )
   }
   await syncPackageClubs(row.id, input.clubIds ?? [])
@@ -258,7 +271,7 @@ export async function updatePackage(id: number, input: PackageInput) {
   await db.delete(packageSlots).where(eq(packageSlots.packageId, id))
   if (values.slotType === "custom" && input.customSlots?.length) {
     await db.insert(packageSlots).values(
-      input.customSlots.map((s) => ({ packageId: id, weekday: s.weekday, hour: String(s.hour), capacity: s.capacity, ageGroup: s.ageGroup })),
+      input.customSlots.map((s) => ({ packageId: id, clubId: s.clubId ?? 0, weekday: s.weekday, hour: String(s.hour), capacity: s.capacity, ageGroup: s.ageGroup })),
     )
   }
   await syncPackageClubs(id, input.clubIds ?? [])
