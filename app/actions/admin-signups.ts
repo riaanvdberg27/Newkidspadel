@@ -60,6 +60,7 @@ export type UpdateSignupInput = {
   emergencyContactName: string
   emergencyContactPhone: string
   status: string
+  paymentStatus?: string
 }
 
 export async function getAllSignups(): Promise<AdminSignup[]> {
@@ -123,6 +124,7 @@ export async function updateSignup(
         emergencyContactName: input.emergencyContactName.trim() || undefined,
         emergencyContactPhone: input.emergencyContactPhone.trim() || undefined,
         status: input.status,
+        ...(input.paymentStatus !== undefined && { paymentStatus: input.paymentStatus }),
         updatedAt: new Date(),
       })
       .where(eq(enrollments.id, id))

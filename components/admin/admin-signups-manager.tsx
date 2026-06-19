@@ -379,10 +379,10 @@ export function AdminSignupsManager({
                     <span className="font-semibold text-navy">{s.childName}</span>
                   </td>
                   {/* Age — own compact column */}
-                  <td className="px-2 py-2">
+                  <td className="px-2 py-2 text-center">
                     {s.childAge != null ? (
                       <span className="inline-block rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
-                        {s.childAge}y
+                        {s.childAge}
                       </span>
                     ) : (
                       <span className="text-muted-foreground">—</span>
@@ -444,7 +444,11 @@ export function AdminSignupsManager({
                   </td>
                   {/* Payment */}
                   <td className="px-2 py-2">
-                    <PaymentBadge type={s.paymentType} status={s.paymentStatus} payfastPaymentId={s.payfastPaymentId} />
+                    <PaymentBadge
+                      period={allPackages.find((p) => p.name === s.packageName)?.period ?? "monthly"}
+                      status={s.paymentStatus}
+                      payfastPaymentId={s.payfastPaymentId}
+                    />
                   </td>
                   {/* Actions — icon-only with title tooltips */}
                   <td className="px-2 py-2">
@@ -537,48 +541,34 @@ export function AdminSignupsManager({
 // PaymentBadge
 // ---------------------------------------------------------------------------
 
-function PaymentBadge({ type, status, payfastPaymentId }: { type: string; status: string; payfastPaymentId?: string | null }) {
-  // Debit order
-  if (type === "debit_order" || type === "debit") {
+function PaymentBadge({
+  period,
+  status,
+  payfastPaymentId,
+}: {
+  period: string           // "monthly" | "once-off"
+  status: string           // paymentStatus from DB
+  payfastPaymentId?: string | null
+}) {
+  // Monthly packages always show Netcash — payment tracked externally
+  if (period !== "once-off") {
     return (
       <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700">
         <Building2 className="h-2.5 w-2.5 shrink-0" />
-        Debit
-      </span>
-    )
-  }
-  // EFT
-  if (type === "eft" || type === "EFT") {
-    return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-purple-50 px-1.5 py-0.5 text-[10px] font-semibold text-purple-700">
-        <Landmark className="h-2.5 w-2.5 shrink-0" />
-        EFT
-      </span>
-    )
-  }
-  // PayFast: treat as PayFast payment if payfastPaymentId is set OR status is a terminal PayFast state
-  const isPayfast = !!payfastPaymentId || type === "payfast" || type === "once_off"
-  const paid = status === "paid" || status === "complete" || status === "completed"
-  const failed = status === "failed" || status === "cancelled"
-
-  if (isPayfast) {
-    return (
-      <span className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
-        paid ? "bg-lime/20 text-navy" : failed ? "bg-red-50 text-red-600" : "bg-amber-50 text-amber-700"
-      }`}>
-        <CreditCard className="h-2.5 w-2.5 shrink-0" />
-        {paid ? "PF Paid" : failed ? "PF Failed" : "PF Pending"}
+        Netcash
       </span>
     )
   }
 
-  // Monthly / unknown — show generic payment status
+  // Once-off: PayFast — green paid, red unpaid
+  const paid =
+    status === "paid" || status === "complete" || status === "completed" || !!payfastPaymentId
   return (
     <span className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
-      paid ? "bg-lime/20 text-navy" : "bg-muted text-muted-foreground"
+      paid ? "bg-green-100 text-green-700" : "bg-red-50 text-red-600"
     }`}>
       <CreditCard className="h-2.5 w-2.5 shrink-0" />
-      {paid ? "Paid" : "—"}
+      {paid ? "Paid" : "Unpaid"}
     </span>
   )
 }
@@ -660,10 +650,12 @@ function IconBtn({
 
 function ViewModal({
   signup: s,
+  packagePeriod,
   onClose,
   onEdit,
 }: {
   signup: AdminSignup
+  packagePeriod: string
   onClose: () => void
   onEdit: () => void
 }) {
@@ -701,7 +693,7 @@ function ViewModal({
             }`}>
               {s.status}
             </span>
-            <PaymentBadge type={s.paymentType} status={s.paymentStatus} />
+            <PaymentBadge period={packagePeriod} status={s.paymentStatus} payfastPaymentId={s.payfastPaymentId} />
             {s.payfastPaymentId && (
               <span className="text-xs text-muted-foreground">ID: {s.payfastPaymentId}</span>
             )}
@@ -902,6 +894,11 @@ function EditModal({
   const [emergencyName, setEmergencyName] = useState(signup.emergencyContactName ?? "")
   const [emergencyPhone, setEmergencyPhone] = useState(signup.emergencyContactPhone ?? "")
   const [status, setStatus] = useState(signup.status)
+  const [paymentStatus, setPaymentStatus] = useState(signup.paymentStatus)
+
+  // Resolve whether the current package is once-off
+  const selectedPkg = allPackages.find((p) => p.name === packageName)
+  const isOnceOff = selectedPkg?.period === "once-off"
 
   function submit(e: React.FormEvent) {
     e.preventDefault()
@@ -914,6 +911,7 @@ function EditModal({
       emergencyContactName: emergencyName,
       emergencyContactPhone: emergencyPhone,
       status,
+      ...(isOnceOff && { paymentStatus }),
     })
   }
 
@@ -950,6 +948,37 @@ function EditModal({
               {STATUS_OPTIONS.map((s) => <option key={s} value={s} className="capitalize">{s}</option>)}
             </select>
           </Field>
+
+          {/* Payment status — only for once-off (PayFast) packages */}
+          {isOnceOff && (
+            <Field label="Payment status">
+              <div className="mt-1 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPaymentStatus("complete")}
+                  className={`flex-1 rounded-md border-2 px-3 py-2 text-sm font-semibold transition-colors ${
+                    paymentStatus === "complete" || paymentStatus === "paid"
+                      ? "border-green-500 bg-green-50 text-green-700"
+                      : "border-border bg-background text-muted-foreground hover:border-green-300"
+                  }`}
+                >
+                  Paid
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPaymentStatus("pending")}
+                  className={`flex-1 rounded-md border-2 px-3 py-2 text-sm font-semibold transition-colors ${
+                    paymentStatus !== "complete" && paymentStatus !== "paid"
+                      ? "border-red-400 bg-red-50 text-red-600"
+                      : "border-border bg-background text-muted-foreground hover:border-red-300"
+                  }`}
+                >
+                  Unpaid
+                </button>
+              </div>
+            </Field>
+          )}
+
           <ModalFooter pending={pending} onClose={onClose} submitLabel="Save changes" />
         </form>
       </div>
