@@ -22,6 +22,17 @@ import type { CoachRow } from "@/app/actions/coaches"
 import type { PublicPackage } from "@/app/actions/packages"
 import type { Club } from "@/lib/db/schema"
 import { formatSlot } from "@/lib/slots"
+import { PackageSlotPicker } from "@/components/package-slot-picker"
+import type { SelectedSlot } from "@/components/slot-picker"
+
+/** Derive an age-group bucket from a numeric age, matching enrollment wizard logic. */
+function ageGroupFromAge(age: number | string | null | undefined): string {
+  const n = Number(age)
+  if (!n) return "5-8"
+  if (n <= 8) return "5-8"
+  if (n <= 13) return "9-13"
+  return "14-17"
+}
 
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
 const HOURS = Array.from({ length: 11 }, (_, i) => i + 8)
@@ -632,6 +643,7 @@ function EditModal({
             coachName={coachName} setCoachName={setCoachName}
             slotWeekday={slotWeekday} setSlotWeekday={setSlotWeekday}
             slotHour={slotHour} setSlotHour={setSlotHour}
+            childAge={childAge}
             allPackages={allPackages} allClubs={allClubs} allCoaches={allCoaches}
           />
           <EmergencyFields
@@ -868,6 +880,7 @@ function AddModal({
             coachName={coachName} setCoachName={setCoachName}
             slotWeekday={slotWeekday} setSlotWeekday={setSlotWeekday}
             slotHour={slotHour} setSlotHour={setSlotHour}
+            childAge={childAge}
             allPackages={allPackages} allClubs={allClubs} allCoaches={allCoaches}
           />
           <EmergencyFields
@@ -992,6 +1005,7 @@ function ProgrammeFields({
   coachName, setCoachName,
   slotWeekday, setSlotWeekday,
   slotHour, setSlotHour,
+  childAge,
   allPackages, allClubs, allCoaches,
 }: {
   packageName: string; setPackageName: (v: string) => void
@@ -999,10 +1013,33 @@ function ProgrammeFields({
   coachName: string; setCoachName: (v: string) => void
   slotWeekday: string; setSlotWeekday: (v: string) => void
   slotHour: string; setSlotHour: (v: string) => void
+  childAge?: string | number | null
   allPackages: PublicPackage[]
   allClubs: Club[]
   allCoaches: CoachRow[]
 }) {
+  // Resolve whether the selected package uses custom slots
+  const selectedPkg = allPackages.find((p) => p.name === packageName) ?? null
+  const isCustom = selectedPkg?.slotType === "custom"
+
+  // Resolve the clubId from the selected club name
+  const selectedClub = allClubs.find((c) => c.name === club) ?? null
+  const clubId = selectedClub?.id ?? undefined
+
+  // Derive age group from child's age for the slot picker
+  const ageGroup = ageGroupFromAge(childAge)
+
+  // Map current string state back to a SelectedSlot for the picker
+  const selectedSlot: SelectedSlot | null =
+    slotWeekday !== "" && slotHour !== ""
+      ? { weekday: Number(slotWeekday), hour: Number(slotHour) }
+      : null
+
+  function handleSlotSelect(slot: SelectedSlot) {
+    setSlotWeekday(String(slot.weekday))
+    setSlotHour(String(slot.hour))
+  }
+
   return (
     <fieldset className="space-y-3">
       <legend className="text-sm font-bold text-navy">Programme</legend>
@@ -1010,7 +1047,6 @@ function ProgrammeFields({
         <Field label="Package">
           <select value={packageName} onChange={(e) => setPackageName(e.target.value)} className={selectCls}>
             {allPackages.map((p) => <option key={p.id} value={p.name}>{p.name}</option>)}
-            {/* Allow free-text fallback if packageName isn't in the list */}
             {packageName && !allPackages.find((p) => p.name === packageName) && (
               <option value={packageName}>{packageName}</option>
             )}
@@ -1031,20 +1067,49 @@ function ProgrammeFields({
           </select>
         </Field>
       </div>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <Field label="Session day">
-          <select value={slotWeekday} onChange={(e) => setSlotWeekday(e.target.value)} className={selectCls}>
-            <option value="">— not set —</option>
-            {WEEKDAYS.map((d, i) => <option key={i} value={i}>{d}</option>)}
-          </select>
-        </Field>
-        <Field label="Session time">
-          <select value={slotHour} onChange={(e) => setSlotHour(e.target.value)} className={selectCls}>
-            <option value="">— not set —</option>
-            {HOURS.map((h) => <option key={h} value={h}>{String(h).padStart(2, "0")}:00</option>)}
-          </select>
-        </Field>
-      </div>
+
+      {isCustom && selectedPkg ? (
+        /* Custom package — show the same slot picker customers see, filtered to this club */
+        <div>
+          <p className="mb-2 text-xs font-semibold text-navy">Session slot</p>
+          <p className="mb-3 text-xs text-muted-foreground">
+            Only the slots configured for this package{clubId ? " at this venue" : ""} are shown. Select one to assign it.
+          </p>
+          <PackageSlotPicker
+            packageId={selectedPkg.id}
+            packageName={selectedPkg.name}
+            ageGroup={ageGroup}
+            clubId={clubId}
+            selected={selectedSlot}
+            onSelect={handleSlotSelect}
+          />
+          {selectedSlot && (
+            <p className="mt-2 text-xs text-muted-foreground">
+              Selected: <span className="font-semibold text-navy">{formatSlot(selectedSlot.weekday, selectedSlot.hour)}</span>
+              {" · "}
+              <button type="button" onClick={() => { setSlotWeekday(""); setSlotHour("") }} className="text-destructive hover:underline">
+                Clear
+              </button>
+            </p>
+          )}
+        </div>
+      ) : (
+        /* Standard package — free day + time selects */
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Session day">
+            <select value={slotWeekday} onChange={(e) => setSlotWeekday(e.target.value)} className={selectCls}>
+              <option value="">— not set —</option>
+              {WEEKDAYS.map((d, i) => <option key={i} value={i}>{d}</option>)}
+            </select>
+          </Field>
+          <Field label="Session time">
+            <select value={slotHour} onChange={(e) => setSlotHour(e.target.value)} className={selectCls}>
+              <option value="">— not set —</option>
+              {HOURS.map((h) => <option key={h} value={h}>{String(h).padStart(2, "0")}:00</option>)}
+            </select>
+          </Field>
+        </div>
+      )}
     </fieldset>
   )
 }
