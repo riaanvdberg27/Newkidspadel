@@ -80,6 +80,7 @@ export async function POST(req: NextRequest) {
   await db
     .update(enrollments)
     .set({
+      paymentType: "payfast",
       paymentStatus: newPaymentStatus,
       payfastPaymentId: pf_payment_id ?? null,
       status: newStatus,

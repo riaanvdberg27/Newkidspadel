@@ -26,6 +26,30 @@ import { formatSlot } from "@/lib/slots"
 import { PackageSlotPicker } from "@/components/package-slot-picker"
 import type { SelectedSlot } from "@/components/slot-picker"
 
+/** Compact slot label: "Monday at 13:30 – 14:30" → "Mon 13:30" */
+function compactSlot(label: string | null | undefined): string | null {
+  if (!label) return null
+  // Extract day abbreviation and start time from "Weekday at HH:MM – HH:MM"
+  const match = label.match(/^(\w+)\s+at\s+(\d{1,2}:\d{2})/)
+  if (match) return `${match[1].slice(0, 3)} ${match[2]}`
+  return label
+}
+
+/** Shorten verbose package names for display in the compact table. */
+function pkgAbbr(name: string): string {
+  // Map common long tokens to short forms
+  return name
+    .replace(/\bDevelopment\b/gi, "Dev")
+    .replace(/\bBeginner\b/gi, "Begr")
+    .replace(/\bAdvanced\b/gi, "Adv")
+    .replace(/\bIntermediate\b/gi, "Inter")
+    .replace(/\bPackage\b/gi, "Pkg")
+    .replace(/\bProgramme\b/gi, "Prog")
+    .replace(/\bAcademy\b/gi, "Acad")
+    .replace(/\bBootcamp\b/gi, "Boot")
+    .trim()
+}
+
 /** Derive an age-group bucket from a numeric age, matching enrollment wizard logic. */
 function ageGroupFromAge(age: number | string | null | undefined): string {
   const n = Number(age)
@@ -317,15 +341,15 @@ export function AdminSignupsManager({
       <div className="mt-4 rounded-card border border-border bg-card shadow-sm">
         <table className="w-full table-fixed text-left text-xs">
           <colgroup>
-            <col style={{ width: "13%" }} />{/* Child */}
-            <col style={{ width: "10%" }} />{/* Age */}
+            <col style={{ width: "14%" }} />{/* Child */}
+            <col style={{ width: "5%" }} />{/* Age */}
             <col style={{ width: "12%" }} />{/* Parent */}
-            <col style={{ width: "11%" }} />{/* Package */}
-            <col style={{ width: "9%" }} />{/* Club */}
+            <col style={{ width: "10%" }} />{/* Package */}
+            <col style={{ width: "8%" }} />{/* Club */}
             <col style={{ width: "9%" }} />{/* Slot */}
-            <col style={{ width: "9%" }} />{/* Coach */}
+            <col style={{ width: "8%" }} />{/* Coach */}
             <col style={{ width: "8%" }} />{/* Status */}
-            <col style={{ width: "11%" }} />{/* Payment */}
+            <col style={{ width: "10%" }} />{/* Payment */}
             <col style={{ width: "8%" }} />{/* Actions */}
           </colgroup>
           <thead className="border-b border-border bg-muted/40">
@@ -366,8 +390,10 @@ export function AdminSignupsManager({
                   </td>
                   {/* Parent name only */}
                   <td className="truncate px-3 py-2 text-navy">{s.parentName}</td>
-                  {/* Package */}
-                  <td className="truncate px-3 py-2 text-navy">{s.packageName}</td>
+                  {/* Package — abbreviated to fit */}
+                  <td className="px-3 py-2" title={s.packageName}>
+                    <span className="block truncate text-navy">{pkgAbbr(s.packageName)}</span>
+                  </td>
                   {/* Club: small avatar + name */}
                   <td className="px-2 py-2">
                     <div className="flex flex-col items-center gap-0.5 text-center">
@@ -385,9 +411,9 @@ export function AdminSignupsManager({
                       <span className="max-w-[72px] truncate text-[10px] text-muted-foreground leading-tight">{s.club ?? "—"}</span>
                     </div>
                   </td>
-                  {/* Slot */}
-                  <td className="whitespace-nowrap px-2 py-2 font-medium text-navy">
-                    {s.slotLabel ?? <span className="text-muted-foreground">TBC</span>}
+                  {/* Slot — compact "Mon 13:30" */}
+                  <td className="whitespace-nowrap px-2 py-2 font-medium text-navy" title={s.slotLabel ?? undefined}>
+                    {compactSlot(s.slotLabel) ?? <span className="text-muted-foreground">TBC</span>}
                   </td>
                   {/* Coach: small avatar + name */}
                   <td className="px-2 py-2">
@@ -418,7 +444,7 @@ export function AdminSignupsManager({
                   </td>
                   {/* Payment */}
                   <td className="px-2 py-2">
-                    <PaymentBadge type={s.paymentType} status={s.paymentStatus} />
+                    <PaymentBadge type={s.paymentType} status={s.paymentStatus} payfastPaymentId={s.payfastPaymentId} />
                   </td>
                   {/* Actions — icon-only with title tooltips */}
                   <td className="px-2 py-2">
@@ -511,7 +537,8 @@ export function AdminSignupsManager({
 // PaymentBadge
 // ---------------------------------------------------------------------------
 
-function PaymentBadge({ type, status }: { type: string; status: string }) {
+function PaymentBadge({ type, status, payfastPaymentId }: { type: string; status: string; payfastPaymentId?: string | null }) {
+  // Debit order
   if (type === "debit_order" || type === "debit") {
     return (
       <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700">
@@ -520,6 +547,7 @@ function PaymentBadge({ type, status }: { type: string; status: string }) {
       </span>
     )
   }
+  // EFT
   if (type === "eft" || type === "EFT") {
     return (
       <span className="inline-flex items-center gap-1 rounded-full bg-purple-50 px-1.5 py-0.5 text-[10px] font-semibold text-purple-700">
@@ -528,13 +556,29 @@ function PaymentBadge({ type, status }: { type: string; status: string }) {
       </span>
     )
   }
+  // PayFast: treat as PayFast payment if payfastPaymentId is set OR status is a terminal PayFast state
+  const isPayfast = !!payfastPaymentId || type === "payfast" || type === "once_off"
   const paid = status === "paid" || status === "complete" || status === "completed"
+  const failed = status === "failed" || status === "cancelled"
+
+  if (isPayfast) {
+    return (
+      <span className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
+        paid ? "bg-lime/20 text-navy" : failed ? "bg-red-50 text-red-600" : "bg-amber-50 text-amber-700"
+      }`}>
+        <CreditCard className="h-2.5 w-2.5 shrink-0" />
+        {paid ? "PF Paid" : failed ? "PF Failed" : "PF Pending"}
+      </span>
+    )
+  }
+
+  // Monthly / unknown — show generic payment status
   return (
     <span className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
-      paid ? "bg-lime/20 text-navy" : "bg-amber-50 text-amber-700"
+      paid ? "bg-lime/20 text-navy" : "bg-muted text-muted-foreground"
     }`}>
       <CreditCard className="h-2.5 w-2.5 shrink-0" />
-      {paid ? "Paid" : "Unpaid"}
+      {paid ? "Paid" : "—"}
     </span>
   )
 }
