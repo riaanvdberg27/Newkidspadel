@@ -130,8 +130,8 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [reference, setReference] = useState<string | null>(null)
-  // Payment method for once-off packages
-  const [paymentMethod, setPaymentMethod] = useState<"eft" | "payfast">("eft")
+  // Payment method for once-off packages — PayFast only (EFT removed)
+  const [paymentMethod] = useState<"payfast">("payfast")
 
   const selectedClub = clubs.find((c) => c.id === clubId) ?? null
 
@@ -152,7 +152,7 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
       <Confirmation
         packageName={selectedPackage.name}
         reference={reference}
-        isEft={isOnceOff && paymentMethod === "eft"}
+        isEft={false}
         childNames={children.map((c) => `${c.firstName} ${c.lastName}`.trim())}
         packagePrice={selectedPackage.price}
       />
@@ -218,13 +218,7 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
       const referenceNumber = refs.join(", ")
 
       if (isOnceOff) {
-        if (paymentMethod === "eft") {
-          // EFT: just show the confirmation screen with banking details
-          setReference(referenceNumber)
-          router.refresh()
-          return
-        }
-        // 3a. PayFast: use the first child's reference for the redirect
+        // PayFast: use the first child's reference for the redirect
         const firstRef = referenceNumber.split(", ")[0]
         const { payfastUrl, formData } = await buildPayfastPayment({
           referenceNumber: firstRef,
@@ -642,82 +636,18 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
               )}
             </dl>
             {isOnceOff && (
-              <div className="mt-5 space-y-3">
-                <p className="text-sm font-semibold text-navy">How would you like to pay?</p>
-                {/* EFT option */}
-                <button
-                  type="button"
-                  onClick={() => setPaymentMethod("eft")}
-                  className={`w-full rounded-card border-2 p-4 text-left transition-colors ${
-                    paymentMethod === "eft"
-                      ? "border-lime bg-lime/10"
-                      : "border-border bg-card hover:border-lime/50"
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-navy">EFT / Bank Transfer</span>
-                    {paymentMethod === "eft" && <Check className="h-5 w-5 text-lime-foreground" />}
+              <div className="mt-5 rounded-card border border-border bg-card p-4 shadow-sm">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-lime/20">
+                    <Check className="h-5 w-5 text-lime-foreground" />
                   </div>
-                  <p className="mt-0.5 text-xs text-muted-foreground">
-                    Pay directly into our bank account. Your spot is reserved once payment is confirmed.
-                  </p>
-                </button>
-                {/* PayFast option */}
-                <button
-                  type="button"
-                  onClick={() => setPaymentMethod("payfast")}
-                  className={`w-full rounded-card border-2 p-4 text-left transition-colors ${
-                    paymentMethod === "payfast"
-                      ? "border-lime bg-lime/10"
-                      : "border-border bg-card hover:border-lime/50"
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-navy">PayFast (Card / Instant EFT)</span>
-                    {paymentMethod === "payfast" && <Check className="h-5 w-5 text-lime-foreground" />}
+                  <div>
+                    <p className="font-bold text-navy">PayFast — Secure Online Payment</p>
+                    <p className="text-xs text-muted-foreground">
+                      Pay via card, instant EFT, or SnapScan. You will be redirected to PayFast after confirming.
+                    </p>
                   </div>
-                  <p className="mt-0.5 text-xs text-muted-foreground">
-                    Pay securely online via card, instant EFT, or SnapScan through PayFast.
-                  </p>
-                </button>
-
-                {/* EFT banking details */}
-                {paymentMethod === "eft" && (
-                  <div className="rounded-card border border-border bg-card p-5 shadow-sm">
-                    <p className="text-sm font-bold text-navy">Banking Details</p>
-                    <dl className="mt-3 space-y-2 text-sm">
-                      <div className="flex justify-between gap-4 border-b border-border pb-2">
-                        <dt className="text-muted-foreground">Account Name</dt>
-                        <dd className="text-right font-semibold text-navy">NEXT GEN PADEL ACADEMY</dd>
-                      </div>
-                      <div className="flex justify-between gap-4 border-b border-border pb-2">
-                        <dt className="text-muted-foreground">Bank</dt>
-                        <dd className="text-right font-semibold text-navy">First National Bank</dd>
-                      </div>
-                      <div className="flex justify-between gap-4 border-b border-border pb-2">
-                        <dt className="text-muted-foreground">Account Number</dt>
-                        <dd className="text-right font-semibold text-navy">63214278441</dd>
-                      </div>
-                      <div className="flex justify-between gap-4 border-b border-border pb-2">
-                        <dt className="text-muted-foreground">Branch Code</dt>
-                        <dd className="text-right font-semibold text-navy">252445</dd>
-                      </div>
-                      <div className="flex justify-between gap-4">
-                        <dt className="text-muted-foreground">Amount</dt>
-                        <dd className="text-right font-semibold text-navy">R{selectedPackage.price.toLocaleString()}</dd>
-                      </div>
-                    </dl>
-                    <div className="mt-4 rounded-md border border-amber-300 bg-amber-50 px-4 py-3">
-                      <p className="text-xs font-semibold text-amber-800">Payment Reference</p>
-                      <p className="mt-1 text-sm font-black text-amber-900">
-                        {children.map((c) => `${c.firstName} ${c.lastName}`.trim()).filter(Boolean).join(" & ") || "Child Name"}
-                      </p>
-                      <p className="mt-1 text-xs text-amber-700">
-                        Please use your {childCount > 1 ? "children's" : "child's"} full name{childCount > 1 ? "s" : ""} as the payment reference so we can match your payment.
-                      </p>
-                    </div>
-                  </div>
-                )}
+                </div>
               </div>
             )}
 
@@ -779,12 +709,8 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
                 className="rounded-2xl bg-lime px-6 py-3 font-black text-lime-foreground shadow-sm transition-all hover:scale-105 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-40 active:scale-95"
               >
                 {submitting
-                  ? isOnceOff
-                    ? paymentMethod === "eft" ? "Creating account…" : "Redirecting to PayFast…"
-                    : "Creating account…"
-                  : isOnceOff
-                    ? paymentMethod === "eft" ? "Create Account & Get Banking Details" : "Create Account & Pay via PayFast"
-                    : "Create Account & Enroll"}
+                  ? isOnceOff ? "Redirecting to PayFast…" : "Creating account…"
+                  : isOnceOff ? "Create Account & Pay via PayFast" : "Create Account & Enroll"}
               </button>
             </div>
             {(!agreedTerms || !signatureData) && (
