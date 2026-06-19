@@ -80,13 +80,37 @@ export function buildPayfastFormData(p: PayfastParams): Record<string, string> {
   return { ...params, signature }
 }
 
-/** Verify the ITN signature sent by PayFast. Returns true if valid. */
+/**
+ * Verify the ITN signature sent by PayFast.
+ *
+ * Matches the PHP reference exactly:
+ *  - Iterate all fields in their original POST order
+ *  - STOP (break) when you hit "signature" — do not include it or any field after it
+ *  - urlencode each value (encodeURIComponent + replace %20 with +)
+ *  - Append &passphrase=urlencode(passphrase) if set
+ *  - MD5 the resulting string
+ *
+ * Returns true if the computed hash matches the signature field.
+ */
 export function verifyItnSignature(
   body: Record<string, string>,
   passphrase: string,
 ): boolean {
-  const { signature, ...rest } = body
-  if (!signature) return false
-  const expected = generateSignature(rest, passphrase)
-  return expected === signature
+  const incoming = body.signature
+  if (!incoming) return false
+
+  let paramString = ""
+  for (const [key, val] of Object.entries(body)) {
+    if (key === "signature") break          // stop here — do NOT include fields after signature
+    paramString += `${key}=${encodeURIComponent(val).replace(/%20/g, "+")}&`
+  }
+  // Remove trailing &
+  paramString = paramString.slice(0, -1)
+
+  if (passphrase) {
+    paramString += `&passphrase=${encodeURIComponent(passphrase).replace(/%20/g, "+")}`
+  }
+
+  const expected = crypto.createHash("md5").update(paramString).digest("hex")
+  return expected === incoming
 }

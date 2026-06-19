@@ -32,8 +32,11 @@ export async function POST(req: NextRequest) {
   const passphrase = process.env.PAYFAST_PASSPHRASE ?? ""
   const merchantId = process.env.PAYFAST_MERCHANT_ID ?? ""
 
+  console.log("[PayFast ITN] received payment_status:", params.payment_status, "m_payment_id:", params.m_payment_id, "pf_payment_id:", params.pf_payment_id)
+
   // 1. Verify signature
   if (!verifyItnSignature(params, passphrase)) {
+    console.log("[PayFast ITN] signature mismatch — computed vs received. Keys in body:", Object.keys(params).join(", "))
     return reject("Invalid signature")
   }
 
@@ -77,7 +80,7 @@ export async function POST(req: NextRequest) {
 
   const newStatus = payment_status === "COMPLETE" ? "active" : "pending"
 
-  await db
+  const updated = await db
     .update(enrollments)
     .set({
       paymentType: "payfast",
@@ -88,6 +91,9 @@ export async function POST(req: NextRequest) {
       updatedAt: new Date(),
     })
     .where(eq(enrollments.referenceNumber, m_payment_id))
+    .returning({ id: enrollments.id })
+
+  console.log("[PayFast ITN] DB updated rows:", updated.length, "for reference:", m_payment_id, "-> paymentStatus:", newPaymentStatus)
 
   return ok()
 }
