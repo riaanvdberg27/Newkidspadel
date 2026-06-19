@@ -4,7 +4,8 @@ import { useState, useTransition, useMemo, useRef, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import {
   FileText, Mail, RefreshCw, Check, X, Pencil,
-  ChevronDown, ChevronUp, Trash2, Plus, Filter, Search, Link2, UserPlus,
+  ChevronDown, ChevronUp, Trash2, Plus, Filter, Search, Link2, UserPlus, Eye,
+  CreditCard, Building2, Landmark,
 } from "lucide-react"
 import {
   type AdminSignup,
@@ -22,6 +23,41 @@ import type { CoachRow } from "@/app/actions/coaches"
 import type { PublicPackage } from "@/app/actions/packages"
 import type { Club } from "@/lib/db/schema"
 import { formatSlot } from "@/lib/slots"
+import { PackageSlotPicker } from "@/components/package-slot-picker"
+import type { SelectedSlot } from "@/components/slot-picker"
+
+/** Compact slot label: "Monday at 13:30 – 14:30" → "Mon 13:30" */
+function compactSlot(label: string | null | undefined): string | null {
+  if (!label) return null
+  // Extract day abbreviation and start time from "Weekday at HH:MM – HH:MM"
+  const match = label.match(/^(\w+)\s+at\s+(\d{1,2}:\d{2})/)
+  if (match) return `${match[1].slice(0, 3)} ${match[2]}`
+  return label
+}
+
+/** Shorten verbose package names for display in the compact table. */
+function pkgAbbr(name: string): string {
+  // Map common long tokens to short forms
+  return name
+    .replace(/\bDevelopment\b/gi, "Dev")
+    .replace(/\bBeginner\b/gi, "Begr")
+    .replace(/\bAdvanced\b/gi, "Adv")
+    .replace(/\bIntermediate\b/gi, "Inter")
+    .replace(/\bPackage\b/gi, "Pkg")
+    .replace(/\bProgramme\b/gi, "Prog")
+    .replace(/\bAcademy\b/gi, "Acad")
+    .replace(/\bBootcamp\b/gi, "Boot")
+    .trim()
+}
+
+/** Derive an age-group bucket from a numeric age, matching enrollment wizard logic. */
+function ageGroupFromAge(age: number | string | null | undefined): string {
+  const n = Number(age)
+  if (!n) return "5-8"
+  if (n <= 8) return "5-8"
+  if (n <= 13) return "9-13"
+  return "14-17"
+}
 
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
 const HOURS = Array.from({ length: 11 }, (_, i) => i + 8)
@@ -48,6 +84,7 @@ export function AdminSignupsManager({
   const [busyId, setBusyId] = useState<number | null>(null)
   const [toast, setToast] = useState<{ id: number; ok: boolean; msg: string } | null>(null)
   const [editing, setEditing] = useState<AdminSignup | null>(null)
+  const [viewing, setViewing] = useState<AdminSignup | null>(null)
   const [expanded, setExpanded] = useState<number | null>(null)
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null)
   const [showAddModal, setShowAddModal] = useState(false)
@@ -180,6 +217,9 @@ export function AdminSignupsManager({
           consentMedia: false,
           contractUrl: null,
           status: input.status,
+          paymentType: "monthly",
+          paymentStatus: "pending",
+          payfastPaymentId: null,
           signedAt: null,
           createdAt: new Date().toISOString(),
         }
@@ -297,134 +337,159 @@ export function AdminSignupsManager({
         )}
       </div>
 
-      {/* Table */}
-      <div className="mt-4 overflow-x-auto rounded-card border border-border bg-card shadow-sm">
-        <table className="w-full min-w-[860px] text-left text-sm">
-          <thead className="border-b border-border bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
+      {/* List */}
+      <div className="mt-4 rounded-card border border-border bg-card shadow-sm">
+        <table className="w-full table-fixed text-left text-xs">
+          <colgroup>
+            <col style={{ width: "14%" }} />{/* Child */}
+            <col style={{ width: "5%" }} />{/* Age */}
+            <col style={{ width: "12%" }} />{/* Parent */}
+            <col style={{ width: "10%" }} />{/* Package */}
+            <col style={{ width: "8%" }} />{/* Club */}
+            <col style={{ width: "9%" }} />{/* Slot */}
+            <col style={{ width: "8%" }} />{/* Coach */}
+            <col style={{ width: "8%" }} />{/* Status */}
+            <col style={{ width: "10%" }} />{/* Payment */}
+            <col style={{ width: "8%" }} />{/* Actions */}
+          </colgroup>
+          <thead className="border-b border-border bg-muted/40">
             <tr>
-              <th className="px-4 py-3">Reference</th>
-              <th className="px-4 py-3">Child / Parent</th>
-              <th className="px-4 py-3">Package &amp; Club</th>
-              <th className="px-4 py-3">Coach</th>
-              <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3 text-right">Actions</th>
+              <th className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Child</th>
+              <th className="px-2 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Age</th>
+              <th className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Parent</th>
+              <th className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Package</th>
+              <th className="px-2 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Club</th>
+              <th className="px-2 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Slot</th>
+              <th className="px-2 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Coach</th>
+              <th className="px-2 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Status</th>
+              <th className="px-2 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Payment</th>
+              <th className="px-2 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Actions</th>
             </tr>
           </thead>
-          <tbody>
-            {filtered.map((s) => (
-              <>
-                <tr key={s.id} className="border-b border-border last:border-0 align-top">
-                  <td className="px-4 py-3">
-                    <p className="font-semibold text-navy">{s.referenceNumber}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {s.signedAt ? new Date(s.signedAt).toLocaleDateString("en-ZA") : "—"}
-                    </p>
-                    <button
-                      onClick={() => setExpanded(expanded === s.id ? null : s.id)}
-                      className="mt-1 flex items-center gap-1 text-xs text-lime-foreground hover:underline"
-                    >
-                      {expanded === s.id ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-                      {expanded === s.id ? "Less" : "Details"}
-                    </button>
+          <tbody className="divide-y divide-border">
+            {filtered.map((s) => {
+              const clubData = allClubs.find((c) => c.name === s.club)
+              const clubImg = clubData ? (clubData.imageUrl || clubData.image) : null
+              const coachData = allCoaches.find((c) => c.name === s.coachName)
+              const coachImg = coachData?.imageUrl ?? null
+              return (
+                <tr key={s.id} className="hover:bg-muted/20 align-middle">
+                  {/* Child name */}
+                  <td className="truncate px-3 py-2">
+                    <span className="font-semibold text-navy">{s.childName}</span>
                   </td>
-                  <td className="px-4 py-3">
-                    <p className="font-semibold text-navy">
-                      {s.childName}
-                      {s.childAge != null ? ` (age ${s.childAge})` : ""}
-                    </p>
-                    <p className="text-xs text-muted-foreground">{s.parentName}</p>
-                    <p className="text-xs text-muted-foreground">{s.parentEmail}</p>
-                    <p className="text-xs text-muted-foreground">{s.parentMobile}</p>
+                  {/* Age — own compact column */}
+                  <td className="px-2 py-2 text-center">
+                    {s.childAge != null ? (
+                      <span className="inline-block rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                        {s.childAge}
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
                   </td>
-                  <td className="px-4 py-3">
-                    <p className="font-medium text-navy">{s.packageName}</p>
-                    <p className="text-xs text-muted-foreground">{s.club ?? "—"}</p>
-                    <p className="text-xs text-muted-foreground">{s.slotLabel ?? "Slot TBC"}</p>
+                  {/* Parent name only */}
+                  <td className="truncate px-3 py-2 text-navy">{s.parentName}</td>
+                  {/* Package — abbreviated to fit */}
+                  <td className="px-3 py-2" title={s.packageName}>
+                    <span className="block truncate text-navy">{pkgAbbr(s.packageName)}</span>
                   </td>
-                  <td className="px-4 py-3">
-                    <p className="text-xs text-navy">{s.coachName ?? "—"}</p>
+                  {/* Club: small avatar + name */}
+                  <td className="px-2 py-2">
+                    <div className="flex flex-col items-center gap-0.5 text-center">
+                      {clubImg ? (
+                        <img
+                          src={`/api/blob?p=${encodeURIComponent(clubImg)}`}
+                          alt={s.club ?? ""}
+                          className="h-7 w-7 rounded-md object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-7 w-7 items-center justify-center rounded-md bg-muted">
+                          <Building2 className="h-3.5 w-3.5 text-muted-foreground" />
+                        </div>
+                      )}
+                      <span className="max-w-[72px] truncate text-[10px] text-muted-foreground leading-tight">{s.club ?? "—"}</span>
+                    </div>
                   </td>
-                  <td className="px-4 py-3">
-                    <span className={`rounded-full px-2 py-0.5 text-xs font-semibold capitalize ${statusColor(s.status)}`}>
+                  {/* Slot — compact "Mon 13:30" */}
+                  <td className="whitespace-nowrap px-2 py-2 font-medium text-navy" title={s.slotLabel ?? undefined}>
+                    {compactSlot(s.slotLabel) ?? <span className="text-muted-foreground">TBC</span>}
+                  </td>
+                  {/* Coach: small avatar + name */}
+                  <td className="px-2 py-2">
+                    {s.coachName ? (
+                      <div className="flex flex-col items-center gap-0.5 text-center">
+                        {coachImg ? (
+                          <img
+                            src={`/api/blob?p=${encodeURIComponent(coachImg)}`}
+                            alt={s.coachName}
+                            className="h-7 w-7 rounded-full object-cover"
+                          />
+                        ) : (
+                          <div className="flex h-7 w-7 items-center justify-center rounded-full bg-muted font-bold text-[10px] text-muted-foreground uppercase">
+                            {s.coachName.split(" ").map((n) => n[0]).join("").slice(0, 2)}
+                          </div>
+                        )}
+                        <span className="max-w-[64px] truncate text-[10px] text-muted-foreground leading-tight">{s.coachName}</span>
+                      </div>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </td>
+                  {/* Status */}
+                  <td className="px-2 py-2">
+                    <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize ${statusColor(s.status)}`}>
                       {s.status}
                     </span>
                   </td>
-                  <td className="px-4 py-3">
-                    <div className="flex flex-col items-end gap-2">
-                      <button
-                        onClick={() => setEditing(s)}
-                        className="inline-flex items-center gap-1.5 rounded-md bg-navy px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-navy/90"
-                      >
+                  {/* Payment */}
+                  <td className="px-2 py-2">
+                    <PaymentBadge
+                      period={allPackages.find((p) => p.name === s.packageName)?.period ?? "monthly"}
+                      status={s.paymentStatus}
+                      payfastPaymentId={s.payfastPaymentId}
+                    />
+                  </td>
+                  {/* Actions — icon-only with title tooltips */}
+                  <td className="px-2 py-2">
+                    <div className="flex items-center justify-end gap-0.5">
+                      <IconBtn title="Edit sign-up" onClick={() => setEditing(s)}>
                         <Pencil className="h-3.5 w-3.5" />
-                        Edit
-                      </button>
-                      <button
+                      </IconBtn>
+                      <IconBtn
+                        title={s.contractUrl ? "View contract" : "Generate PDF"}
                         onClick={() => handleContract(s)}
                         disabled={pending && busyId === s.id}
-                        className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-semibold text-navy transition-colors hover:bg-muted disabled:opacity-50"
                       >
-                        <FileText className="h-3.5 w-3.5 text-lime" />
-                        {s.contractUrl ? "View contract" : busyId === s.id ? "Generating…" : "Generate PDF"}
-                      </button>
-                      <button
+                        {busyId === s.id && pending
+                          ? <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                          : <FileText className="h-3.5 w-3.5" />}
+                      </IconBtn>
+                      <IconBtn
+                        title="Resend welcome email"
                         onClick={() => handleResend(s)}
                         disabled={pending && busyId === s.id}
-                        className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-semibold text-navy transition-colors hover:bg-muted disabled:opacity-50"
                       >
-                        {busyId === s.id ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Mail className="h-3.5 w-3.5 text-lime" />}
-                        Resend welcome
-                      </button>
-                      <button
-                        onClick={() => setConfirmDeleteId(s.id)}
-                        className="inline-flex items-center gap-1.5 rounded-md border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-600 transition-colors hover:bg-red-50"
-                      >
+                        {busyId === s.id && pending
+                          ? <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                          : <Mail className="h-3.5 w-3.5" />}
+                      </IconBtn>
+                      <IconBtn title="Remove sign-up" onClick={() => setConfirmDeleteId(s.id)} variant="danger">
                         <Trash2 className="h-3.5 w-3.5" />
-                        Remove
-                      </button>
-                      {toast?.id === s.id && (
-                        <span className={`text-xs font-semibold ${toast.ok ? "text-lime-foreground" : "text-destructive"}`}>
-                          {toast.msg}
-                        </span>
-                      )}
+                      </IconBtn>
                     </div>
+                    {toast?.id === s.id && (
+                      <p className={`mt-0.5 text-right text-[10px] font-semibold ${toast.ok ? "text-lime-foreground" : "text-destructive"}`}>
+                        {toast.msg}
+                      </p>
+                    )}
                   </td>
                 </tr>
-
-                {/* Expandable detail row */}
-                {expanded === s.id && (
-                  <tr key={`${s.id}-detail`} className="border-b border-border bg-muted/20">
-                    <td colSpan={6} className="px-6 py-4">
-                      <div className="grid gap-4 text-sm sm:grid-cols-3">
-                        <dl>
-                          <dt className="font-semibold text-navy">Emergency contact</dt>
-                          <dd className="text-muted-foreground">{s.emergencyContactName || "—"}</dd>
-                          <dd className="text-muted-foreground">{s.emergencyContactPhone || "—"}</dd>
-                        </dl>
-                        <dl>
-                          <dt className="font-semibold text-navy">Debit order</dt>
-                          <dd className="text-muted-foreground">{s.debitAccountHolder || "—"}</dd>
-                          <dd className="text-muted-foreground">{s.debitBankName || "—"} · {s.debitAccountType || "—"}</dd>
-                          <dd className="text-muted-foreground">
-                            {s.debitAccountNumber ? `****${s.debitAccountNumber.slice(-4)}` : "—"}
-                          </dd>
-                          <dd className="text-muted-foreground">Debit day: {s.debitDay ?? "—"}</dd>
-                        </dl>
-                        <dl>
-                          <dt className="font-semibold text-navy">Consents</dt>
-                          <dd><Badge ok={s.agreedTerms} label="Terms agreed" /></dd>
-                          <dd><Badge ok={s.consentMedia} label="Media consent" /></dd>
-                          <dt className="mt-2 font-semibold text-navy">Date of birth</dt>
-                          <dd className="text-muted-foreground">{s.childDob || "—"}</dd>
-                        </dl>
-                      </div>
-                    </td>
-                  </tr>
-                )}
-              </>
-            ))}
+              )
+            })}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">
+                <td colSpan={10} className="px-4 py-10 text-center text-muted-foreground">
                   {hasFilters ? "No sign-ups match the current filters." : "No sign-ups yet."}
                 </td>
               </tr>
@@ -468,6 +533,239 @@ export function AdminSignupsManager({
           onCancel={() => setConfirmDeleteId(null)}
         />
       )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// PaymentBadge
+// ---------------------------------------------------------------------------
+
+function PaymentBadge({
+  period,
+  status,
+  payfastPaymentId,
+}: {
+  period: string           // "monthly" | "once-off"
+  status: string           // paymentStatus from DB
+  payfastPaymentId?: string | null
+}) {
+  // Monthly packages always show Netcash — payment tracked externally
+  if (period !== "once-off") {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700">
+        <Building2 className="h-2.5 w-2.5 shrink-0" />
+        Netcash
+      </span>
+    )
+  }
+
+  // Once-off: PayFast — green paid, red unpaid
+  const paid =
+    status === "paid" || status === "complete" || status === "completed" || !!payfastPaymentId
+  return (
+    <span className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
+      paid ? "bg-green-100 text-green-700" : "bg-red-50 text-red-600"
+    }`}>
+      <CreditCard className="h-2.5 w-2.5 shrink-0" />
+      {paid ? "Paid" : "Unpaid"}
+    </span>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// ActionBtn (kept for backward compatibility — modals still use it)
+// ---------------------------------------------------------------------------
+
+function ActionBtn({
+  icon,
+  label,
+  title,
+  onClick,
+  disabled,
+  variant = "ghost",
+}: {
+  icon: React.ReactNode
+  label: string
+  title: string
+  onClick: () => void
+  disabled?: boolean
+  variant?: "ghost" | "danger"
+}) {
+  return (
+    <button
+      type="button"
+      title={title}
+      onClick={onClick}
+      disabled={disabled}
+      className={`inline-flex items-center gap-1 rounded-md border px-2 py-1.5 text-xs font-semibold transition-colors disabled:opacity-50 ${
+        variant === "danger"
+          ? "border-red-200 text-red-600 hover:bg-red-50"
+          : "border-border text-navy hover:bg-muted"
+      }`}
+    >
+      {icon}
+      <span className="hidden lg:inline">{label}</span>
+    </button>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// IconBtn — icon-only button with native tooltip via title attr
+// ---------------------------------------------------------------------------
+
+function IconBtn({
+  children,
+  title,
+  onClick,
+  disabled,
+  variant = "ghost",
+}: {
+  children: React.ReactNode
+  title: string
+  onClick: () => void
+  disabled?: boolean
+  variant?: "ghost" | "danger"
+}) {
+  return (
+    <button
+      type="button"
+      title={title}
+      onClick={onClick}
+      disabled={disabled}
+      className={`inline-flex h-7 w-7 items-center justify-center rounded-md transition-colors disabled:opacity-40 ${
+        variant === "danger"
+          ? "text-red-500 hover:bg-red-50 hover:text-red-600"
+          : "text-muted-foreground hover:bg-muted hover:text-navy"
+      }`}
+    >
+      {children}
+    </button>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// View detail modal
+// ---------------------------------------------------------------------------
+
+function ViewModal({
+  signup: s,
+  packagePeriod,
+  onClose,
+  onEdit,
+}: {
+  signup: AdminSignup
+  packagePeriod: string
+  onClose: () => void
+  onEdit: () => void
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 pt-10">
+      <div className="w-full max-w-2xl rounded-xl bg-card shadow-2xl">
+        {/* Header */}
+        <div className="flex items-start justify-between gap-4 border-b border-border px-6 py-4">
+          <div>
+            <h2 className="text-base font-bold text-navy">{s.childName}</h2>
+            <p className="text-xs text-muted-foreground">{s.referenceNumber}</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onEdit}
+              className="inline-flex items-center gap-1.5 rounded-md bg-navy px-3 py-1.5 text-xs font-semibold text-white hover:bg-navy/90"
+            >
+              <Pencil className="h-3.5 w-3.5" />
+              Edit
+            </button>
+            <button onClick={onClose} className="rounded-md p-1.5 hover:bg-muted">
+              <X className="h-4 w-4 text-muted-foreground" />
+            </button>
+          </div>
+        </div>
+
+        <div className="space-y-5 px-6 py-5 text-sm">
+          {/* Status row */}
+          <div className="flex flex-wrap items-center gap-3">
+            <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize ${
+              s.status === "active" ? "bg-lime/20 text-navy"
+              : s.status === "pending" ? "bg-amber-100 text-amber-800"
+              : s.status === "cancelled" ? "bg-red-100 text-red-700"
+              : "bg-muted text-muted-foreground"
+            }`}>
+              {s.status}
+            </span>
+            <PaymentBadge period={packagePeriod} status={s.paymentStatus} payfastPaymentId={s.payfastPaymentId} />
+            {s.payfastPaymentId && (
+              <span className="text-xs text-muted-foreground">ID: {s.payfastPaymentId}</span>
+            )}
+          </div>
+
+          <div className="grid gap-5 sm:grid-cols-2">
+            {/* Child */}
+            <DetailSection title="Child">
+              <DetailRow label="Name" value={s.childName} />
+              <DetailRow label="Age" value={s.childAge != null ? String(s.childAge) : "—"} />
+              <DetailRow label="DOB" value={s.childDob || "—"} />
+            </DetailSection>
+            {/* Parent */}
+            <DetailSection title="Parent / Guardian">
+              <DetailRow label="Name" value={s.parentName} />
+              <DetailRow label="Email" value={s.parentEmail} />
+              <DetailRow label="Mobile" value={s.parentMobile} />
+            </DetailSection>
+            {/* Programme */}
+            <DetailSection title="Programme">
+              <DetailRow label="Package" value={s.packageName} />
+              <DetailRow label="Club" value={s.club || "—"} />
+              <DetailRow label="Time slot" value={s.slotLabel || "TBC"} />
+              <DetailRow label="Coach" value={s.coachName || "—"} />
+            </DetailSection>
+            {/* Payment */}
+            <DetailSection title="Payment">
+              <DetailRow label="Type" value={s.paymentType || "—"} />
+              <DetailRow label="Status" value={s.paymentStatus || "—"} />
+              {(s.paymentType === "debit_order" || s.paymentType === "debit") && (
+                <>
+                  <DetailRow label="Account holder" value={s.debitAccountHolder || "—"} />
+                  <DetailRow label="Bank" value={s.debitBankName || "—"} />
+                  <DetailRow label="Account no." value={s.debitAccountNumber ? `****${s.debitAccountNumber.slice(-4)}` : "—"} />
+                  <DetailRow label="Account type" value={s.debitAccountType || "—"} />
+                  <DetailRow label="Debit day" value={s.debitDay != null ? String(s.debitDay) : "—"} />
+                </>
+              )}
+            </DetailSection>
+            {/* Emergency */}
+            <DetailSection title="Emergency contact">
+              <DetailRow label="Name" value={s.emergencyContactName || "—"} />
+              <DetailRow label="Phone" value={s.emergencyContactPhone || "—"} />
+            </DetailSection>
+            {/* Consents & dates */}
+            <DetailSection title="Consents &amp; dates">
+              <DetailRow label="Terms agreed" value={s.agreedTerms ? "Yes" : "No"} />
+              <DetailRow label="Media consent" value={s.consentMedia ? "Yes" : "No"} />
+              <DetailRow label="Signed at" value={s.signedAt ? new Date(s.signedAt).toLocaleDateString("en-ZA") : "—"} />
+              <DetailRow label="Created" value={s.createdAt ? new Date(s.createdAt).toLocaleDateString("en-ZA") : "—"} />
+            </DetailSection>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function DetailSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-muted-foreground">{title}</h3>
+      <dl className="space-y-1">{children}</dl>
+    </div>
+  )
+}
+
+function DetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex gap-2 text-sm">
+      <dt className="w-32 shrink-0 text-muted-foreground">{label}</dt>
+      <dd className="font-medium text-navy">{value}</dd>
     </div>
   )
 }
@@ -596,6 +894,11 @@ function EditModal({
   const [emergencyName, setEmergencyName] = useState(signup.emergencyContactName ?? "")
   const [emergencyPhone, setEmergencyPhone] = useState(signup.emergencyContactPhone ?? "")
   const [status, setStatus] = useState(signup.status)
+  const [paymentStatus, setPaymentStatus] = useState(signup.paymentStatus)
+
+  // Resolve whether the current package is once-off
+  const selectedPkg = allPackages.find((p) => p.name === packageName)
+  const isOnceOff = selectedPkg?.period === "once-off"
 
   function submit(e: React.FormEvent) {
     e.preventDefault()
@@ -608,6 +911,7 @@ function EditModal({
       emergencyContactName: emergencyName,
       emergencyContactPhone: emergencyPhone,
       status,
+      ...(isOnceOff && { paymentStatus }),
     })
   }
 
@@ -632,6 +936,7 @@ function EditModal({
             coachName={coachName} setCoachName={setCoachName}
             slotWeekday={slotWeekday} setSlotWeekday={setSlotWeekday}
             slotHour={slotHour} setSlotHour={setSlotHour}
+            childAge={childAge}
             allPackages={allPackages} allClubs={allClubs} allCoaches={allCoaches}
           />
           <EmergencyFields
@@ -643,6 +948,37 @@ function EditModal({
               {STATUS_OPTIONS.map((s) => <option key={s} value={s} className="capitalize">{s}</option>)}
             </select>
           </Field>
+
+          {/* Payment status — only for once-off (PayFast) packages */}
+          {isOnceOff && (
+            <Field label="Payment status">
+              <div className="mt-1 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPaymentStatus("complete")}
+                  className={`flex-1 rounded-md border-2 px-3 py-2 text-sm font-semibold transition-colors ${
+                    paymentStatus === "complete" || paymentStatus === "paid"
+                      ? "border-green-500 bg-green-50 text-green-700"
+                      : "border-border bg-background text-muted-foreground hover:border-green-300"
+                  }`}
+                >
+                  Paid
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPaymentStatus("pending")}
+                  className={`flex-1 rounded-md border-2 px-3 py-2 text-sm font-semibold transition-colors ${
+                    paymentStatus !== "complete" && paymentStatus !== "paid"
+                      ? "border-red-400 bg-red-50 text-red-600"
+                      : "border-border bg-background text-muted-foreground hover:border-red-300"
+                  }`}
+                >
+                  Unpaid
+                </button>
+              </div>
+            </Field>
+          )}
+
           <ModalFooter pending={pending} onClose={onClose} submitLabel="Save changes" />
         </form>
       </div>
@@ -868,6 +1204,7 @@ function AddModal({
             coachName={coachName} setCoachName={setCoachName}
             slotWeekday={slotWeekday} setSlotWeekday={setSlotWeekday}
             slotHour={slotHour} setSlotHour={setSlotHour}
+            childAge={childAge}
             allPackages={allPackages} allClubs={allClubs} allCoaches={allCoaches}
           />
           <EmergencyFields
@@ -992,6 +1329,7 @@ function ProgrammeFields({
   coachName, setCoachName,
   slotWeekday, setSlotWeekday,
   slotHour, setSlotHour,
+  childAge,
   allPackages, allClubs, allCoaches,
 }: {
   packageName: string; setPackageName: (v: string) => void
@@ -999,10 +1337,33 @@ function ProgrammeFields({
   coachName: string; setCoachName: (v: string) => void
   slotWeekday: string; setSlotWeekday: (v: string) => void
   slotHour: string; setSlotHour: (v: string) => void
+  childAge?: string | number | null
   allPackages: PublicPackage[]
   allClubs: Club[]
   allCoaches: CoachRow[]
 }) {
+  // Resolve whether the selected package uses custom slots
+  const selectedPkg = allPackages.find((p) => p.name === packageName) ?? null
+  const isCustom = selectedPkg?.slotType === "custom"
+
+  // Resolve the clubId from the selected club name
+  const selectedClub = allClubs.find((c) => c.name === club) ?? null
+  const clubId = selectedClub?.id ?? undefined
+
+  // Derive age group from child's age for the slot picker
+  const ageGroup = ageGroupFromAge(childAge)
+
+  // Map current string state back to a SelectedSlot for the picker
+  const selectedSlot: SelectedSlot | null =
+    slotWeekday !== "" && slotHour !== ""
+      ? { weekday: Number(slotWeekday), hour: Number(slotHour) }
+      : null
+
+  function handleSlotSelect(slot: SelectedSlot) {
+    setSlotWeekday(String(slot.weekday))
+    setSlotHour(String(slot.hour))
+  }
+
   return (
     <fieldset className="space-y-3">
       <legend className="text-sm font-bold text-navy">Programme</legend>
@@ -1010,7 +1371,6 @@ function ProgrammeFields({
         <Field label="Package">
           <select value={packageName} onChange={(e) => setPackageName(e.target.value)} className={selectCls}>
             {allPackages.map((p) => <option key={p.id} value={p.name}>{p.name}</option>)}
-            {/* Allow free-text fallback if packageName isn't in the list */}
             {packageName && !allPackages.find((p) => p.name === packageName) && (
               <option value={packageName}>{packageName}</option>
             )}
@@ -1031,20 +1391,49 @@ function ProgrammeFields({
           </select>
         </Field>
       </div>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <Field label="Session day">
-          <select value={slotWeekday} onChange={(e) => setSlotWeekday(e.target.value)} className={selectCls}>
-            <option value="">— not set —</option>
-            {WEEKDAYS.map((d, i) => <option key={i} value={i}>{d}</option>)}
-          </select>
-        </Field>
-        <Field label="Session time">
-          <select value={slotHour} onChange={(e) => setSlotHour(e.target.value)} className={selectCls}>
-            <option value="">— not set —</option>
-            {HOURS.map((h) => <option key={h} value={h}>{String(h).padStart(2, "0")}:00</option>)}
-          </select>
-        </Field>
-      </div>
+
+      {isCustom && selectedPkg ? (
+        /* Custom package — show the same slot picker customers see, filtered to this club */
+        <div>
+          <p className="mb-2 text-xs font-semibold text-navy">Session slot</p>
+          <p className="mb-3 text-xs text-muted-foreground">
+            Only the slots configured for this package{clubId ? " at this venue" : ""} are shown. Select one to assign it.
+          </p>
+          <PackageSlotPicker
+            packageId={selectedPkg.id}
+            packageName={selectedPkg.name}
+            ageGroup={ageGroup}
+            clubId={clubId}
+            selected={selectedSlot}
+            onSelect={handleSlotSelect}
+          />
+          {selectedSlot && (
+            <p className="mt-2 text-xs text-muted-foreground">
+              Selected: <span className="font-semibold text-navy">{formatSlot(selectedSlot.weekday, selectedSlot.hour)}</span>
+              {" · "}
+              <button type="button" onClick={() => { setSlotWeekday(""); setSlotHour("") }} className="text-destructive hover:underline">
+                Clear
+              </button>
+            </p>
+          )}
+        </div>
+      ) : (
+        /* Standard package — free day + time selects */
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Session day">
+            <select value={slotWeekday} onChange={(e) => setSlotWeekday(e.target.value)} className={selectCls}>
+              <option value="">— not set —</option>
+              {WEEKDAYS.map((d, i) => <option key={i} value={i}>{d}</option>)}
+            </select>
+          </Field>
+          <Field label="Session time">
+            <select value={slotHour} onChange={(e) => setSlotHour(e.target.value)} className={selectCls}>
+              <option value="">— not set —</option>
+              {HOURS.map((h) => <option key={h} value={h}>{String(h).padStart(2, "0")}:00</option>)}
+            </select>
+          </Field>
+        </div>
+      )}
     </fieldset>
   )
 }

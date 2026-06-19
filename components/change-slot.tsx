@@ -114,6 +114,7 @@ export function ChangeSlot({
               packageId={resolvedPkg.id}
               packageName={packageName}
               ageGroup={ageGroup}
+              clubId={clubId ?? undefined}
               selected={slot}
               onSelect={setSlot}
             />

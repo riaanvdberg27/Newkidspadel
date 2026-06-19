@@ -38,6 +38,9 @@ export type AdminSignup = {
   consentMedia: boolean
   contractUrl: string | null
   status: string
+  paymentType: string
+  paymentStatus: string
+  payfastPaymentId: string | null
   signedAt: string | null
   createdAt: string | null
 }
@@ -57,6 +60,7 @@ export type UpdateSignupInput = {
   emergencyContactName: string
   emergencyContactPhone: string
   status: string
+  paymentStatus?: string
 }
 
 export async function getAllSignups(): Promise<AdminSignup[]> {
@@ -88,6 +92,9 @@ export async function getAllSignups(): Promise<AdminSignup[]> {
     consentMedia: r.consentMedia,
     contractUrl: r.contractUrl ?? null,
     status: r.status,
+    paymentType: r.paymentType ?? "monthly",
+    paymentStatus: r.paymentStatus ?? "pending",
+    payfastPaymentId: r.payfastPaymentId ?? null,
     signedAt: r.signedAt ? r.signedAt.toISOString() : null,
     createdAt: r.createdAt ? r.createdAt.toISOString() : null,
   }))
@@ -117,6 +124,7 @@ export async function updateSignup(
         emergencyContactName: input.emergencyContactName.trim() || undefined,
         emergencyContactPhone: input.emergencyContactPhone.trim() || undefined,
         status: input.status,
+        ...(input.paymentStatus !== undefined && { paymentStatus: input.paymentStatus }),
         updatedAt: new Date(),
       })
       .where(eq(enrollments.id, id))

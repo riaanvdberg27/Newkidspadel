@@ -11,12 +11,15 @@ export function PackageSlotPicker({
   packageId,
   packageName,
   ageGroup,
+  clubId,
   selected,
   onSelect,
 }: {
   packageId: number
   packageName: string
   ageGroup: string
+  /** The club the customer selected — slots are filtered to this club. */
+  clubId?: number
   selected: SelectedSlot | null
   onSelect: (slot: SelectedSlot) => void
 }) {
@@ -26,11 +29,11 @@ export function PackageSlotPicker({
   useEffect(() => {
     let active = true
     setLoading(true)
-    getPublicPackageSlotAvailability(packageId, packageName, ageGroup)
+    getPublicPackageSlotAvailability(packageId, packageName, ageGroup, clubId)
       .then((data) => { if (active) setSlots(data) })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
-  }, [packageId, packageName, ageGroup])
+  }, [packageId, packageName, ageGroup, clubId])
 
   if (loading) {
     return (
