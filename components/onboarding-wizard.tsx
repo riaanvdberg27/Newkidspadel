@@ -262,7 +262,13 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
           <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Selected Package</p>
           <p className="font-bold text-navy">
             {selectedPackage.name} — R{selectedPackage.price.toLocaleString()}
-            {selectedPackage.period === "once-off" ? " (once off)" : "/month"}
+            {selectedPackage.period === "once-off" ? " (once off)" : "/month"} per child
+            {childCount > 1 && (
+              <span className="ml-2 text-lime-foreground">
+                = R{(selectedPackage.price * childCount).toLocaleString()} total
+                {selectedPackage.period !== "once-off" ? "/month" : ""}
+              </span>
+            )}
           </p>
         </div>
         <button
