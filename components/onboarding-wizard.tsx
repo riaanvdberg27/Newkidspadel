@@ -154,7 +154,7 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
         reference={reference}
         isEft={false}
         childNames={children.map((c) => `${c.firstName} ${c.lastName}`.trim())}
-        packagePrice={selectedPackage.price}
+        packagePrice={selectedPackage.price * childCount}
       />
     )
   }
@@ -225,7 +225,7 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
           parentName: `${parent.firstName} ${parent.lastName}`.trim(),
           parentEmail: parent.email,
           packageName: selectedPackage.name,
-          packagePrice: selectedPackage.price,
+          packagePrice: selectedPackage.price * childCount,
         })
 
         // Build and auto-submit a hidden form to POST to PayFast
@@ -612,8 +612,15 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
             <dl className="mt-6 space-y-2 rounded-card border border-border bg-card p-5 text-sm shadow-sm">
               <Row
                 label="Package"
-                value={`${selectedPackage?.name} — R${selectedPackage?.price.toLocaleString()} ${isOnceOff ? "(once off)" : "/month"}`}
+                value={`${selectedPackage?.name} — R${selectedPackage?.price.toLocaleString()} ${isOnceOff ? "(once off)" : "/month"} per child`}
               />
+              {childCount > 1 && (
+                <Row
+                  label={`Total (${childCount} children)`}
+                  value={`R${((selectedPackage?.price ?? 0) * childCount).toLocaleString()} ${isOnceOff ? "(once off)" : "/month"}`}
+                  bold
+                />
+              )}
               <Row label="Club" value={selectedClub?.name ?? ""} />
               <Row label="Time Slot" value={slot ? formatSlot(slot.weekday, slot.hour) : ""} />
               {coachId && <Row label="Coach" value={availableCoaches.find((c) => c.id === coachId)?.name ?? ""} />}
@@ -873,11 +880,11 @@ function PrefToggle({ label, checked, onChange }: { label: string; checked: bool
   )
 }
 
-function Row({ label, value }: { label: string; value: string }) {
+function Row({ label, value, bold }: { label: string; value: string; bold?: boolean }) {
   return (
-    <div className="flex justify-between gap-4 border-b border-border pb-2 last:border-0 last:pb-0">
-      <dt className="text-muted-foreground">{label}</dt>
-      <dd className="text-right font-semibold text-navy">{value}</dd>
+    <div className={`flex justify-between gap-4 border-b border-border pb-2 last:border-0 last:pb-0 ${bold ? "border-t border-border pt-2" : ""}`}>
+      <dt className={bold ? "font-bold text-navy" : "text-muted-foreground"}>{label}</dt>
+      <dd className={`text-right ${bold ? "font-extrabold text-navy" : "font-semibold text-navy"}`}>{value}</dd>
     </div>
   )
 }
