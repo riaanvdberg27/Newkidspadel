@@ -57,7 +57,7 @@ export default async function HomePage() {
             width={900}
             height={1100}
             priority
-            className="w-[220px] h-auto [mix-blend-mode:lighten]"
+            className="w-[220px] h-auto"
           />
         </div>
 
@@ -69,7 +69,7 @@ export default async function HomePage() {
             fill
             priority
             sizes="(min-width: 1024px) 68vw, 75vw"
-            className="object-contain object-bottom [mix-blend-mode:lighten]"
+            className="object-contain object-bottom"
           />
         </div>
       </section>

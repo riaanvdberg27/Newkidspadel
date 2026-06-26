@@ -110,6 +110,8 @@ export async function getPublicPackageSlotAvailability(
 ): Promise<CustomSlotWithAvailability[]> {
   // 1. Get slot definitions scoped to this club (or fall back to clubId=0 rows)
   const conditions = [eq(packageSlots.packageId, packageId)]
+  // Only filter by ageGroup when one is explicitly provided — never hard-code a default here
+  // (the wizard passes ageGroup ?? "5-8" so it's always set, but guard for safety)
   if (ageGroup) conditions.push(eq(packageSlots.ageGroup, ageGroup))
   // If a specific club is requested, fetch rows for that club; otherwise fetch all
   if (clubId != null && clubId !== 0) {
