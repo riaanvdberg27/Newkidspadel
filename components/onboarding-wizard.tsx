@@ -164,16 +164,39 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
     setError(null)
     setSubmitting(true)
     try {
-      // 1. Create the parent account (Better Auth, auto sign-in)
+      // 1. Create the parent account (Better Auth, auto sign-in).
+      //    If the account already exists (e.g. a previous attempt created the
+      //    account but the enrollment failed before saving), sign them in with
+      //    the provided password and continue — their enrollment will be saved
+      //    as a new record either way.
       const { error: signUpError } = await authClient.signUp.email({
         email: parent.email,
         password: parent.password,
         name: `${parent.firstName} ${parent.lastName}`.trim(),
       })
       if (signUpError) {
-        setError(signUpError.message ?? "Could not create your account.")
-        setSubmitting(false)
-        return
+        const isExisting =
+          signUpError.code === "USER_ALREADY_EXISTS" ||
+          (signUpError.message ?? "").toLowerCase().includes("already exists")
+        if (isExisting) {
+          // Account exists — try signing in with the given password so we can
+          // proceed to create the enrollment record.
+          const { error: signInError } = await authClient.signIn.email({
+            email: parent.email,
+            password: parent.password,
+          })
+          if (signInError) {
+            // Password is wrong for the existing account — surface a helpful message.
+            setError("An account with this email already exists. If you registered before, please sign in from the dashboard instead.")
+            setSubmitting(false)
+            return
+          }
+          // Sign-in succeeded — continue to enrollment creation below.
+        } else {
+          setError(signUpError.message ?? "Could not create your account.")
+          setSubmitting(false)
+          return
+        }
       }
 
       // 2. Persist one enrollment per child
