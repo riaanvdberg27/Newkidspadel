@@ -121,6 +121,8 @@ export async function getPublicPackageSlotAvailability(
     .where(and(...conditions))
     .orderBy(asc(packageSlots.weekday), asc(packageSlots.hour))
 
+  console.log("[v0] getPublicPackageSlotAvailability", { packageId, ageGroup, clubId, slotRowCount: slotRows.length, firstSlot: slotRows[0] ?? null })
+
   if (!slotRows.length) return []
 
   // 2. Count active bookings per weekday+hour+ageGroup+clubId for this package
