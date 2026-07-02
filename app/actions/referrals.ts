@@ -180,6 +180,21 @@ export async function completeReferralForEnrollment(enrollmentId: number): Promi
 
   if (!campaign) return
 
+  // One referral voucher per user per campaign — skip if they already have an active one
+  const [existingVoucher] = await db
+    .select({ id: vouchers.id })
+    .from(vouchers)
+    .where(
+      and(
+        eq(vouchers.userId, referral.referrerId),
+        eq(vouchers.campaignId, campaign.id),
+        eq(vouchers.status, "active"),
+      ),
+    )
+    .limit(1)
+
+  if (existingVoucher) return
+
   const expiresAt = campaign.expiryDays
     ? new Date(Date.now() + campaign.expiryDays * 86_400_000)
     : null
@@ -298,8 +313,25 @@ export async function issueBootcampVoucher(
   // CRITICAL: Never allow an email address to be inserted as userId.
   // This is a foreign key to user.id (UUID), not an email field.
   if (!resolvedUserId || resolvedUserId.includes("@")) {
-    console.error("[v0] CRITICAL: Attempted to insert email as userId:", resolvedUserId)
     return { error: "Invalid user ID — must be a UUID, not an email address." }
+  }
+
+  // One bootcamp voucher per user per campaign — prevent duplicates
+  const [existingVoucher] = await db
+    .select({ id: vouchers.id, code: vouchers.code, status: vouchers.status })
+    .from(vouchers)
+    .where(
+      and(
+        eq(vouchers.userId, resolvedUserId),
+        eq(vouchers.campaignId, campaign.id),
+      ),
+    )
+    .limit(1)
+
+  if (existingVoucher) {
+    return {
+      error: `This parent already has a Boot Camp voucher (${existingVoucher.code} — ${existingVoucher.status}). Each client may only receive one.`,
+    }
   }
 
   const expiresAt = campaign.expiryDays
