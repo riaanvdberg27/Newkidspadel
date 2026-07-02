@@ -17,6 +17,7 @@ import { SignaturePad } from "@/components/signature-pad"
 import { CONSENT_TERMS_LABEL, CONSENT_MEDIA_LABEL, TERMS_TITLE, TERMS_SECTIONS } from "@/lib/terms"
 import { authClient } from "@/lib/auth-client"
 import { createEnrollment } from "@/app/actions/enrollment"
+import { blobUrl } from "@/lib/blob"
 
 import { buildNetcashPaymentForEnrollment } from "@/app/actions/enrollment"
 import { validateVoucherCode } from "@/app/actions/referrals"
@@ -455,7 +456,7 @@ export function OnboardingWizard({ clubs, packages, schools }: { clubs: Club[]; 
                       <div className="mt-4 flex items-center gap-3 rounded-2xl border-2 border-lime bg-lime/10 px-4 py-3">
                         {s.logoUrl ? (
                           // eslint-disable-next-line @next/next/no-img-element
-                          <img src={s.logoUrl} alt={s.name} className="h-10 w-10 rounded-full object-contain border border-border bg-white p-0.5 shrink-0" />
+                          <img src={blobUrl(s.logoUrl) ?? s.logoUrl} alt={s.name} className="h-10 w-10 rounded-full object-contain border border-border bg-white p-0.5 shrink-0" />
                         ) : (
                           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-navy/10 text-sm font-black text-navy">
                             {s.name[0]?.toUpperCase()}
