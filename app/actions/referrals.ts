@@ -271,7 +271,9 @@ export async function redeemVoucher(voucherId: number, enrollmentId: number): Pr
 // Issue a Boot Camp voucher (admin action)
 // ---------------------------------------------------------------------------
 
-export async function issueBootcampVoucher(targetUserId: string): Promise<{ code: string } | { error: string }> {
+export async function issueBootcampVoucher(
+  targetUserIdOrEmail: string,
+): Promise<{ code: string } | { error: string }> {
   const [campaign] = await db
     .select()
     .from(voucherCampaigns)
@@ -279,6 +281,19 @@ export async function issueBootcampVoucher(targetUserId: string): Promise<{ code
     .limit(1)
 
   if (!campaign) return { error: "Boot Camp Reward campaign is not currently active." }
+
+  // Accept either the user's UUID or their email address — look up by email if
+  // the value contains "@", otherwise treat it as a raw user ID.
+  let resolvedUserId = targetUserIdOrEmail.trim()
+  if (resolvedUserId.includes("@")) {
+    const [found] = await db
+      .select({ id: user.id })
+      .from(user)
+      .where(eq(user.email, resolvedUserId))
+      .limit(1)
+    if (!found) return { error: `No account found for email: ${resolvedUserId}` }
+    resolvedUserId = found.id
+  }
 
   const expiresAt = campaign.expiryDays
     ? new Date(Date.now() + campaign.expiryDays * 86_400_000)
@@ -289,7 +304,7 @@ export async function issueBootcampVoucher(targetUserId: string): Promise<{ code
     .values({
       code: generateVoucherCode(),
       campaignId: campaign.id,
-      userId: targetUserId,
+      userId: resolvedUserId,
       discountPercent: campaign.discountPercent,
       status: "active",
       expiresAt,

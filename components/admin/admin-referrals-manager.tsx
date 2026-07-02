@@ -174,13 +174,13 @@ function VouchersTab({
       <div className="rounded-card border border-border bg-card p-4 shadow-sm">
         <h3 className="mb-3 font-semibold text-navy">Issue Boot Camp Voucher</h3>
         <p className="mb-3 text-xs text-muted-foreground">
-          Manually issue a 40% Boot Camp Reward voucher to a parent by their user ID.
+          Manually issue a 40% Boot Camp Reward voucher to a parent. Enter their email address or user ID.
         </p>
         <div className="flex gap-2">
           <input
             value={issueUserId}
             onChange={(e) => setIssueUserId(e.target.value)}
-            placeholder="Parent User ID"
+            placeholder="Parent email or user ID"
             className="flex-1 rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-lime"
           />
           <button
