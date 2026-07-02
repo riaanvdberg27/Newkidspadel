@@ -1,8 +1,9 @@
 "use client"
 
-import { useRef, useState, useTransition } from "react"
+import { useRef, useState } from "react"
 import { Upload, ImageIcon, CheckCircle2, AlertCircle, RefreshCw } from "lucide-react"
 import type { SiteImageRow } from "@/app/actions/site-images"
+import { updateSiteImage } from "@/app/actions/site-images"
 
 export function AdminSiteImagesManager({
   initialImages,
@@ -16,6 +17,9 @@ export function AdminSiteImagesManager({
   const [cacheBust, setCacheBust] = useState<Record<string, number>>({})
   const fileRefs = useRef<Record<string, HTMLInputElement | null>>({})
 
+  // Step 1: upload file to blob store via API route (no auth needed)
+  // Step 2: save the resulting URL to DB + revalidate pages via Server Action (has cookie context)
+
   async function handleUpload(imageKey: string, file: File) {
     setUploading(imageKey)
     setSuccess(null)
@@ -26,16 +30,22 @@ export function AdminSiteImagesManager({
     fd.append("imageKey", imageKey)
 
     try {
+      // Step 1: upload the file to Vercel Blob
       const res = await fetch("/api/admin/upload-site-image", { method: "POST", body: fd })
       const json = await res.json()
-      if (res.status === 401) throw new Error("Session expired — please sign out and sign in again.")
       if (!res.ok) throw new Error(json.error ?? "Upload failed")
+
+      const blobUrl: string = json.url
+
+      // Step 2: persist the URL to DB and revalidate public pages via Server Action
+      // Server Actions always have full cookie context — this is what was failing before
+      await updateSiteImage(imageKey, blobUrl)
 
       const now = Date.now()
       setImages((prev) =>
         prev.map((img) =>
           img.imageKey === imageKey
-            ? { ...img, blobUrl: json.url, updatedAt: new Date().toISOString() }
+            ? { ...img, blobUrl, updatedAt: new Date().toISOString() }
             : img
         )
       )
