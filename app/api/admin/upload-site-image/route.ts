@@ -4,6 +4,7 @@ import { isAdminAuthenticated } from "@/lib/admin-auth"
 import { db } from "@/lib/db"
 import { siteImages } from "@/lib/db/schema"
 import { eq } from "drizzle-orm"
+import { revalidatePath } from "next/cache"
 
 export async function POST(req: Request) {
   if (!(await isAdminAuthenticated())) {
@@ -33,6 +34,11 @@ export async function POST(req: Request) {
     .update(siteImages)
     .set({ blobUrl: blob.url, updatedAt: new Date() })
     .where(eq(siteImages.imageKey, imageKey))
+
+  // Revalidate the public pages so the new image is served immediately
+  revalidatePath("/")
+  revalidatePath("/about")
+  revalidatePath("/admin")
 
   return NextResponse.json({ url: blob.url })
 }
