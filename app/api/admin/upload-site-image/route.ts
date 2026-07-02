@@ -1,16 +1,11 @@
+// This route handles ONLY the blob upload — no auth check, no DB write.
+// Auth + DB update + revalidation are done in the saveSiteImage() Server Action
+// called by the client immediately after this route returns the blob URL.
+// This matches the pattern used by upload-moment and upload-club-image.
 import { type NextRequest, NextResponse } from "next/server"
 import { put } from "@vercel/blob"
-import { isAdminAuthenticated } from "@/lib/admin-auth"
-import { db } from "@/lib/db"
-import { siteImages } from "@/lib/db/schema"
-import { eq } from "drizzle-orm"
-import { revalidatePath } from "next/cache"
 
 export async function POST(request: NextRequest) {
-  if (!(await isAdminAuthenticated())) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  }
-
   const formData = await request.formData()
   const file = formData.get("file") as File | null
   const imageKey = formData.get("imageKey") as string | null
@@ -19,9 +14,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "file and imageKey are required" }, { status: 400 })
   }
 
-  // The hero mascot image is hardcoded and must never be overwritten via the admin
-  const PROTECTED_KEYS = ["hero-kids"]
-  if (PROTECTED_KEYS.includes(imageKey)) {
+  // The hero mascot image is hardcoded and must never be overwritten
+  if (imageKey === "hero-kids") {
     return NextResponse.json({ error: "This image cannot be replaced." }, { status: 403 })
   }
 
@@ -37,21 +31,10 @@ export async function POST(request: NextRequest) {
   const ext = file.name.split(".").pop() ?? "jpg"
   const randomSuffix = Math.random().toString(36).slice(2, 7)
 
-  // Use private access to match the rest of the blob store — served via /api/blob proxy
   const blob = await put(`site-images/${imageKey}-${Date.now()}-${randomSuffix}.${ext}`, file, {
     access: "private",
     contentType: file.type,
   })
-
-  await db
-    .update(siteImages)
-    .set({ blobUrl: blob.url, updatedAt: new Date() })
-    .where(eq(siteImages.imageKey, imageKey))
-
-  // Revalidate public pages so they pick up the new image on next request
-  revalidatePath("/")
-  revalidatePath("/about")
-  revalidatePath("/admin")
 
   return NextResponse.json({ url: blob.url })
 }

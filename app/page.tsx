@@ -176,21 +176,21 @@ export default async function HomePage() {
 
       {/* Photo break */}
       <section className="mx-auto max-w-6xl px-4 pb-4" aria-label="Academy photos">
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <div className="relative aspect-video overflow-hidden rounded-2xl sm:col-span-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="relative aspect-[4/3] overflow-hidden rounded-2xl">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={img("kids-playing-padel")}
               alt="Children playing padel at a NextGen Padel Academy session in Pretoria"
-              className="h-full w-full object-cover"
+              className="h-full w-full object-cover object-center"
             />
           </div>
-          <div className="relative aspect-video overflow-hidden rounded-2xl">
+          <div className="relative aspect-[4/3] overflow-hidden rounded-2xl">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={img("coach-kids")}
               alt="NextGen Padel Academy coach guiding junior players in Pretoria"
-              className="h-full w-full object-cover"
+              className="h-full w-full object-cover object-center"
             />
           </div>
         </div>
