@@ -22,8 +22,10 @@ import { buildNetcashPaymentForEnrollment } from "@/app/actions/enrollment"
 import { validateVoucherCode } from "@/app/actions/referrals"
 import { Tag, X } from "lucide-react"
 
-const ALL_STEPS = ["Children", "Child Details", "Club & Schedule", "Parent Account", "Preferences", "Review"]
-const ONCE_OFF_STEPS = ["Children", "Child Details", "Club & Schedule", "Parent Account", "Preferences", "Review"]
+const CLUB_STEPS = ["Children", "Child Details", "Club & Schedule", "Parent Account", "Preferences", "Review"]
+const SCHOOL_STEPS = ["Children", "Child Details", "School", "Parent Account", "Preferences", "Review"]
+const ALL_STEPS = CLUB_STEPS
+const ONCE_OFF_STEPS = CLUB_STEPS
 
 
 type Prefs = {
@@ -46,8 +48,11 @@ export function OnboardingWizard({ clubs, packages, schools }: { clubs: Club[]; 
   const [step, setStep] = useState(0)
 
   const isOnceOff = selectedPackage?.period === "once-off"
-  const isSchoolPackage = selectedPackage?.isSchool === true
-  const STEPS = isOnceOff ? ONCE_OFF_STEPS : ALL_STEPS
+  // Treat as school package if the isSchool flag is set OR the slug contains "school"
+  const isSchoolPackage =
+    selectedPackage?.isSchool === true ||
+    (selectedPackage?.slug?.toLowerCase().includes("school") ?? false)
+  const STEPS = isSchoolPackage ? SCHOOL_STEPS : (isOnceOff ? ONCE_OFF_STEPS : ALL_STEPS)
 
   // If the selected package restricts to specific clubs, only show those clubs in step 1
   const availableClubs =
@@ -416,44 +421,56 @@ export function OnboardingWizard({ clubs, packages, schools }: { clubs: Club[]; 
           <div>
             {isSchoolPackage ? (
               <>
-                <h2 className="text-xl font-bold text-navy">Choose Your School</h2>
+                <h2 className="text-xl font-bold text-navy">Select Your School</h2>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Select the school where your child will attend padel lessons.
+                  Choose the school where your child will attend Next Gen Padel Academy lessons.
                 </p>
-                {schools.length === 0 ? (
-                  <p className="mt-4 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700">
-                    No schools are currently listed. Please check back soon.
-                  </p>
-                ) : (
-                  <div className="mt-4 space-y-3">
-                    {schools.map((s) => (
-                      <button
-                        key={s.id}
-                        type="button"
-                        onClick={() => setSchoolId(s.id === schoolId ? null : s.id)}
-                        className={`w-full rounded-card border p-4 text-left transition-colors ${
-                          schoolId === s.id ? "border-lime bg-lime/10" : "border-border bg-card hover:border-lime/50"
-                        }`}
-                      >
-                        <div className="flex items-center gap-3">
-                          {s.logoUrl ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img src={s.logoUrl} alt={s.name} className="h-10 w-10 rounded-full object-contain border border-border bg-white p-0.5 shrink-0" />
-                          ) : (
-                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-navy/10 text-xs font-black text-navy">
-                              {s.name[0]?.toUpperCase()}
-                            </div>
-                          )}
-                          <div className="min-w-0 flex-1">
-                            <h3 className="font-bold text-navy">{s.name}</h3>
-                            {s.location && <p className="text-sm text-muted-foreground">{s.location}</p>}
+                <div className="mt-6">
+                  <label htmlFor="school-select" className="block text-sm font-semibold text-navy mb-2">
+                    School
+                  </label>
+                  {schools.length === 0 ? (
+                    <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700">
+                      No schools are currently listed. Please check back soon or{" "}
+                      <a href="/contact" className="underline">contact us</a>.
+                    </p>
+                  ) : (
+                    <select
+                      id="school-select"
+                      value={schoolId ?? ""}
+                      onChange={(e) => setSchoolId(e.target.value ? Number(e.target.value) : null)}
+                      className="w-full rounded-2xl border-2 border-border bg-card px-4 py-3 text-sm font-semibold text-navy shadow-sm transition-colors focus:border-lime focus:outline-none"
+                    >
+                      <option value="">— Select a school —</option>
+                      {schools.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.name}{s.location ? ` — ${s.location}` : ""}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  {/* Show selected school confirmation */}
+                  {schoolId && (() => {
+                    const s = schools.find((sc) => sc.id === schoolId)
+                    return s ? (
+                      <div className="mt-4 flex items-center gap-3 rounded-2xl border-2 border-lime bg-lime/10 px-4 py-3">
+                        {s.logoUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={s.logoUrl} alt={s.name} className="h-10 w-10 rounded-full object-contain border border-border bg-white p-0.5 shrink-0" />
+                        ) : (
+                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-navy/10 text-sm font-black text-navy">
+                            {s.name[0]?.toUpperCase()}
                           </div>
-                          {schoolId === s.id && <Check className="h-5 w-5 shrink-0 text-lime-foreground" />}
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <p className="font-black text-navy">{s.name}</p>
+                          {s.location && <p className="text-xs text-muted-foreground">{s.location}</p>}
                         </div>
-                      </button>
-                    ))}
-                  </div>
-                )}
+                        <Check className="h-5 w-5 shrink-0 text-lime-foreground" />
+                      </div>
+                    ) : null
+                  })()}
+                </div>
                 <StepNav onBack={() => setStep(1)} onNext={() => setStep(3)} nextDisabled={!schoolId} />
               </>
             ) : (
@@ -503,7 +520,7 @@ export function OnboardingWizard({ clubs, packages, schools }: { clubs: Club[]; 
           </div>
     )
     if (step === 3) return (
-          /* ── Step 3: Parent account (for both monthly & once-off) ── */
+          /* ── Step 3: Parent account (for both monthly & once-off) ���─ */
           <div>
             <h2 className="text-xl font-bold text-navy">Parent / Guardian Account</h2>
             <p className="mt-1 text-sm text-muted-foreground">
