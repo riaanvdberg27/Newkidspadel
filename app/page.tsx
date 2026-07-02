@@ -9,8 +9,9 @@ import { HomeFaqSection } from "@/components/home-faq-section"
 import { getPublishedPackages } from "@/app/actions/packages"
 import { getPublishedCoaches } from "@/app/actions/coaches"
 
-// Always render fresh — clubs, packages and coaches change in the admin
-export const dynamic = "force-dynamic"
+// Revalidate every 5 minutes — packages and coaches change infrequently.
+// Admin mutations already call revalidatePath("/") so changes propagate immediately.
+export const revalidate = 300
 
 export const metadata: Metadata = {
   title: "Kids Padel Coaching in Pretoria — Ages 4–17 | Brooklyn, Menlo Park, Moreleta Park",

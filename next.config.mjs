@@ -1,5 +1,12 @@
 const nextConfig = {
   images: {
+    // Serve AVIF first (best compression), fall back to WebP — browser picks best supported format.
+    formats: ["image/avif", "image/webp"],
+    // Explicit breakpoints matching Tailwind's sm/md/lg/xl — avoids generating unnecessary sizes.
+    deviceSizes: [390, 640, 750, 828, 1080, 1200, 1920],
+    imageSizes: [16, 32, 48, 64, 96, 128, 256],
+    // Keep optimised images in the cache for 7 days before re-optimising.
+    minimumCacheTTL: 60 * 60 * 24 * 7,
     remotePatterns: [
       // Vercel Blob public store URLs (legacy / existing data)
       {
