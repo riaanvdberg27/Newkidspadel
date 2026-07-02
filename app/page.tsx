@@ -9,6 +9,7 @@ import { HomeFaqSection } from "@/components/home-faq-section"
 import { getPublishedPackages } from "@/app/actions/packages"
 import { getPublishedCoaches } from "@/app/actions/coaches"
 import { getSiteImageMap } from "@/app/actions/site-images"
+import { blobImage, blobSrcSet } from "@/lib/blob"
 
 // Always render at request time — data comes from a live database.
 export const dynamic = "force-dynamic"
@@ -86,6 +87,17 @@ export default async function HomePage() {
     const blobUrl = siteImageMap[key]
     return blobUrl ? `/api/blob?p=${encodeURIComponent(blobUrl)}` : `/images/${key}.png`
   }
+
+  // Resolve a responsive image: for admin-uploaded blobs, return a resized WebP
+  // src + srcset (served small through the /api/blob proxy). Local fallbacks are
+  // returned as-is.
+  function imgResponsive(key: string): { src: string; srcSet?: string } {
+    const blobUrl = siteImageMap[key]
+    if (blobUrl) {
+      return { src: blobImage(blobUrl, 828) ?? "", srcSet: blobSrcSet(blobUrl) }
+    }
+    return { src: `/images/${key}.png` }
+  }
   return (
     <main>
       <script
@@ -140,12 +152,13 @@ export default async function HomePage() {
 
             {/* Right — mascot image. ALWAYS use the local file — this image is never admin-replaceable */}
             <div className="flex items-end justify-center self-end pointer-events-none select-none">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
+              <Image
                 src="/images/hero-kids.png"
                 alt="Children learning padel at NextGen Padel Academy Pretoria"
                 width={900}
                 height={1100}
+                priority
+                sizes="(min-width: 1024px) 420px, (min-width: 640px) 340px, 260px"
                 className="w-full max-w-[260px] sm:max-w-[340px] lg:max-w-[420px] h-auto object-contain object-bottom"
               />
             </div>
@@ -180,17 +193,23 @@ export default async function HomePage() {
           <div className="relative aspect-[4/3] overflow-hidden rounded-2xl">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={img("home-action-1")}
+              {...imgResponsive("home-action-1")}
+              sizes="(min-width: 640px) 50vw, 100vw"
               alt="Junior players doing agility drills with a coach at a NextGen Padel Academy session in Pretoria"
               className="h-full w-full object-cover object-center"
+              loading="lazy"
+              decoding="async"
             />
           </div>
           <div className="relative aspect-[4/3] overflow-hidden rounded-2xl">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={img("home-action-2")}
+              {...imgResponsive("home-action-2")}
+              sizes="(min-width: 640px) 50vw, 100vw"
               alt="NextGen Padel Academy coach guiding junior players in Pretoria"
               className="h-full w-full object-cover object-center"
+              loading="lazy"
+              decoding="async"
             />
           </div>
         </div>

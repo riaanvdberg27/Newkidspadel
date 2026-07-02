@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { X, Play, ChevronLeft, ChevronRight } from "lucide-react"
 import type { PublicMoment } from "@/app/actions/moments"
-import { blobUrl } from "@/lib/blob"
+import { blobUrl, blobImage, blobSrcSet } from "@/lib/blob"
 
 const CATEGORIES = [
   { value: "all", label: "All" },
@@ -13,16 +13,32 @@ const CATEGORIES = [
   { value: "tournaments", label: "Tournaments" },
 ]
 
+// Per-category heading and subheading shown once above that category's photos.
+const CATEGORY_HEADINGS: Record<string, { title: string; caption: string }> = {
+  general: {
+    title: "Every Moment Captures More Than Just a Game",
+    caption: "It captures confidence, friendships, resilience, and unforgettable memories.",
+  },
+  clubs: {
+    title: "Club Days",
+    caption: "Action and fun from our regular club sessions across Pretoria.",
+  },
+  schools: {
+    title: "School Programmes",
+    caption: "Bringing padel to schools and growing the next generation of players.",
+  },
+  tournaments: {
+    title: "Tournaments",
+    caption: "Competitive moments and championship highlights from our players.",
+  },
+}
+
 export function MomentsGallery({ items }: { items: PublicMoment[] }) {
   const [filter, setFilter] = useState("all")
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
 
   const filtered = filter === "all" ? items : items.filter((m) => m.category === filter)
-
-  // Find categories that actually have items
-  const activeCategories = CATEGORIES.filter(
-    (c) => c.value === "all" || items.some((m) => m.category === c.value)
-  )
+  const categoryHeading = filter !== "all" ? CATEGORY_HEADINGS[filter] ?? null : null
 
   function openLightbox(index: number) {
     setLightboxIndex(index)
@@ -52,30 +68,37 @@ export function MomentsGallery({ items }: { items: PublicMoment[] }) {
 
   return (
     <>
-      {/* Category filter */}
-      {activeCategories.length > 2 && (
-        <div className="flex flex-wrap justify-center gap-2 mb-8">
-          {activeCategories.map((c) => (
-            <button
-              key={c.value}
-              onClick={() => setFilter(c.value)}
-              className={`rounded-full px-4 py-1.5 text-sm font-bold transition-colors ${
-                filter === c.value
-                  ? "bg-navy text-white shadow-sm"
-                  : "border border-border bg-card text-muted-foreground hover:border-navy hover:text-navy"
-              }`}
-            >
-              {c.label}
-            </button>
-          ))}
+      {/* Category filter tabs — always show all 5 */}
+      <div className="flex flex-wrap justify-center gap-2 mb-8">
+        {CATEGORIES.map((c) => (
+          <button
+            key={c.value}
+            onClick={() => setFilter(c.value)}
+            className={`rounded-full px-4 py-1.5 text-sm font-bold transition-colors ${
+              filter === c.value
+                ? "bg-navy text-white shadow-sm"
+                : "border border-border bg-card text-muted-foreground hover:border-navy hover:text-navy"
+            }`}
+          >
+            {c.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Category heading — shown once above the grid when a specific category is selected */}
+      {categoryHeading && (
+        <div className="mb-8">
+          <h2 className="text-2xl font-extrabold text-navy text-balance">{categoryHeading.title}</h2>
+          <p className="mt-2 text-base text-muted-foreground text-pretty">{categoryHeading.caption}</p>
         </div>
       )}
 
-      {/* Masonry-style grid */}
+      {/* Masonry-style grid — no title/caption on individual cards */}
       <div className="columns-1 gap-4 sm:columns-2 lg:columns-3 xl:columns-4 space-y-4">
         {filtered.map((m, i) => {
           const media = blobUrl(m.mediaUrl) ?? m.mediaUrl
           const thumb = m.thumbnailUrl ? (blobUrl(m.thumbnailUrl) ?? m.thumbnailUrl) : null
+          const gridSizes = "(min-width: 1280px) 23vw, (min-width: 1024px) 31vw, (min-width: 640px) 47vw, 92vw"
 
           return (
             <div
@@ -88,7 +111,15 @@ export function MomentsGallery({ items }: { items: PublicMoment[] }) {
                   <>
                     {thumb ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={thumb} alt={m.title} className="w-full object-cover" />
+                      <img
+                        src={blobImage(m.thumbnailUrl, 828) ?? thumb}
+                        srcSet={blobSrcSet(m.thumbnailUrl)}
+                        sizes={gridSizes}
+                        alt={m.category}
+                        className="w-full object-cover"
+                        loading={i < 4 ? "eager" : "lazy"}
+                        decoding="async"
+                      />
                     ) : (
                       <video src={media} className="w-full object-cover" preload="metadata" muted playsInline />
                     )}
@@ -100,17 +131,17 @@ export function MomentsGallery({ items }: { items: PublicMoment[] }) {
                   </>
                 ) : (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={media} alt={m.title} className="w-full object-cover" />
+                  <img
+                    src={blobImage(m.mediaUrl, 828) ?? media}
+                    srcSet={blobSrcSet(m.mediaUrl)}
+                    sizes={gridSizes}
+                    alt={m.category}
+                    className="w-full object-cover"
+                    loading={i < 4 ? "eager" : "lazy"}
+                    decoding="async"
+                  />
                 )}
               </div>
-              {(m.title || m.caption) && (
-                <div className="px-3 py-2.5">
-                  <p className="text-sm font-bold text-navy leading-snug">{m.title}</p>
-                  {m.caption && (
-                    <p className="mt-0.5 text-xs text-muted-foreground line-clamp-2">{m.caption}</p>
-                  )}
-                </div>
-              )}
             </div>
           )
         })}
@@ -122,7 +153,6 @@ export function MomentsGallery({ items }: { items: PublicMoment[] }) {
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4"
           onClick={closeLightbox}
         >
-          {/* Content */}
           <div
             className="relative flex max-h-full max-w-5xl w-full flex-col"
             onClick={(e) => e.stopPropagation()}
@@ -148,22 +178,12 @@ export function MomentsGallery({ items }: { items: PublicMoment[] }) {
               ) : (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
-                  src={blobUrl(current.mediaUrl) ?? current.mediaUrl}
-                  alt={current.title}
+                  src={blobImage(current.mediaUrl, 1600) ?? blobUrl(current.mediaUrl) ?? current.mediaUrl}
+                  alt={current.title || current.category}
                   className="max-h-[70vh] w-full object-contain"
                 />
               )}
             </div>
-
-            {/* Caption */}
-            {(current.title || current.caption) && (
-              <div className="mt-3 px-1 text-center text-white">
-                <p className="font-bold">{current.title}</p>
-                {current.caption && (
-                  <p className="mt-1 text-sm text-white/70">{current.caption}</p>
-                )}
-              </div>
-            )}
 
             {/* Counter + nav */}
             {filtered.length > 1 && (
