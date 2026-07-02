@@ -10,11 +10,11 @@ import { Menu, X } from "lucide-react"
 const NAV = [
   { label: "Home", href: "/" },
   { label: "About", href: "/about" },
+  { label: "Enroll", href: "/enrollment" },
   { label: "Clubs", href: "/clubs" },
   { label: "Schools", href: "/schools" },
   { label: "Blog", href: "/blog" },
   { label: "FAQ", href: "/faq" },
-  { label: "Enroll", href: "/enrollment" },
   { label: "Contact", href: "/contact" },
 ]
 
