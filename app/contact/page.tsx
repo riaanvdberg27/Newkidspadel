@@ -1,9 +1,57 @@
+import type { Metadata } from "next"
 import Image from "next/image"
 import Link from "next/link"
 import { Phone, Mail, Clock, MessageCircle } from "lucide-react"
 import { getContacts } from "@/app/actions/contact-settings"
 import { getPublishedPackages } from "@/app/actions/packages"
 import { PackagesSection } from "@/components/packages-section"
+import { BreadcrumbSchema } from "@/components/breadcrumb-schema"
+
+export const metadata: Metadata = {
+  title: "Contact Us | NextGen Padel Academy Pretoria",
+  description:
+    "Get in touch with NextGen Padel Academy in Pretoria. Questions about padel lessons for your child? Call, WhatsApp or email our coaching team directly.",
+  alternates: { canonical: "https://nextgenpadel.co.za/contact" },
+  openGraph: {
+    title: "Contact NextGen Padel Academy | Kids Padel Coaching Pretoria",
+    description:
+      "Reach our coaching team in Pretoria. Call, WhatsApp or email us — we respond within 24 hours on business days.",
+    url: "https://nextgenpadel.co.za/contact",
+  },
+}
+
+const localBusinessSchema = {
+  "@context": "https://schema.org",
+  "@type": ["LocalBusiness", "SportsActivityLocation"],
+  name: "NextGen Padel Academy",
+  description:
+    "NextGen Padel Academy offers professional padel coaching for children aged 4–17 across Pretoria, Centurion, Midrand and Gauteng, South Africa.",
+  url: "https://nextgenpadel.co.za",
+  image: "https://nextgenpadel.co.za/images/mk-padel-logo.png",
+  priceRange: "R300–R1200/month",
+  address: {
+    "@type": "PostalAddress",
+    addressLocality: "Pretoria",
+    addressRegion: "Gauteng",
+    postalCode: "0001",
+    addressCountry: "ZA",
+  },
+  geo: {
+    "@type": "GeoCoordinates",
+    latitude: -25.7479,
+    longitude: 28.2293,
+  },
+  openingHoursSpecification: [
+    { "@type": "OpeningHoursSpecification", dayOfWeek: ["Monday","Tuesday","Wednesday","Thursday","Friday"], opens: "08:00", closes: "17:00" },
+    { "@type": "OpeningHoursSpecification", dayOfWeek: ["Saturday"], opens: "08:00", closes: "13:00" },
+  ],
+  areaServed: [
+    "Pretoria", "Centurion", "Midrand", "Waterkloof", "Menlyn",
+    "Lynnwood", "Faerie Glen", "Moreleta Park", "Silver Lakes", "Gauteng",
+  ],
+  sport: "Padel",
+  audience: { "@type": "PeopleAudience", suggestedMinAge: 4, suggestedMaxAge: 17 },
+}
 
 export default async function ContactPage() {
   const [packages, allContacts] = await Promise.all([
@@ -16,15 +64,20 @@ export default async function ContactPage() {
     .map((c) => ({ key: c.id, name: c.name, role: c.role, phone: c.phone, email: c.email }))
   return (
     <main>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(localBusinessSchema) }}
+      />
+      <BreadcrumbSchema crumbs={[{ name: "Contact", href: "/contact" }]} />
       {/* Hero */}
       <section className="bg-navy px-4 py-12 text-center text-navy-foreground sm:py-16">
         <span className="inline-block rounded-full bg-lime/20 px-4 py-1.5 text-sm font-bold text-lime mb-4">
-          Say Hello
+          Contact NextGen Padel Academy — Pretoria
         </span>
-        <h1 className="text-balance text-3xl font-black sm:text-5xl">Get In Touch</h1>
-        <p className="mt-2 text-xl font-black text-lime">We&apos;d love to hear from you!</p>
+        <h1 className="text-balance text-3xl font-black sm:text-5xl">Contact Us</h1>
+        <p className="mt-2 text-xl font-black text-lime">We&apos;d Love to Hear From You</p>
         <p className="mx-auto mt-3 max-w-xl text-sm leading-relaxed text-navy-foreground/80 sm:text-base">
-          Questions about our programs? Want to enroll your child? Reach out — we respond fast.
+          Questions about our junior padel programmes in Pretoria or Gauteng? Want to enrol your child? Reach out — our coaching team responds fast.
         </p>
       </section>
 
@@ -100,15 +153,24 @@ export default async function ContactPage() {
             </p>
           </div>
           <div className="rounded-2xl bg-lime/10 border border-lime/30 p-4 sm:p-5">
-            <h3 className="font-black text-navy mb-2">Fast Response</h3>
+            <h3 className="font-black text-navy mb-2">Serving Pretoria &amp; Gauteng</h3>
             <p className="text-sm leading-relaxed text-muted-foreground">
-              We aim to respond within 24 hours on business days. For urgent matters call or WhatsApp us directly.
+              We offer kids padel coaching at venues across Pretoria, Centurion, Midrand, Waterkloof, Menlyn, Lynnwood, Faerie Glen, Moreleta Park and Silver Lakes. We also deliver lessons at schools throughout Gauteng.
+            </p>
+            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+              We aim to respond within 24 hours on business days. For urgent enquiries call or WhatsApp us directly.
             </p>
             <Link
               href="/enrollment"
               className="mt-4 block rounded-xl bg-lime py-3 text-center text-sm font-black text-lime-foreground transition-all hover:scale-105 shadow-sm"
             >
-              Enroll Online Now
+              Enrol Online Now
+            </Link>
+            <Link
+              href="/clubs"
+              className="mt-2 block rounded-xl border border-lime/40 py-3 text-center text-sm font-bold text-navy transition-all hover:bg-lime/20"
+            >
+              Find a Club Near You
             </Link>
           </div>
         </div>
