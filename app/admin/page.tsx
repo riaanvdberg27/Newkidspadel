@@ -9,6 +9,7 @@ import { getCoaches } from "@/app/actions/coaches"
 import { adminGetAllReferrals, adminGetAllVouchers, adminGetCampaigns } from "@/app/actions/referrals"
 import { getAllPayments, getAllOrders, getAllSubscriptions, getAllWebhookLogs } from "@/app/actions/payments"
 import { getAllMoments } from "@/app/actions/moments"
+import { getAllSiteImages } from "@/app/actions/site-images"
 import { AdminTabs } from "@/components/admin/admin-tabs"
 
 export const metadata = {
@@ -20,7 +21,7 @@ export default async function AdminPage() {
     redirect("/admin/login")
   }
 
-  const [clubs, schools, packages, signups, contacts, coaches, referrals, vouchers, campaigns, allPayments, allOrders, allSubscriptions, webhookLogs, moments] =
+  const [clubs, schools, packages, signups, contacts, coaches, referrals, vouchers, campaigns, allPayments, allOrders, allSubscriptions, webhookLogs, moments, siteImages] =
     await Promise.all([
       getAllClubsAdmin(),
       getAllSchoolsAdmin(),
@@ -36,6 +37,7 @@ export default async function AdminPage() {
       getAllSubscriptions().catch(() => []),
       getAllWebhookLogs().catch(() => []),
       getAllMoments().catch(() => []),
+      getAllSiteImages().catch(() => []),
     ])
 
   return (
@@ -73,6 +75,7 @@ export default async function AdminPage() {
           allSubscriptions={allSubscriptions}
           webhookLogs={webhookLogs}
           moments={moments}
+          siteImages={siteImages}
         />
       </section>
     </main>

@@ -19,8 +19,10 @@ import { AdminSchoolsManager } from "@/components/admin/admin-schools-manager"
 import { AdminImpersonationManager } from "@/components/admin/admin-impersonation-manager"
 import { AdminMomentsManager } from "@/components/admin/admin-moments-manager"
 import type { PublicMoment } from "@/app/actions/moments"
+import { AdminSiteImagesManager } from "@/components/admin/admin-site-images-manager"
+import type { SiteImageRow } from "@/app/actions/site-images"
 
-type Tab = "clubs" | "schools" | "packages" | "signups" | "contact" | "coaches" | "referrals" | "payments" | "impersonate" | "moments"
+type Tab = "clubs" | "schools" | "packages" | "signups" | "contact" | "coaches" | "referrals" | "payments" | "impersonate" | "moments" | "site-images"
 
 export function AdminTabs({
   clubs,
@@ -37,6 +39,7 @@ export function AdminTabs({
   allSubscriptions,
   webhookLogs,
   moments,
+  siteImages,
 }: {
   clubs: Club[]
   schools: School[]
@@ -52,6 +55,7 @@ export function AdminTabs({
   allSubscriptions: Subscription[]
   webhookLogs: WebhookLog[]
   moments: PublicMoment[]
+  siteImages: SiteImageRow[]
 }) {
   const [tab, setTab] = useState<Tab>("clubs")
 
@@ -65,6 +69,7 @@ export function AdminTabs({
     { id: "referrals", label: "Referrals & Vouchers" },
     { id: "contact", label: "Contact Details" },
     { id: "moments", label: "Next Gen Moments" },
+    { id: "site-images", label: "Site Images" },
     { id: "impersonate", label: "View as Parent" },
   ]
 
@@ -103,6 +108,7 @@ export function AdminTabs({
         {tab === "referrals" && <AdminReferralsManager referrals={referrals} vouchers={vouchers} campaigns={campaigns} />}
         {tab === "contact" && <AdminContactManager initialContacts={contacts} />}
         {tab === "moments" && <AdminMomentsManager initialMoments={moments} />}
+        {tab === "site-images" && <AdminSiteImagesManager initialImages={siteImages} />}
         {tab === "impersonate" && <AdminImpersonationManager />}
       </div>
     </div>
