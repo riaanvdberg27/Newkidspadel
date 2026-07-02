@@ -128,14 +128,22 @@ export async function createEnrollment(input: EnrollmentInput) {
 
   const enrollmentId = inserted[0]?.id
 
-  // Record referral (best-effort — never block enrollment)
+  // Record referral (best-effort — never block enrollment).
+  // The referral status stays "pending" until first payment is confirmed via ITN.
   if (enrollmentId != null && input.referralCode) {
     try { await recordReferralOnEnrollment(input.referralCode, enrollmentId) } catch {}
   }
 
-  // Redeem voucher (best-effort)
+  // Store the voucherId on the enrollment so the ITN webhook can redeem it after
+  // payment is confirmed. We do NOT call redeemVoucher() here — the discount must
+  // only activate once the friend's enrollment payment succeeds.
   if (enrollmentId != null && input.voucherId) {
-    try { await redeemVoucher(input.voucherId, enrollmentId) } catch {}
+    try {
+      await db
+        .update(enrollments)
+        .set({ pendingVoucherId: input.voucherId })
+        .where(eq(enrollments.id, enrollmentId))
+    } catch {}
   }
 
   const slotLabel =

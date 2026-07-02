@@ -203,6 +203,14 @@ export const enrollments = pgTable("enrollments", {
   status: text("status").notNull().default("pending"),
   accountStatus: text("accountStatus").notNull().default("active"),
   onboardingComplete: boolean("onboardingComplete").notNull().default(false),
+  // Referral discount — set when a referral voucher is earned, cleared once applied to next payment
+  // e.g. 10 means the referrer gets 10% off their next month's debit order
+  pendingDiscountPercent: integer("pending_discount_percent").notNull().default(0),
+  discountAppliedAt: timestamp("discount_applied_at"),
+  // Voucher applied during enrollment (redeemed only after first payment succeeds).
+  // FK to vouchers(id) ON DELETE SET NULL — expressed in DB but not in Drizzle
+  // schema to avoid a circular reference (vouchers is declared after enrollments).
+  pendingVoucherId: integer("pending_voucher_id"),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
   updatedAt: timestamp("updatedAt").notNull().defaultNow(),
 })
