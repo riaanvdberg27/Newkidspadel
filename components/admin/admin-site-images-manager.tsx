@@ -13,6 +13,7 @@ export function AdminSiteImagesManager({
   const [uploading, setUploading] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [cacheBust, setCacheBust] = useState<Record<string, number>>({})
   const fileRefs = useRef<Record<string, HTMLInputElement | null>>({})
 
   async function handleUpload(imageKey: string, file: File) {
@@ -29,6 +30,7 @@ export function AdminSiteImagesManager({
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? "Upload failed")
 
+      const now = Date.now()
       setImages((prev) =>
         prev.map((img) =>
           img.imageKey === imageKey
@@ -36,6 +38,7 @@ export function AdminSiteImagesManager({
             : img
         )
       )
+      setCacheBust((prev) => ({ ...prev, [imageKey]: now }))
       setSuccess(imageKey)
       setTimeout(() => setSuccess(null), 3000)
     } catch (e: unknown) {
@@ -50,7 +53,11 @@ export function AdminSiteImagesManager({
   }
 
   function imageUrl(row: SiteImageRow): string {
-    if (row.blobUrl) return `/api/blob?p=${encodeURIComponent(row.blobUrl)}`
+    const bust = cacheBust[row.imageKey]
+    if (row.blobUrl) {
+      const base = `/api/blob?p=${encodeURIComponent(row.blobUrl)}`
+      return bust ? `${base}&v=${bust}` : base
+    }
     return `/images/${row.imageKey}.png`
   }
 
