@@ -10,7 +10,7 @@ export function PackagesSection({ packages }: { packages: PublicPackage[] }) {
   if (packages.length === 0) return null
 
   return (
-    <section className="py-16 overflow-hidden">
+    <section className="py-16 overflow-x-hidden w-full">
       <div className="px-4 text-center">
         <span className="inline-block rounded-full bg-lime/20 px-4 py-1.5 text-sm font-bold text-lime-foreground mb-3">
           Choose Your Path
