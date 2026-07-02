@@ -676,10 +676,7 @@ function ViewModal({
             }`}>
               {s.status}
             </span>
-            <PaymentBadge period={packagePeriod} status={s.paymentStatus} payfastPaymentId={s.payfastPaymentId} />
-            {s.payfastPaymentId && (
-              <span className="text-xs text-muted-foreground">ID: {s.payfastPaymentId}</span>
-            )}
+            <PaymentBadge status={s.paymentStatus} />
           </div>
 
           <div className="grid gap-5 sm:grid-cols-2">
