@@ -5,27 +5,14 @@ import { db } from "@/lib/db"
 import { impersonationLog, user } from "@/lib/db/schema"
 import { requireAdmin } from "@/lib/admin-auth"
 import { eq, or, ilike, desc } from "drizzle-orm"
+import {
+  IMPERSONATION_COOKIE,
+  type ImpersonationMode,
+  type ParentSearchResult,
+  type ActiveImpersonation,
+} from "@/lib/impersonation"
 
-// ---- Cookie name ----
-export const IMPERSONATION_COOKIE = "ngp_impersonate"
 
-// ---- Types ----
-export type ImpersonationMode = "view-only" | "full"
-
-export type ParentSearchResult = {
-  id: string
-  name: string
-  email: string
-  createdAt: Date
-}
-
-export type ActiveImpersonation = {
-  parentId: string
-  parentName: string
-  parentEmail: string
-  mode: ImpersonationMode
-  logId: number
-}
 
 // ---- Search parents ----
 export async function searchParents(query: string): Promise<ParentSearchResult[]> {

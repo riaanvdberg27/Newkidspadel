@@ -2,7 +2,7 @@
 
 import { useTransition } from "react"
 import { ShieldAlert, LogOut } from "lucide-react"
-import type { ImpersonationMode } from "@/app/actions/impersonation"
+import type { ImpersonationMode } from "@/lib/impersonation"
 
 interface Props {
   parentName: string

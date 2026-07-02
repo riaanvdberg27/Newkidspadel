@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { isAdminAuthenticated } from "@/lib/admin-auth"
-import { startImpersonation, type ImpersonationMode } from "@/app/actions/impersonation"
+import { startImpersonation } from "@/app/actions/impersonation"
+import type { ImpersonationMode } from "@/lib/impersonation"
 
 export async function POST(req: NextRequest) {
   if (!(await isAdminAuthenticated())) {

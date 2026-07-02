@@ -2,7 +2,8 @@
 
 import { useState, useTransition } from "react"
 import { Search, User, Eye, Pencil, LogIn, Shield, Clock, X, ChevronRight } from "lucide-react"
-import { searchParents, type ParentSearchResult, type ImpersonationMode } from "@/app/actions/impersonation"
+import { searchParents } from "@/app/actions/impersonation"
+import type { ParentSearchResult, ImpersonationMode } from "@/lib/impersonation"
 
 type Step = "search" | "confirm"
 
