@@ -17,8 +17,10 @@ import type { AdminReferralRow, AdminVoucherRow } from "@/app/actions/referrals"
 import type { Order, Payment, Subscription, WebhookLog, School } from "@/lib/db/schema"
 import { AdminSchoolsManager } from "@/components/admin/admin-schools-manager"
 import { AdminImpersonationManager } from "@/components/admin/admin-impersonation-manager"
+import { AdminMomentsManager } from "@/components/admin/admin-moments-manager"
+import type { PublicMoment } from "@/app/actions/moments"
 
-type Tab = "clubs" | "schools" | "packages" | "signups" | "contact" | "coaches" | "referrals" | "payments" | "impersonate"
+type Tab = "clubs" | "schools" | "packages" | "signups" | "contact" | "coaches" | "referrals" | "payments" | "impersonate" | "moments"
 
 export function AdminTabs({
   clubs,
@@ -34,6 +36,7 @@ export function AdminTabs({
   allOrders,
   allSubscriptions,
   webhookLogs,
+  moments,
 }: {
   clubs: Club[]
   schools: School[]
@@ -48,6 +51,7 @@ export function AdminTabs({
   allOrders: Order[]
   allSubscriptions: Subscription[]
   webhookLogs: WebhookLog[]
+  moments: PublicMoment[]
 }) {
   const [tab, setTab] = useState<Tab>("clubs")
 
@@ -60,6 +64,7 @@ export function AdminTabs({
     { id: "payments", label: "Payments" },
     { id: "referrals", label: "Referrals & Vouchers" },
     { id: "contact", label: "Contact Details" },
+    { id: "moments", label: "Next Gen Moments" },
     { id: "impersonate", label: "View as Parent" },
   ]
 
@@ -97,6 +102,7 @@ export function AdminTabs({
         )}
         {tab === "referrals" && <AdminReferralsManager referrals={referrals} vouchers={vouchers} campaigns={campaigns} />}
         {tab === "contact" && <AdminContactManager initialContacts={contacts} />}
+        {tab === "moments" && <AdminMomentsManager initialMoments={moments} />}
         {tab === "impersonate" && <AdminImpersonationManager />}
       </div>
     </div>

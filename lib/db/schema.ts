@@ -203,6 +203,14 @@ export const enrollments = pgTable("enrollments", {
   status: text("status").notNull().default("pending"),
   accountStatus: text("accountStatus").notNull().default("active"),
   onboardingComplete: boolean("onboardingComplete").notNull().default(false),
+  // Referral discount — set when a referral voucher is earned, cleared once applied to next payment
+  // e.g. 10 means the referrer gets 10% off their next month's debit order
+  pendingDiscountPercent: integer("pending_discount_percent").notNull().default(0),
+  discountAppliedAt: timestamp("discount_applied_at"),
+  // Voucher applied during enrollment (redeemed only after first payment succeeds).
+  // FK to vouchers(id) ON DELETE SET NULL — expressed in DB but not in Drizzle
+  // schema to avoid a circular reference (vouchers is declared after enrollments).
+  pendingVoucherId: integer("pending_voucher_id"),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
   updatedAt: timestamp("updatedAt").notNull().defaultNow(),
 })
@@ -524,3 +532,22 @@ export const impersonationLog = pgTable("impersonation_log", {
 })
 
 export type ImpersonationLog = typeof impersonationLog.$inferSelect
+
+// ---- Next Gen Moments (gallery) ----
+
+export const moments = pgTable("moments", {
+  id: serial("id").primaryKey(),
+  title: text("title").notNull(),
+  caption: text("caption"),
+  mediaUrl: text("media_url").notNull(),
+  // 'image' | 'video'
+  mediaType: text("media_type").notNull().default("image"),
+  thumbnailUrl: text("thumbnail_url"),
+  // 'general' | 'clubs' | 'schools' | 'tournaments'
+  category: text("category").notNull().default("general"),
+  published: boolean("published").notNull().default(true),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+})
+
+export type Moment = typeof moments.$inferSelect

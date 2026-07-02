@@ -12,6 +12,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { enrollments } from "@/lib/db/schema"
 import { eq } from "drizzle-orm"
+import { redeemVoucher } from "@/app/actions/referrals"
 import { verifyItnSignature } from "@/lib/payfast"
 import { completeReferralForEnrollment } from "@/app/actions/referrals"
 
@@ -96,9 +97,28 @@ export async function POST(req: NextRequest) {
 
   console.log("[PayFast ITN] DB updated rows:", updated.length, "for reference:", m_payment_id, "-> paymentStatus:", newPaymentStatus)
 
-  // Complete any pending referral for this enrollment and issue voucher to referrer
   if (payment_status === "COMPLETE" && updated[0]?.id) {
-    try { await completeReferralForEnrollment(updated[0].id) } catch {}
+    const enrollmentId = updated[0].id
+
+    // Complete the referral — marks it done, issues referrer their voucher,
+    // and stamps pendingDiscountPercent on the referrer's enrollment.
+    try { await completeReferralForEnrollment(enrollmentId) } catch {}
+
+    // Redeem the friend's own voucher deferred from enrollment creation.
+    try {
+      const [fresh] = await db
+        .select({ pendingVoucherId: enrollments.pendingVoucherId })
+        .from(enrollments)
+        .where(eq(enrollments.id, enrollmentId))
+        .limit(1)
+      if (fresh?.pendingVoucherId) {
+        await redeemVoucher(fresh.pendingVoucherId, enrollmentId)
+        await db
+          .update(enrollments)
+          .set({ pendingVoucherId: null })
+          .where(eq(enrollments.id, enrollmentId))
+      }
+    } catch {}
   }
 
   return ok()

@@ -43,6 +43,7 @@ export type AdminSignup = {
   payfastPaymentId: string | null
   signedAt: string | null
   createdAt: string | null
+  pendingDiscountPercent: number
 }
 
 export type UpdateSignupInput = {
@@ -97,6 +98,7 @@ export async function getAllSignups(): Promise<AdminSignup[]> {
     payfastPaymentId: r.payfastPaymentId ?? null,
     signedAt: r.signedAt ? r.signedAt.toISOString() : null,
     createdAt: r.createdAt ? r.createdAt.toISOString() : null,
+    pendingDiscountPercent: r.pendingDiscountPercent ?? 0,
   }))
 }
 

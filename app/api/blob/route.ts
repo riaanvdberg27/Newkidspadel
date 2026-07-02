@@ -37,14 +37,20 @@ export async function GET(request: NextRequest) {
       return new NextResponse("Blob fetch failed", { status: upstream.status })
     }
 
-    const contentType = upstream.headers.get("content-type") ?? "image/jpeg"
+    const contentType = upstream.headers.get("content-type") ?? "application/octet-stream"
+    const contentLength = upstream.headers.get("content-length")
+    const isVideo = contentType.startsWith("video/")
 
-    return new NextResponse(upstream.body, {
-      headers: {
-        "Content-Type": contentType,
-        "Cache-Control": "public, max-age=86400, stale-while-revalidate=604800",
-      },
-    })
+    const headers: Record<string, string> = {
+      "Content-Type": contentType,
+      // Videos: no long caching — they can be large and change
+      "Cache-Control": isVideo
+        ? "public, max-age=3600"
+        : "public, max-age=86400, stale-while-revalidate=604800",
+    }
+    if (contentLength) headers["Content-Length"] = contentLength
+
+    return new NextResponse(upstream.body, { headers })
   } catch (error) {
     console.error("[blob proxy] error:", error)
     return new NextResponse("Not found", { status: 404 })

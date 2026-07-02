@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation"
 import {
   FileText, Mail, RefreshCw, Check, X, Pencil,
   ChevronDown, ChevronUp, Trash2, Plus, Filter, Search, Link2, UserPlus, Eye,
-  CreditCard, Building2, Landmark,
+  CreditCard, Building2, Landmark, Tag,
 } from "lucide-react"
 import {
   type AdminSignup,
@@ -19,6 +19,7 @@ import {
   createSignup,
   searchUsers,
 } from "@/app/actions/admin-signups"
+import { markReferralDiscountApplied } from "@/app/actions/referrals"
 import type { CoachRow } from "@/app/actions/coaches"
 import type { PublicPackage } from "@/app/actions/packages"
 import type { Club } from "@/lib/db/schema"
@@ -222,6 +223,7 @@ export function AdminSignupsManager({
           payfastPaymentId: null,
           signedAt: null,
           createdAt: new Date().toISOString(),
+          pendingDiscountPercent: 0,
         }
         setSignups((prev) => [newSignup, ...prev])
         setShowAddModal(false)
@@ -445,6 +447,15 @@ export function AdminSignupsManager({
                   {/* Payment */}
                   <td className="px-2 py-2">
                     <PaymentBadge status={s.paymentStatus} />
+                    {(s.pendingDiscountPercent ?? 0) > 0 && (
+                      <span
+                        className="mt-0.5 flex items-center gap-0.5 rounded-full bg-lime/20 px-1.5 py-0.5 text-[9px] font-bold text-lime-foreground"
+                        title="Referral discount pending on next debit order"
+                      >
+                        <Tag className="h-2.5 w-2.5" />
+                        {s.pendingDiscountPercent}% off next month
+                      </span>
+                    )}
                   </td>
                   {/* Actions — icon-only with title tooltips */}
                   <td className="px-2 py-2">
@@ -452,6 +463,19 @@ export function AdminSignupsManager({
                       <IconBtn title="Edit sign-up" onClick={() => setEditing(s)}>
                         <Pencil className="h-3.5 w-3.5" />
                       </IconBtn>
+                      {(s.pendingDiscountPercent ?? 0) > 0 && (
+                        <IconBtn
+                          title={`Mark ${s.pendingDiscountPercent}% referral discount as applied to debit order`}
+                          onClick={async () => {
+                            startTransition(async () => {
+                              await markReferralDiscountApplied(s.id)
+                            })
+                          }}
+                          variant="success"
+                        >
+                          <Tag className="h-3.5 w-3.5" />
+                        </IconBtn>
+                      )}
                       <IconBtn
                         title={s.contractUrl ? "View contract" : "Generate PDF"}
                         onClick={() => handleContract(s)}
@@ -603,12 +627,8 @@ function IconBtn({
   onClick,
   disabled,
   variant = "ghost",
-}: {
-  children: React.ReactNode
-  title: string
-  onClick: () => void
-  disabled?: boolean
-  variant?: "ghost" | "danger"
+}: React.ButtonHTMLAttributes<HTMLButtonElement> & {
+  variant?: "ghost" | "danger" | "success"
 }) {
   return (
     <button
@@ -619,6 +639,8 @@ function IconBtn({
       className={`inline-flex h-7 w-7 items-center justify-center rounded-md transition-colors disabled:opacity-40 ${
         variant === "danger"
           ? "text-red-500 hover:bg-red-50 hover:text-red-600"
+          : variant === "success"
+          ? "text-lime-foreground hover:bg-lime/20"
           : "text-muted-foreground hover:bg-muted hover:text-navy"
       }`}
     >

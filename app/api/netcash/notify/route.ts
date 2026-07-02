@@ -289,9 +289,32 @@ export async function POST(req: NextRequest) {
         },
       })
 
-      // Complete any pending referral (best-effort, non-blocking)
+      // Complete any pending referral — marks it "complete", issues the referrer
+      // their voucher, and stamps pendingDiscountPercent on the referrer's enrollment.
+      // Only fires after payment is verified. (best-effort, non-blocking)
       try {
         await completeReferralForEnrollment(enrollmentRow.id)
+      } catch {}
+
+      // Redeem the friend's own voucher (if they applied one at enrollment).
+      // This was deferred from enrollment creation to here so it only fires
+      // after the friend's payment is actually confirmed.
+      try {
+        const freshEnrollment = await db
+          .select({ pendingVoucherId: enrollments.pendingVoucherId })
+          .from(enrollments)
+          .where(eq(enrollments.id, enrollmentRow.id))
+          .limit(1)
+        const pendingVoucherId = freshEnrollment[0]?.pendingVoucherId
+        if (pendingVoucherId) {
+          const { redeemVoucher } = await import("@/app/actions/referrals")
+          await redeemVoucher(pendingVoucherId, enrollmentRow.id)
+          // Clear the pending voucher reference now that it has been redeemed
+          await db
+            .update(enrollments)
+            .set({ pendingVoucherId: null })
+            .where(eq(enrollments.id, enrollmentRow.id))
+        }
       } catch {}
 
     } else if (itn.declined) {

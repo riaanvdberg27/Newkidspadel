@@ -469,6 +469,25 @@ function PackageForm({
         />
       </Field>
 
+      {/* School package toggle — controls all sections below */}
+      <div className={`flex items-center gap-3 rounded-md border px-4 py-3 ${isSchool ? "border-lime bg-lime/10" : "border-border bg-card"}`}>
+        <input
+          type="checkbox"
+          id="isSchool"
+          checked={isSchool}
+          onChange={(e) => setIsSchool(e.target.checked)}
+          className="h-5 w-5 accent-lime"
+        />
+        <label htmlFor="isSchool" className="cursor-pointer">
+          <p className="text-sm font-semibold text-navy">School package</p>
+          <p className="text-xs text-muted-foreground">
+            {isSchool
+              ? "This package is for schools only — club and slot options are hidden."
+              : "Tick this if the package is for schools, not clubs."}
+          </p>
+        </label>
+      </div>
+
       {/* Slot type toggle — hidden for school packages */}
       {!isSchool && (
         <Field label="Booking slot type">
@@ -754,15 +773,7 @@ function PackageForm({
           />
           <span className="text-sm font-medium text-navy">Published</span>
         </label>
-        <label className="flex items-center gap-2 pt-7">
-          <input
-            type="checkbox"
-            checked={isSchool}
-            onChange={(e) => setIsSchool(e.target.checked)}
-            className="h-5 w-5 accent-lime"
-          />
-          <span className="text-sm font-medium text-navy">School package</span>
-        </label>
+
       </div>
 
       <div className="flex justify-end gap-2 border-t border-border pt-4">
