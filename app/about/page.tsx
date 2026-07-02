@@ -7,9 +7,8 @@ import { BreadcrumbSchema } from "@/components/breadcrumb-schema"
 import { getPublishedPackages } from "@/app/actions/packages"
 import { getPublishedCoaches } from "@/app/actions/coaches"
 
-// Revalidate every 5 minutes — coaches and packages change infrequently.
-// Admin mutations already call revalidatePath so changes propagate immediately.
-export const revalidate = 300
+// Always render at request time — data comes from a live database.
+export const dynamic = "force-dynamic"
 
 export const metadata: Metadata = {
   title: "About NextGen Padel Academy | Junior Padel Coaching Pretoria",

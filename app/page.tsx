@@ -9,9 +9,8 @@ import { HomeFaqSection } from "@/components/home-faq-section"
 import { getPublishedPackages } from "@/app/actions/packages"
 import { getPublishedCoaches } from "@/app/actions/coaches"
 
-// Revalidate every 5 minutes — packages and coaches change infrequently.
-// Admin mutations already call revalidatePath("/") so changes propagate immediately.
-export const revalidate = 300
+// Always render at request time — data comes from a live database.
+export const dynamic = "force-dynamic"
 
 export const metadata: Metadata = {
   title: "Kids Padel Coaching in Pretoria — Ages 4–17 | Brooklyn, Menlo Park, Moreleta Park",
