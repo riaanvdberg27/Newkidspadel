@@ -69,7 +69,6 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
   const [parent, setParent] = useState({ firstName: "", lastName: "", email: "", mobile: "", password: "" })
   const [emergency, setEmergency] = useState({ name: "", phone: "" })
 
-  }, [clubId])
   const [prefs, setPrefs] = useState<Prefs>({
     prefEmail: true,
     prefWhatsapp: false,
