@@ -25,6 +25,8 @@ export async function GET(request: NextRequest) {
   const p = request.nextUrl.searchParams.get("p")
   if (!p) return NextResponse.json({ error: "Missing pathname" }, { status: 400 })
 
+  // `v` is a cache-busting version param — ignored for processing, only used
+  // to let browsers discard stale immutably-cached responses after proxy updates.
   const wParam = request.nextUrl.searchParams.get("w")
   const requestedWidth = wParam ? Number.parseInt(wParam, 10) : null
   const width =
