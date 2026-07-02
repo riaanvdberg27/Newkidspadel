@@ -16,18 +16,29 @@ const CATEGORIES = [
 // Group an ordered list of moments into albums by their shared title.
 // Each unique title (within the filtered set) becomes one album shown with a
 // heading + caption once, followed by a masonry grid of its photos.
+// Groups moments into albums by their shared title + category.
+// The order reflects first-seen insertion so photos appear in upload order.
+// Two batches with the same title but different categories stay separate.
 function groupByTitle(items: PublicMoment[]) {
+  // Use an ordered array of keys so insertion order is preserved.
+  const order: string[] = []
   const map = new Map<string, PublicMoment[]>()
   for (const m of items) {
-    const key = m.title ?? ""
-    if (!map.has(key)) map.set(key, [])
+    const key = `${m.category}::${m.title ?? ""}`
+    if (!map.has(key)) {
+      order.push(key)
+      map.set(key, [])
+    }
     map.get(key)!.push(m)
   }
-  return Array.from(map.entries()).map(([title, photos]) => ({
-    title,
-    caption: photos[0]?.caption ?? null,
-    photos,
-  }))
+  return order.map((key) => {
+    const photos = map.get(key)!
+    return {
+      title: photos[0]?.title ?? "",
+      caption: photos[0]?.caption ?? null,
+      photos,
+    }
+  })
 }
 
 export function MomentsGallery({ items }: { items: PublicMoment[] }) {
