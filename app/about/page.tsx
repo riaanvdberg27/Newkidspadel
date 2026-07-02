@@ -6,6 +6,7 @@ import { PackagesSection } from "@/components/packages-section"
 import { BreadcrumbSchema } from "@/components/breadcrumb-schema"
 import { getPublishedPackages } from "@/app/actions/packages"
 import { getPublishedCoaches } from "@/app/actions/coaches"
+import { getSiteImageMap } from "@/app/actions/site-images"
 
 // Always render at request time — data comes from a live database.
 export const dynamic = "force-dynamic"
@@ -24,10 +25,16 @@ export const metadata: Metadata = {
 }
 
 export default async function AboutPage() {
-  const [packages, coaches] = await Promise.all([
+  const [packages, coaches, siteImageMap] = await Promise.all([
     getPublishedPackages(),
     getPublishedCoaches(),
+    getSiteImageMap(),
   ])
+
+  function img(key: string): string {
+    const blobUrl = siteImageMap[key]
+    return blobUrl ? `/api/blob?p=${encodeURIComponent(blobUrl)}` : `/images/${key}.png`
+  }
   return (
     <main>
       <BreadcrumbSchema crumbs={[{ name: "About", href: "/about" }]} />
@@ -49,13 +56,11 @@ export default async function AboutPage() {
       <section className="mx-auto max-w-5xl px-4 py-10 sm:py-16">
         <div className="flex flex-col gap-8 sm:grid sm:grid-cols-2 sm:items-center">
           <div className="relative aspect-[4/3] w-full overflow-hidden rounded-2xl shadow-xl">
-            <Image
-              src="/images/kids-playing-padel.png"
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={img("kids-playing-padel")}
               alt="Children playing padel at NextGen Padel Academy in Pretoria"
-              fill
-              loading="lazy"
-              sizes="(min-width: 640px) 50vw, 100vw"
-              className="object-cover"
+              className="h-full w-full object-cover"
             />
           </div>
           <div>
@@ -90,23 +95,19 @@ export default async function AboutPage() {
       <section className="mx-auto max-w-6xl px-4 pb-4" aria-label="Academy photos">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="relative aspect-video overflow-hidden rounded-2xl">
-            <Image
-              src="/images/coach-kids.png"
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={img("coach-kids")}
               alt="NextGen Padel Academy coach working with junior players in Pretoria"
-              fill
-              loading="lazy"
-              sizes="(min-width: 640px) 50vw, 100vw"
-              className="object-cover"
+              className="h-full w-full object-cover"
             />
           </div>
           <div className="relative aspect-video overflow-hidden rounded-2xl">
-            <Image
-              src="/images/padel-action.png"
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={img("padel-action")}
               alt="Junior padel action during a coaching session at NextGen Padel Academy Pretoria"
-              fill
-              loading="lazy"
-              sizes="(min-width: 640px) 50vw, 100vw"
-              className="object-cover"
+              className="h-full w-full object-cover"
             />
           </div>
         </div>

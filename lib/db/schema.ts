@@ -551,3 +551,18 @@ export const moments = pgTable("moments", {
 })
 
 export type Moment = typeof moments.$inferSelect
+
+// ---- Site Images (admin-managed images for Home and About pages) ----
+
+export const siteImages = pgTable("site_images", {
+  id: serial("id").primaryKey(),
+  // Stable key that the page code references, e.g. 'hero-kids'
+  imageKey: text("image_key").notNull().unique(),
+  label: text("label").notNull(),
+  description: text("description"),
+  // Null means "use the local /images/<key>.png fallback"
+  blobUrl: text("blob_url"),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+})
+
+export type SiteImage = typeof siteImages.$inferSelect

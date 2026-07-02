@@ -8,6 +8,7 @@ import { ClubsSection } from "@/components/clubs-section"
 import { HomeFaqSection } from "@/components/home-faq-section"
 import { getPublishedPackages } from "@/app/actions/packages"
 import { getPublishedCoaches } from "@/app/actions/coaches"
+import { getSiteImageMap } from "@/app/actions/site-images"
 
 // Always render at request time — data comes from a live database.
 export const dynamic = "force-dynamic"
@@ -74,10 +75,17 @@ const sportsClubSchema = {
 }
 
 export default async function HomePage() {
-  const [packages, coaches] = await Promise.all([
+  const [packages, coaches, siteImageMap] = await Promise.all([
     getPublishedPackages(),
     getPublishedCoaches(),
+    getSiteImageMap(),
   ])
+
+  // Resolve each image: use the admin-uploaded blob URL (proxied) or fall back to the local file
+  function img(key: string): string {
+    const blobUrl = siteImageMap[key]
+    return blobUrl ? `/api/blob?p=${encodeURIComponent(blobUrl)}` : `/images/${key}.png`
+  }
   return (
     <main>
       <script
@@ -132,12 +140,12 @@ export default async function HomePage() {
 
             {/* Right — mascot image, sits in its own column so it never overlaps text */}
             <div className="flex items-end justify-center self-end pointer-events-none select-none">
-              <Image
-                src="/images/hero-kids.png"
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={img("hero-kids")}
                 alt="Children learning padel at NextGen Padel Academy Pretoria"
                 width={900}
                 height={1100}
-                priority
                 className="w-full max-w-[260px] sm:max-w-[340px] lg:max-w-[420px] h-auto object-contain object-bottom"
               />
             </div>
@@ -170,23 +178,19 @@ export default async function HomePage() {
       <section className="mx-auto max-w-6xl px-4 pb-4" aria-label="Academy photos">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <div className="relative aspect-video overflow-hidden rounded-2xl sm:col-span-2">
-            <Image
-              src="/images/kids-playing-padel.png"
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={img("kids-playing-padel")}
               alt="Children playing padel at a NextGen Padel Academy session in Pretoria"
-              fill
-              loading="lazy"
-              sizes="(min-width: 640px) 66vw, 100vw"
-              className="object-cover"
+              className="h-full w-full object-cover"
             />
           </div>
           <div className="relative aspect-video overflow-hidden rounded-2xl">
-            <Image
-              src="/images/coach-kids.png"
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={img("coach-kids")}
               alt="NextGen Padel Academy coach guiding junior players in Pretoria"
-              fill
-              loading="lazy"
-              sizes="(min-width: 640px) 33vw, 100vw"
-              className="object-cover"
+              className="h-full w-full object-cover"
             />
           </div>
         </div>
