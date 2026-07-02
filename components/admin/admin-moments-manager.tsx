@@ -142,7 +142,7 @@ function MomentForm({
     if (!title.trim() || mediaItems.length === 0) return
     const multiple = mediaItems.length > 1
     const base = Number(sortOrder)
-    const inputs: MomentInput[] = mediaItems.map((m) => ({
+    const inputs: MomentInput[] = mediaItems.map((m, i) => ({
       title: title.trim(),
       caption: caption.trim() || undefined,
       mediaUrl: m.url,
