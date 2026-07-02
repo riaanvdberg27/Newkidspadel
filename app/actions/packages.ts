@@ -7,6 +7,8 @@ import { packages, packageSlots, packageClubs, clubs, enrollments } from "@/lib/
 import { requireAdmin } from "@/lib/admin-auth"
 import type { PackageSlot } from "@/lib/db/schema"
 
+export type FeatureItem = { type: "heading" | "bullet"; text: string }
+
 export type PublicPackage = {
   id: number
   slug: string
@@ -14,7 +16,7 @@ export type PublicPackage = {
   price: number
   period: string
   tagline: string
-  features: string[]
+  features: FeatureItem[]
   description: string
   popular: boolean
   published: boolean
@@ -27,6 +29,20 @@ export type PublicPackage = {
 export type CustomSlot = Pick<PackageSlot, "id" | "packageId" | "clubId" | "weekday" | "hour" | "capacity" | "ageGroup">
 
 function toPublic(row: typeof packages.$inferSelect, clubIds: number[] = []): PublicPackage {
+  // Support both old format (string[]) and new format (FeatureItem[])
+  let features: FeatureItem[] = []
+  if (Array.isArray(row.features)) {
+    const raw = row.features as unknown[]
+    features = raw.map((f) => {
+      if (typeof f === "string") {
+        // Legacy: convert old string to bullet item
+        return { type: "bullet", text: f }
+      }
+      // New format: already a FeatureItem
+      return f as FeatureItem
+    })
+  }
+
   return {
     id: row.id,
     slug: row.slug,
@@ -34,7 +50,7 @@ function toPublic(row: typeof packages.$inferSelect, clubIds: number[] = []): Pu
     price: row.price,
     period: row.period,
     tagline: row.tagline,
-    features: Array.isArray(row.features) ? (row.features as string[]) : [],
+    features,
     description: row.description ?? "",
     popular: row.popular,
     published: row.published,
@@ -210,7 +226,7 @@ export type PackageInput = {
   price: number
   period: string
   tagline: string
-  features: string[]
+  features: FeatureItem[]
   description: string
   popular: boolean
   published: boolean
@@ -233,7 +249,7 @@ function clean(input: PackageInput) {
     price: Math.max(0, Math.round(input.price)),
     period: input.period || "monthly",
     tagline: input.tagline.trim(),
-    features: input.features.map((f) => f.trim()).filter(Boolean),
+    features: input.features.map((f) => ({ type: f.type, text: f.text.trim() })).filter((f) => f.text),
     description: input.description.trim(),
     popular: input.popular,
     published: input.published,

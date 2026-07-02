@@ -883,16 +883,22 @@ function PackagePicker({ packages, onSelect }: { packages: PublicPackage[]; onSe
               {/* White body */}
               <div className="bg-card p-5">
                 {pkg.features.length > 0 && (
-                  <ul className="space-y-2">
-                    {pkg.features.slice(0, 4).map((f) => (
-                      <li key={f} className="flex items-start gap-2 text-sm">
-                        <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-lime/20">
-                          <Check className="h-2.5 w-2.5 text-lime-foreground" />
-                        </span>
-                        <span>{f}</span>
-                      </li>
+                  <div className="space-y-2">
+                    {pkg.features.slice(0, 4).map((item, idx) => (
+                      <div key={idx}>
+                        {item.type === "heading" ? (
+                          <h5 className="font-semibold text-navy text-xs mb-1">{item.text}</h5>
+                        ) : (
+                          <div className="flex items-start gap-2 text-sm">
+                            <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-lime/20">
+                              <Check className="h-2.5 w-2.5 text-lime-foreground" />
+                            </span>
+                            <span>{item.text}</span>
+                          </div>
+                        )}
+                      </div>
                     ))}
-                  </ul>
+                  </div>
                 )}
                 <span className="mt-5 flex items-center justify-center gap-1.5 rounded-xl bg-lime py-3 text-sm font-black text-lime-foreground transition-all group-hover:bg-navy group-hover:text-white">
                   Select &amp; Continue

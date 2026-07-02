@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
-import { Pencil, Trash2, Plus, Check } from "lucide-react"
+import { Pencil, Trash2, Plus, Check, X } from "lucide-react"
 import {
   createPackage,
   updatePackage,
@@ -11,6 +11,7 @@ import {
   type PublicPackage,
   type PackageInput,
   type CustomSlot,
+  type FeatureItem,
 } from "@/app/actions/packages"
 import { SLOT_HOURS, formatHour, formatEndHour } from "@/lib/slots"
 import { AGE_GROUPS, type AgeGroup, type Club } from "@/lib/db/schema"
@@ -30,7 +31,7 @@ const EMPTY: PackageInput = {
   price: 0,
   period: "monthly",
   tagline: "",
-  features: [],
+  features: [] as FeatureItem[],
   description: "",
   popular: false,
   published: true,
@@ -136,14 +137,20 @@ export function AdminPackageManager({
                 </p>
                 <p className="text-sm text-muted-foreground">{pkg.tagline}</p>
                 {pkg.features.length > 0 && (
-                  <ul className="mt-2 space-y-0.5">
-                    {pkg.features.map((f) => (
-                      <li key={f} className="flex items-start gap-2 text-sm text-navy">
-                        <Check className="mt-0.5 h-4 w-4 flex-shrink-0 text-lime" />
-                        {f}
-                      </li>
+                  <div className="mt-2 space-y-0.5">
+                    {pkg.features.map((item, idx) => (
+                      <div key={idx}>
+                        {item.type === "heading" ? (
+                          <p className="text-sm font-semibold text-navy">{item.text}</p>
+                        ) : (
+                          <div className="flex items-start gap-2 text-sm text-navy">
+                            <Check className="mt-0.5 h-4 w-4 flex-shrink-0 text-lime" />
+                            {item.text}
+                          </div>
+                        )}
+                      </div>
                     ))}
-                  </ul>
+                  </div>
                 )}
                 {pkg.description && (
                   <p className="mt-2 text-sm text-muted-foreground">{pkg.description}</p>
@@ -250,7 +257,7 @@ function PackageForm({
   const [price, setPrice] = useState(String(pkg?.price ?? 0))
   const [period, setPeriod] = useState(pkg?.period ?? "monthly")
   const [tagline, setTagline] = useState(pkg?.tagline ?? "")
-  const [featuresText, setFeaturesText] = useState((pkg?.features ?? []).join("\n"))
+  const [features, setFeatures] = useState<FeatureItem[]>(pkg?.features ?? [])
   const [description, setDescription] = useState(pkg?.description ?? "")
   const [popular, setPopular] = useState(pkg?.popular ?? false)
   const [published, setPublished] = useState(pkg?.published ?? true)
@@ -327,7 +334,7 @@ function PackageForm({
       price: Math.max(0, Number(price)),
       period,
       tagline,
-      features: featuresText.split("\n").map((f) => f.trim()).filter(Boolean),
+      features,
       description,
       popular,
       published,
@@ -394,14 +401,50 @@ function PackageForm({
         />
       </Field>
 
-      <Field label="Features (one per line — each gets a tick mark on the homepage)">
-        <textarea
-          value={featuresText}
-          onChange={(e) => setFeaturesText(e.target.value)}
-          rows={5}
-          placeholder={"4 coaching sessions per month\nBalls and court fees included"}
-          className="mt-2 w-full rounded-md border border-border bg-background px-3 py-2 font-mono text-sm outline-none focus:border-lime"
-        />
+      <Field label="Features (add headings and bullets)">
+        <div className="mt-2 space-y-2">
+          {features.map((item, idx) => (
+            <div key={idx} className="flex items-center gap-2">
+              <select
+                value={item.type}
+                onChange={(e) => {
+                  const next = [...features]
+                  next[idx] = { ...item, type: e.target.value as "heading" | "bullet" }
+                  setFeatures(next)
+                }}
+                className="w-24 rounded-md border border-border bg-background px-2 py-2 text-sm outline-none focus:border-lime"
+              >
+                <option value="bullet">Bullet</option>
+                <option value="heading">Heading</option>
+              </select>
+              <input
+                type="text"
+                value={item.text}
+                onChange={(e) => {
+                  const next = [...features]
+                  next[idx] = { ...item, text: e.target.value }
+                  setFeatures(next)
+                }}
+                placeholder={item.type === "heading" ? "Section title..." : "Bullet text..."}
+                className="flex-1 rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-lime"
+              />
+              <button
+                type="button"
+                onClick={() => setFeatures(features.filter((_, i) => i !== idx))}
+                className="text-muted-foreground hover:text-red-600"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          ))}
+          <button
+            type="button"
+            onClick={() => setFeatures([...features, { type: "bullet", text: "" }])}
+            className="flex items-center gap-2 text-sm text-lime-foreground hover:text-lime"
+          >
+            <Plus className="h-4 w-4" /> Add Item
+          </button>
+        </div>
       </Field>
 
       <Field label="Additional description (free text — displayed below features)">
