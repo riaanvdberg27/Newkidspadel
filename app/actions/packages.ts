@@ -24,6 +24,8 @@ export type PublicPackage = {
   sortOrder: number
   /** IDs of clubs this package is restricted to. Empty = available at all clubs. */
   clubIds: number[]
+  /** If true, this is a school-based package — wizard shows school picker instead of club picker. */
+  isSchool: boolean
 }
 
 export type CustomSlot = Pick<PackageSlot, "id" | "packageId" | "clubId" | "weekday" | "hour" | "capacity" | "ageGroup">
@@ -57,6 +59,7 @@ function toPublic(row: typeof packages.$inferSelect, clubIds: number[] = []): Pu
     slotType: row.slotType ?? "standard",
     sortOrder: row.sortOrder,
     clubIds,
+    isSchool: row.isSchool ?? false,
   }
 }
 
@@ -236,6 +239,8 @@ export type PackageInput = {
   customSlots?: { clubId: number; weekday: number; hour: number; capacity: number; ageGroup: string }[]
   /** Club IDs this package is restricted to. Empty array = available everywhere. */
   clubIds?: number[]
+  /** If true, wizard shows school picker instead of club picker. */
+  isSchool?: boolean
 }
 
 function clean(input: PackageInput) {
@@ -255,6 +260,7 @@ function clean(input: PackageInput) {
     published: input.published,
     slotType: input.slotType === "custom" ? "custom" : "standard",
     sortOrder: Math.round(input.sortOrder),
+    isSchool: input.isSchool ?? false,
   }
 }
 

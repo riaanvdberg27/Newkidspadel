@@ -38,6 +38,7 @@ const EMPTY: PackageInput = {
   slotType: "standard",
   sortOrder: 0,
   customSlots: [],
+  isSchool: false,
 }
 
 export function AdminPackageManager({
@@ -261,6 +262,7 @@ function PackageForm({
   const [description, setDescription] = useState(pkg?.description ?? "")
   const [popular, setPopular] = useState(pkg?.popular ?? false)
   const [published, setPublished] = useState(pkg?.published ?? true)
+  const [isSchool, setIsSchool] = useState(pkg?.isSchool ?? false)
   const [slotType, setSlotType] = useState(pkg?.slotType ?? "standard")
   const [sortOrder, setSortOrder] = useState(String(pkg?.sortOrder ?? 0))
   const [activeAgeGroup, setActiveAgeGroup] = useState<AgeGroup>("4-8")
@@ -339,6 +341,7 @@ function PackageForm({
       popular,
       published,
       slotType,
+      isSchool,
       sortOrder: Number(sortOrder),
       customSlots: slotType === "custom" ? customSlotList : [],
       clubIds: selectedClubIds,
@@ -689,6 +692,15 @@ function PackageForm({
             className="h-5 w-5 accent-lime"
           />
           <span className="text-sm font-medium text-navy">Published</span>
+        </label>
+        <label className="flex items-center gap-2 pt-7">
+          <input
+            type="checkbox"
+            checked={isSchool}
+            onChange={(e) => setIsSchool(e.target.checked)}
+            className="h-5 w-5 accent-lime"
+          />
+          <span className="text-sm font-medium text-navy">School package</span>
         </label>
       </div>
 

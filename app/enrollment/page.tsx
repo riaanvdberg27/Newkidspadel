@@ -2,9 +2,14 @@ import { Suspense } from "react"
 import { OnboardingWizard } from "@/components/onboarding-wizard"
 import { getPublishedClubs } from "@/app/actions/clubs"
 import { getPublishedPackages } from "@/app/actions/packages"
+import { getPublishedSchools } from "@/app/actions/schools"
 
 export default async function EnrollmentPage() {
-  const [clubs, packages] = await Promise.all([getPublishedClubs(), getPublishedPackages()])
+  const [clubs, packages, schools] = await Promise.all([
+    getPublishedClubs(),
+    getPublishedPackages(),
+    getPublishedSchools(),
+  ])
   return (
     <main>
       <section className="bg-navy px-4 py-12 text-center text-navy-foreground sm:py-14">
@@ -18,7 +23,7 @@ export default async function EnrollmentPage() {
       </section>
 
       <Suspense fallback={<div className="py-20 text-center text-muted-foreground">Loading…</div>}>
-        <OnboardingWizard clubs={clubs} packages={packages} />
+        <OnboardingWizard clubs={clubs} packages={packages} schools={schools} />
       </Suspense>
     </main>
   )

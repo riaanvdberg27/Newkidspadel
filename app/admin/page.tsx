@@ -2,6 +2,7 @@ import { redirect } from "next/navigation"
 import { isAdminAuthenticated } from "@/lib/admin-auth"
 import { getAllClubsAdmin, adminLogout } from "@/app/actions/admin"
 import { getAllPackagesAdmin } from "@/app/actions/packages"
+import { getAllSchoolsAdmin } from "@/app/actions/schools"
 import { getAllSignups } from "@/app/actions/admin-signups"
 import { getContacts } from "@/app/actions/contact-settings"
 import { getCoaches } from "@/app/actions/coaches"
@@ -18,9 +19,10 @@ export default async function AdminPage() {
     redirect("/admin/login")
   }
 
-  const [clubs, packages, signups, contacts, coaches, referrals, vouchers, campaigns, allPayments, allOrders, allSubscriptions, webhookLogs] =
+  const [clubs, schools, packages, signups, contacts, coaches, referrals, vouchers, campaigns, allPayments, allOrders, allSubscriptions, webhookLogs] =
     await Promise.all([
       getAllClubsAdmin(),
+      getAllSchoolsAdmin(),
       getAllPackagesAdmin(),
       getAllSignups(),
       getContacts(),
@@ -56,6 +58,7 @@ export default async function AdminPage() {
       <section className="mx-auto max-w-6xl px-4 py-10">
         <AdminTabs
           clubs={clubs}
+          schools={schools}
           packages={packages}
           signups={signups}
           contacts={contacts}

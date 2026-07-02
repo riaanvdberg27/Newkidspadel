@@ -61,6 +61,9 @@ export type EnrollmentInput = {
   prefHolidayClinics: boolean
   // Payment
   paymentType?: "monthly" | "once-off"
+  // School program (mutually exclusive with club for school packages)
+  schoolId?: number | null
+  schoolName?: string | null
   // Coach selection
   coachId?: number | null
   coachName?: string | null
@@ -91,6 +94,8 @@ export async function createEnrollment(input: EnrollmentInput) {
       packageName: input.packageName,
       club: input.club,
       clubId: input.clubId ?? undefined,
+      schoolId: input.schoolId ?? undefined,
+      schoolName: input.schoolName ?? undefined,
       slotWeekday: input.slotWeekday ?? undefined,
       slotHour: input.slotHour != null ? String(input.slotHour) : undefined,
       slotAgeGroup: input.slotAgeGroup ?? undefined,

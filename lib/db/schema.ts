@@ -79,6 +79,8 @@ export const packages = pgTable("packages", {
   // 'standard' | 'custom'
   slotType: text("slotType").notNull().default("standard"),
   sortOrder: integer("sortOrder").notNull().default(0),
+  // If true, this package is for school programs — wizard shows school picker instead of club picker
+  isSchool: boolean("isSchool").notNull().default(false),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
   updatedAt: timestamp("updatedAt").notNull().defaultNow(),
 })
@@ -100,6 +102,25 @@ export const clubs = pgTable("clubs", {
   createdAt: timestamp("createdAt").notNull().defaultNow(),
   updatedAt: timestamp("updatedAt").notNull().defaultNow(),
 })
+
+// ---- Schools ----
+export const schools = pgTable("schools", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  location: text("location").notNull().default(""),
+  address: text("address").notNull().default(""),
+  phone: text("phone").notNull().default(""),
+  email: text("email").notNull().default(""),
+  website: text("website").notNull().default(""),
+  description: text("description").notNull().default(""),
+  logoUrl: text("logoUrl"),
+  contactPerson: text("contactPerson").notNull().default(""),
+  published: boolean("published").notNull().default(true),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+  updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+})
+
+export type School = typeof schools.$inferSelect
 
 export const AGE_GROUPS = ["4-8", "9-13", "14-17"] as const
 export type AgeGroup = (typeof AGE_GROUPS)[number]
@@ -140,6 +161,9 @@ export const enrollments = pgTable("enrollments", {
   packageName: text("packageName").notNull(),
   club: text("club").notNull(),
   clubId: integer("clubId"),
+  // School program (null for standard club-based packages)
+  schoolId: integer("schoolId"),
+  schoolName: text("schoolName"),
   slotWeekday: integer("slotWeekday"),
   slotHour: numeric("slotHour", { precision: 4, scale: 1 }),
   slotAgeGroup: text("slotAgeGroup"),

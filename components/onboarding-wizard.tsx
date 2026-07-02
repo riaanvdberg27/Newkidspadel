@@ -7,7 +7,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 // lucide-react icons used in this file
 import { Check, ChevronRight } from "lucide-react"
 import { formatSlot } from "@/lib/slots"
-import type { Club } from "@/lib/db/schema"
+import type { Club, School } from "@/lib/db/schema"
 import type { PublicPackage } from "@/app/actions/packages"
 import { SlotPicker, type SelectedSlot } from "@/components/slot-picker"
 import { PackageSlotPicker } from "@/components/package-slot-picker"
@@ -36,7 +36,7 @@ type Prefs = {
 }
 
 
-export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages: PublicPackage[] }) {
+export function OnboardingWizard({ clubs, packages, schools }: { clubs: Club[]; packages: PublicPackage[]; schools: School[] }) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const initialPackage = packages.find((p) => p.slug === searchParams.get("package")) ?? null
@@ -46,6 +46,7 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
   const [step, setStep] = useState(0)
 
   const isOnceOff = selectedPackage?.period === "once-off"
+  const isSchoolPackage = selectedPackage?.isSchool === true
   const STEPS = isOnceOff ? ONCE_OFF_STEPS : ALL_STEPS
 
   // If the selected package restricts to specific clubs, only show those clubs in step 1
@@ -64,6 +65,7 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
     Array.from({ length: 1 }, () => ({ firstName: "", lastName: "", dob: "" })),
   )
   const [clubId, setClubId] = useState<number | null>(null)
+  const [schoolId, setSchoolId] = useState<number | null>(null)
   const [slot, setSlot] = useState<SelectedSlot | null>(null)
   const [ageGroup, setAgeGroup] = useState<AgeGroup | null>(null)
   const [parent, setParent] = useState({ firstName: "", lastName: "", email: "", mobile: "", password: "" })
@@ -99,6 +101,7 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
   const [error, setError] = useState<string | null>(null)
   const [reference, setReference] = useState<string | null>(null)
   const selectedClub = clubs.find((c) => c.id === clubId) ?? null
+  const selectedSchool = schools.find((s) => s.id === schoolId) ?? null
 
   if (!selectedPackage) {
     return <PackagePicker packages={packages} onSelect={(pkg) => {
@@ -178,10 +181,12 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
           childAge: child.dob ? Math.floor((Date.now() - new Date(child.dob).getTime()) / (1000 * 60 * 60 * 24 * 365.25)) : 0,
           packageName: selectedPackage.name,
           packagePrice: selectedPackage.price,
-          club: selectedClub?.name ?? "",
-          clubId: clubId,
-          slotWeekday: slot?.weekday ?? null,
-          slotHour: slot?.hour ?? null,
+          club: isSchoolPackage ? (selectedSchool?.name ?? "") : (selectedClub?.name ?? ""),
+          clubId: isSchoolPackage ? null : clubId,
+          schoolId: isSchoolPackage ? schoolId : null,
+          schoolName: isSchoolPackage ? (selectedSchool?.name ?? null) : null,
+          slotWeekday: isSchoolPackage ? null : (slot?.weekday ?? null),
+          slotHour: isSchoolPackage ? null : (slot?.hour ?? null),
           slotAgeGroup: ageGroup,
 
           emergencyContactName: emergency.name,
@@ -375,7 +380,7 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
                 </div>
               ))}
             </div>
-            {/* Age-group category selector — applies to all children (same class) */}
+            {/* Age-group category selector ��� applies to all children (same class) */}
             <div className="mt-6">
               <p className="text-sm font-semibold text-navy">Age Category</p>
               <p className="mt-0.5 text-xs text-muted-foreground">
@@ -407,48 +412,94 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
           </div>
     )
     if (step === 2) return (
-          /* ── Step 2: Club + coach + time slot ── */
+          /* ── Step 2: School or Club + time slot ── */
           <div>
-            <h2 className="text-xl font-bold text-navy">Choose Your Club &amp; Schedule</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Showing slots available for ages{" "}
-              <span className="font-semibold text-navy">{ageGroup}</span>
-            </p>
-            {availableClubs.length < clubs.length && (
-              <p className="mt-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700">
-                The <strong>{selectedPackage?.name}</strong> package is only available at{" "}
-                {availableClubs.length === 1 ? "the venue below" : "the venues below"}.
-              </p>
+            {isSchoolPackage ? (
+              <>
+                <h2 className="text-xl font-bold text-navy">Choose Your School</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Select the school where your child will attend padel lessons.
+                </p>
+                {schools.length === 0 ? (
+                  <p className="mt-4 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700">
+                    No schools are currently listed. Please check back soon.
+                  </p>
+                ) : (
+                  <div className="mt-4 space-y-3">
+                    {schools.map((s) => (
+                      <button
+                        key={s.id}
+                        type="button"
+                        onClick={() => setSchoolId(s.id === schoolId ? null : s.id)}
+                        className={`w-full rounded-card border p-4 text-left transition-colors ${
+                          schoolId === s.id ? "border-lime bg-lime/10" : "border-border bg-card hover:border-lime/50"
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          {s.logoUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={s.logoUrl} alt={s.name} className="h-10 w-10 rounded-full object-contain border border-border bg-white p-0.5 shrink-0" />
+                          ) : (
+                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-navy/10 text-xs font-black text-navy">
+                              {s.name[0]?.toUpperCase()}
+                            </div>
+                          )}
+                          <div className="min-w-0 flex-1">
+                            <h3 className="font-bold text-navy">{s.name}</h3>
+                            {s.location && <p className="text-sm text-muted-foreground">{s.location}</p>}
+                          </div>
+                          {schoolId === s.id && <Check className="h-5 w-5 shrink-0 text-lime-foreground" />}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <StepNav onBack={() => setStep(1)} onNext={() => setStep(3)} nextDisabled={!schoolId} />
+              </>
+            ) : (
+              <>
+                <h2 className="text-xl font-bold text-navy">Choose Your Club &amp; Schedule</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Showing slots available for ages{" "}
+                  <span className="font-semibold text-navy">{ageGroup}</span>
+                </p>
+                {availableClubs.length < clubs.length && (
+                  <p className="mt-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700">
+                    The <strong>{selectedPackage?.name}</strong> package is only available at{" "}
+                    {availableClubs.length === 1 ? "the venue below" : "the venues below"}.
+                  </p>
+                )}
+                <div className="mt-4 space-y-3">
+                  {availableClubs.map((c) => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => { setClubId(c.id); setSlot(null); }}
+                      className={`w-full rounded-card border p-4 text-left transition-colors ${
+                        clubId === c.id ? "border-lime bg-lime/10" : "border-border bg-card hover:border-lime/50"
+                      }`}
+                    >
+                      <h3 className="font-bold text-navy">{c.name}</h3>
+                      <p className="text-sm text-muted-foreground">{c.location}</p>
+                    </button>
+                  ))}
+                </div>
+                {clubId && selectedPackage?.slotType === "custom" ? (
+                  <div className="mt-6">
+                    <p className="block text-sm font-semibold text-navy">Available Time Slots</p>
+                    <p className="mb-3 text-xs text-muted-foreground">This package runs at fixed times. Pick a slot below.</p>
+                    <PackageSlotPicker packageId={selectedPackage.id} packageName={selectedPackage.name} ageGroup={ageGroup ?? "4-8"} clubId={clubId ?? undefined} selected={slot} onSelect={setSlot} />
+                  </div>
+                ) : clubId && ageGroup ? (
+                  <div className="mt-6">
+                    <p className="block text-sm font-semibold text-navy">Available Time Slots</p>
+                    <p className="mb-3 text-xs text-muted-foreground">Only times with open places for ages {ageGroup} are shown.</p>
+                    <SlotPicker clubId={clubId} ageGroup={ageGroup} selected={slot} onSelect={setSlot} />
+                  </div>
+                ) : null}
+                <StepNav onBack={() => setStep(1)} onNext={() => setStep(3)} nextDisabled={!clubId || !slot} />
+              </>
             )}
-            <div className="mt-4 space-y-3">
-              {availableClubs.map((c) => (
-                <button
-                  key={c.id}
-                  onClick={() => { setClubId(c.id); setSlot(null); }}
-                  className={`w-full rounded-card border p-4 text-left transition-colors ${
-                    clubId === c.id ? "border-lime bg-lime/10" : "border-border bg-card hover:border-lime/50"
-                  }`}
-                >
-                  <h3 className="font-bold text-navy">{c.name}</h3>
-                  <p className="text-sm text-muted-foreground">{c.location}</p>
-                </button>
-              ))}
-            </div>
-
-            {clubId && selectedPackage?.slotType === "custom" ? (
-              <div className="mt-6">
-                <p className="block text-sm font-semibold text-navy">Available Time Slots</p>
-                <p className="mb-3 text-xs text-muted-foreground">This package runs at fixed times. Pick a slot below.</p>
-                <PackageSlotPicker packageId={selectedPackage.id} packageName={selectedPackage.name} ageGroup={ageGroup ?? "5-8"} clubId={clubId ?? undefined} selected={slot} onSelect={setSlot} />
-              </div>
-            ) : clubId && ageGroup ? (
-              <div className="mt-6">
-                <p className="block text-sm font-semibold text-navy">Available Time Slots</p>
-                <p className="mb-3 text-xs text-muted-foreground">Only times with open places for ages {ageGroup} are shown.</p>
-                <SlotPicker clubId={clubId} ageGroup={ageGroup} selected={slot} onSelect={setSlot} />
-              </div>
-            ) : null}
-            <StepNav onBack={() => setStep(1)} onNext={() => setStep(3)} nextDisabled={!clubId || !slot} />
           </div>
     )
     if (step === 3) return (
@@ -537,8 +588,14 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
                   bold
                 />
               )}
-              <Row label="Club" value={selectedClub?.name ?? ""} />
-              <Row label="Time Slot" value={slot ? formatSlot(slot.weekday, slot.hour) : ""} />
+              {isSchoolPackage ? (
+                <Row label="School" value={selectedSchool?.name ?? ""} />
+              ) : (
+                <>
+                  <Row label="Club" value={selectedClub?.name ?? ""} />
+                  <Row label="Time Slot" value={slot ? formatSlot(slot.weekday, slot.hour) : ""} />
+                </>
+              )}
 
               {children.map((child, idx) => (
                 <Row

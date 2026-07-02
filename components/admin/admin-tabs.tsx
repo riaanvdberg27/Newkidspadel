@@ -14,12 +14,14 @@ import type { AdminSignup } from "@/app/actions/admin-signups"
 import type { ContactPerson } from "@/app/actions/contact-settings"
 import type { CoachRow } from "@/app/actions/coaches"
 import type { AdminReferralRow, AdminVoucherRow } from "@/app/actions/referrals"
-import type { Order, Payment, Subscription, WebhookLog } from "@/lib/db/schema"
+import type { Order, Payment, Subscription, WebhookLog, School } from "@/lib/db/schema"
+import { AdminSchoolsManager } from "@/components/admin/admin-schools-manager"
 
-type Tab = "clubs" | "packages" | "signups" | "contact" | "coaches" | "referrals" | "payments"
+type Tab = "clubs" | "schools" | "packages" | "signups" | "contact" | "coaches" | "referrals" | "payments"
 
 export function AdminTabs({
   clubs,
+  schools,
   packages,
   signups,
   contacts,
@@ -33,6 +35,7 @@ export function AdminTabs({
   webhookLogs,
 }: {
   clubs: Club[]
+  schools: School[]
   packages: PackageDTO[]
   signups: AdminSignup[]
   contacts: ContactPerson[]
@@ -49,6 +52,7 @@ export function AdminTabs({
 
   const tabs: { id: Tab; label: string }[] = [
     { id: "clubs", label: "Clubs" },
+    { id: "schools", label: "Schools" },
     { id: "packages", label: "Packages" },
     { id: "signups", label: "Sign-ups" },
     { id: "coaches", label: "Coaches" },
@@ -77,6 +81,7 @@ export function AdminTabs({
 
       <div className="mt-8">
         {tab === "clubs" && <AdminClubManager initialClubs={clubs} />}
+        {tab === "schools" && <AdminSchoolsManager initialSchools={schools} />}
         {tab === "packages" && <AdminPackageManager initialPackages={packages} allClubs={clubs} />}
         {tab === "signups" && <AdminSignupsManager initialSignups={signups} allCoaches={coaches} allPackages={packages} allClubs={clubs} />}
         {tab === "coaches" && <AdminCoachesManager initialCoaches={coaches} allClubs={clubs} />}
