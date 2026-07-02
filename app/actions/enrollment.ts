@@ -108,13 +108,13 @@ export async function createEnrollment(input: EnrollmentInput) {
       prefAnnouncements: input.prefAnnouncements,
       prefEvents: input.prefEvents,
       prefHolidayClinics: input.prefHolidayClinics,
-      // Payment
+      // Payment — all enrollments start as pending; the Netcash ITN webhook
+      // sets paymentStatus to 'paid' and status to 'active' after verification.
       paymentType: isOnceOff ? "once-off" : "monthly",
-      paymentStatus: isOnceOff ? "pending" : "pending",
-      // Once-off payments are confirmed via PayFast ITN; monthly are active immediately
-      status: isOnceOff ? "pending" : "active",
+      paymentStatus: "pending",
+      status: "pending",
       accountStatus: "active",
-      onboardingComplete: !isOnceOff,
+      onboardingComplete: false,
       // Coach
       coachId: input.coachId ?? undefined,
       coachName: input.coachName ?? undefined,
