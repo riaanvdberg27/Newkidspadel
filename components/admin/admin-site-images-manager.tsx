@@ -28,6 +28,7 @@ export function AdminSiteImagesManager({
     try {
       const res = await fetch("/api/admin/upload-site-image", { method: "POST", body: fd })
       const json = await res.json()
+      if (res.status === 401) throw new Error("Session expired — please sign out and sign in again.")
       if (!res.ok) throw new Error(json.error ?? "Upload failed")
 
       const now = Date.now()
