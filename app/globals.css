@@ -45,15 +45,12 @@
 }
 
 @layer base {
-  /* Prevent any component (carousels, absolute elements) from causing
-     horizontal page scroll / cutting off left-side content */
-  html,
+  /* Setting overflow-x: hidden on <html> breaks position:sticky and causes
+     silent horizontal scroll (left-side content appears cut off).
+     It must only be set on <body>. */
   body {
     overflow-x: hidden;
     max-width: 100%;
-  }
-
-  body {
     background-color: var(--background);
     color: var(--foreground);
   }
