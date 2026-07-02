@@ -21,12 +21,6 @@ export const metadata: Metadata = {
 export default async function MomentsPage() {
   const items = await getPublishedMoments()
 
-  // Use the shared title/caption from the first item as the page-level heading.
-  // All photos in a batch share the same title/caption — it belongs once at the top,
-  // not repeated on every card.
-  const pageTitle = items[0]?.title || null
-  const pageCaption = items[0]?.caption || null
-
   return (
     <main>
       <BreadcrumbSchema crumbs={[{ name: "Next Gen Moments", href: "/moments" }]} />
@@ -37,19 +31,12 @@ export default async function MomentsPage() {
           Gallery
         </span>
         <h1 className="text-3xl font-extrabold text-white sm:text-4xl lg:text-5xl text-balance">
-          {pageTitle ?? "Next Gen Moments"}
+          Next Gen Moments
         </h1>
-        {pageCaption && (
-          <p className="mx-auto mt-4 max-w-2xl text-base text-navy-foreground/80 text-pretty">
-            {pageCaption}
-          </p>
-        )}
-        {!pageCaption && (
-          <p className="mx-auto mt-4 max-w-2xl text-base text-navy-foreground/80 text-pretty">
-            Relive the highlights — photos and videos from club days, school programmes, and
-            tournaments across Pretoria.
-          </p>
-        )}
+        <p className="mx-auto mt-4 max-w-2xl text-base text-navy-foreground/80 text-pretty">
+          Relive the highlights — photos and videos from club days, school programmes, and
+          tournaments across Pretoria.
+        </p>
       </section>
 
       {/* Gallery */}

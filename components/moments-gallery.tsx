@@ -13,16 +13,35 @@ const CATEGORIES = [
   { value: "tournaments", label: "Tournaments" },
 ]
 
+// Per-category heading and subheading shown once above that category's photos.
+// Edit these to change what appears above each section.
+const CATEGORY_HEADINGS: Record<string, { title: string; caption: string }> = {
+  general: {
+    title: "Every Moment Captures More Than Just a Game",
+    caption: "It captures confidence, friendships, resilience, and unforgettable memories.",
+  },
+  clubs: {
+    title: "Club Days",
+    caption: "Action and fun from our regular club sessions across Pretoria.",
+  },
+  schools: {
+    title: "School Programmes",
+    caption: "Bringing padel to schools and growing the next generation of players.",
+  },
+  tournaments: {
+    title: "Tournaments",
+    caption: "Competitive moments and championship highlights from our players.",
+  },
+}
+
 export function MomentsGallery({ items }: { items: PublicMoment[] }) {
   const [filter, setFilter] = useState("all")
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
 
   const filtered = filter === "all" ? items : items.filter((m) => m.category === filter)
 
-  // Find categories that actually have items
-  const activeCategories = CATEGORIES.filter(
-    (c) => c.value === "all" || items.some((m) => m.category === c.value)
-  )
+  // The heading/caption for the currently active category (not shown for "all")
+  const categoryHeading = filter !== "all" ? CATEGORY_HEADINGS[filter] ?? null : null
 
   function openLightbox(index: number) {
     setLightboxIndex(index)
@@ -52,22 +71,28 @@ export function MomentsGallery({ items }: { items: PublicMoment[] }) {
 
   return (
     <>
-      {/* Category filter */}
-      {activeCategories.length > 2 && (
-        <div className="flex flex-wrap justify-center gap-2 mb-8">
-          {activeCategories.map((c) => (
-            <button
-              key={c.value}
-              onClick={() => setFilter(c.value)}
-              className={`rounded-full px-4 py-1.5 text-sm font-bold transition-colors ${
-                filter === c.value
-                  ? "bg-navy text-white shadow-sm"
-                  : "border border-border bg-card text-muted-foreground hover:border-navy hover:text-navy"
-              }`}
-            >
-              {c.label}
-            </button>
-          ))}
+      {/* Category filter tabs — always show all 5 */}
+      <div className="flex flex-wrap justify-center gap-2 mb-8">
+        {CATEGORIES.map((c) => (
+          <button
+            key={c.value}
+            onClick={() => setFilter(c.value)}
+            className={`rounded-full px-4 py-1.5 text-sm font-bold transition-colors ${
+              filter === c.value
+                ? "bg-navy text-white shadow-sm"
+                : "border border-border bg-card text-muted-foreground hover:border-navy hover:text-navy"
+            }`}
+          >
+            {c.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Category heading — shown once above the grid when a specific category is selected */}
+      {categoryHeading && (
+        <div className="mb-8">
+          <h2 className="text-2xl font-extrabold text-navy text-balance">{categoryHeading.title}</h2>
+          <p className="mt-2 text-base text-muted-foreground text-pretty">{categoryHeading.caption}</p>
         </div>
       )}
 
