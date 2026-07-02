@@ -142,8 +142,8 @@ function MomentForm({
     if (!title.trim() || mediaItems.length === 0) return
     const multiple = mediaItems.length > 1
     const base = Number(sortOrder)
-    const inputs: MomentInput[] = mediaItems.map((m, i) => ({
-      title: multiple ? `${title.trim()} (${i + 1})` : title.trim(),
+    const inputs: MomentInput[] = mediaItems.map((m) => ({
+      title: title.trim(),
       caption: caption.trim() || undefined,
       mediaUrl: m.url,
       mediaType: m.type,

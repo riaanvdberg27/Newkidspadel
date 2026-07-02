@@ -13,25 +13,21 @@ const CATEGORIES = [
   { value: "tournaments", label: "Tournaments" },
 ]
 
-// Per-category heading and subheading shown once above that category's photos.
-// Edit these to change what appears above each section.
-const CATEGORY_HEADINGS: Record<string, { title: string; caption: string }> = {
-  general: {
-    title: "Every Moment Captures More Than Just a Game",
-    caption: "It captures confidence, friendships, resilience, and unforgettable memories.",
-  },
-  clubs: {
-    title: "Club Days",
-    caption: "Action and fun from our regular club sessions across Pretoria.",
-  },
-  schools: {
-    title: "School Programmes",
-    caption: "Bringing padel to schools and growing the next generation of players.",
-  },
-  tournaments: {
-    title: "Tournaments",
-    caption: "Competitive moments and championship highlights from our players.",
-  },
+// Group an ordered list of moments into albums by their shared title.
+// Each unique title (within the filtered set) becomes one album shown with a
+// heading + caption once, followed by a masonry grid of its photos.
+function groupByTitle(items: PublicMoment[]) {
+  const map = new Map<string, PublicMoment[]>()
+  for (const m of items) {
+    const key = m.title ?? ""
+    if (!map.has(key)) map.set(key, [])
+    map.get(key)!.push(m)
+  }
+  return Array.from(map.entries()).map(([title, photos]) => ({
+    title,
+    caption: photos[0]?.caption ?? null,
+    photos,
+  }))
 }
 
 export function MomentsGallery({ items }: { items: PublicMoment[] }) {
@@ -39,9 +35,7 @@ export function MomentsGallery({ items }: { items: PublicMoment[] }) {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
 
   const filtered = filter === "all" ? items : items.filter((m) => m.category === filter)
-
-  // The heading/caption for the currently active category (not shown for "all")
-  const categoryHeading = filter !== "all" ? CATEGORY_HEADINGS[filter] ?? null : null
+  const albums = groupByTitle(filtered)
 
   function openLightbox(index: number) {
     setLightboxIndex(index)
@@ -69,6 +63,9 @@ export function MomentsGallery({ items }: { items: PublicMoment[] }) {
     )
   }
 
+  // Running index into `filtered` so lightbox indices stay correct across albums
+  let runningIndex = 0
+
   return (
     <>
       {/* Category filter tabs — always show all 5 */}
@@ -88,64 +85,79 @@ export function MomentsGallery({ items }: { items: PublicMoment[] }) {
         ))}
       </div>
 
-      {/* Category heading — shown once above the grid when a specific category is selected */}
-      {categoryHeading && (
-        <div className="mb-8">
-          <h2 className="text-2xl font-extrabold text-navy text-balance">{categoryHeading.title}</h2>
-          <p className="mt-2 text-base text-muted-foreground text-pretty">{categoryHeading.caption}</p>
-        </div>
-      )}
-
-      {/* Masonry-style grid — no title/caption on individual cards */}
-      <div className="columns-1 gap-4 sm:columns-2 lg:columns-3 xl:columns-4 space-y-4">
-        {filtered.map((m, i) => {
-          const media = blobUrl(m.mediaUrl) ?? m.mediaUrl
-          const thumb = m.thumbnailUrl ? (blobUrl(m.thumbnailUrl) ?? m.thumbnailUrl) : null
+      {/* Albums — each upload batch is one album with its own heading + masonry grid */}
+      <div className="space-y-14">
+        {albums.map((album) => {
+          const albumStart = runningIndex
+          runningIndex += album.photos.length
           const gridSizes = "(min-width: 1280px) 23vw, (min-width: 1024px) 31vw, (min-width: 640px) 47vw, 92vw"
 
           return (
-            <div
-              key={m.id}
-              className="break-inside-avoid cursor-pointer overflow-hidden rounded-xl border border-border bg-card shadow-sm transition-transform hover:-translate-y-1 hover:shadow-md"
-              onClick={() => openLightbox(i)}
-            >
-              <div className="relative bg-muted">
-                {m.mediaType === "video" ? (
-                  <>
-                    {thumb ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={blobImage(m.thumbnailUrl, 828) ?? thumb}
-                        srcSet={blobSrcSet(m.thumbnailUrl)}
-                        sizes={gridSizes}
-                        alt={m.category}
-                        className="w-full object-cover"
-                        loading={i < 4 ? "eager" : "lazy"}
-                        decoding="async"
-                      />
-                    ) : (
-                      <video src={media} className="w-full object-cover" preload="metadata" muted playsInline />
-                    )}
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <div className="rounded-full bg-navy/75 p-4 shadow-lg">
-                        <Play className="h-6 w-6 fill-white text-white" />
+            <section key={album.title || albumStart}>
+              {/* Album heading — shown once per batch, never on individual cards */}
+              {album.title && (
+                <div className="mb-6">
+                  <h2 className="text-2xl font-extrabold text-navy text-balance">{album.title}</h2>
+                  {album.caption && (
+                    <p className="mt-2 text-base text-muted-foreground text-pretty">{album.caption}</p>
+                  )}
+                </div>
+              )}
+
+              {/* Masonry grid — no text on individual cards */}
+              <div className="columns-1 gap-4 sm:columns-2 lg:columns-3 xl:columns-4 space-y-4">
+                {album.photos.map((m, i) => {
+                  const itemIndex = albumStart + i
+                  const media = blobUrl(m.mediaUrl) ?? m.mediaUrl
+                  const thumb = m.thumbnailUrl ? (blobUrl(m.thumbnailUrl) ?? m.thumbnailUrl) : null
+
+                  return (
+                    <div
+                      key={m.id}
+                      className="break-inside-avoid cursor-pointer overflow-hidden rounded-xl border border-border bg-card shadow-sm transition-transform hover:-translate-y-1 hover:shadow-md"
+                      onClick={() => openLightbox(itemIndex)}
+                    >
+                      <div className="relative bg-muted">
+                        {m.mediaType === "video" ? (
+                          <>
+                            {thumb ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={blobImage(m.thumbnailUrl, 828) ?? thumb}
+                                srcSet={blobSrcSet(m.thumbnailUrl)}
+                                sizes={gridSizes}
+                                alt={album.title || m.category}
+                                className="w-full object-cover"
+                                loading={itemIndex < 4 ? "eager" : "lazy"}
+                                decoding="async"
+                              />
+                            ) : (
+                              <video src={media} className="w-full object-cover" preload="metadata" muted playsInline />
+                            )}
+                            <div className="absolute inset-0 flex items-center justify-center">
+                              <div className="rounded-full bg-navy/75 p-4 shadow-lg">
+                                <Play className="h-6 w-6 fill-white text-white" />
+                              </div>
+                            </div>
+                          </>
+                        ) : (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={blobImage(m.mediaUrl, 828) ?? media}
+                            srcSet={blobSrcSet(m.mediaUrl)}
+                            sizes={gridSizes}
+                            alt={album.title || m.category}
+                            className="w-full object-cover"
+                            loading={itemIndex < 4 ? "eager" : "lazy"}
+                            decoding="async"
+                          />
+                        )}
                       </div>
                     </div>
-                  </>
-                ) : (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={blobImage(m.mediaUrl, 828) ?? media}
-                    srcSet={blobSrcSet(m.mediaUrl)}
-                    sizes={gridSizes}
-                    alt={m.category}
-                    className="w-full object-cover"
-                    loading={i < 4 ? "eager" : "lazy"}
-                    decoding="async"
-                  />
-                )}
+                  )
+                })}
               </div>
-            </div>
+            </section>
           )
         })}
       </div>
