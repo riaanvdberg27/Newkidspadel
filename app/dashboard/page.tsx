@@ -1,6 +1,10 @@
 import { redirect } from "next/navigation"
 import { headers } from "next/headers"
 import { auth } from "@/lib/auth"
+import { getActiveImpersonation } from "@/app/actions/impersonation"
+import { db } from "@/lib/db"
+import { enrollments, payments, subscriptions } from "@/lib/db/schema"
+import { eq, desc } from "drizzle-orm"
 import { getMyEnrollments } from "@/app/actions/enrollment"
 import { getReferralSummary } from "@/app/actions/referrals"
 import { getMyPayments, getMySubscriptions } from "@/app/actions/payments"
@@ -8,6 +12,7 @@ import { SignOutButton } from "@/components/sign-out-button"
 import { ChangeSlot } from "@/components/change-slot"
 import { EditProfile } from "@/components/edit-profile"
 import { ReferralPanel } from "@/components/referral-panel"
+import { ImpersonationBanner } from "@/components/impersonation-banner"
 import {
   CalendarDays, Mail, Phone, ShieldCheck, User,
   CreditCard, RefreshCw, CheckCircle2, XCircle, Clock,
@@ -51,30 +56,63 @@ function formatCents(cents: number | null | undefined) {
 }
 
 export default async function DashboardPage() {
-  const session = await auth.api.getSession({ headers: await headers() })
-  if (!session?.user) redirect("/sign-in")
+  // Check for active admin impersonation first
+  const impersonation = await getActiveImpersonation()
 
-  const [enrollments, referralSummary, allPayments, allSubscriptions] = await Promise.all([
-    getMyEnrollments(),
-    getReferralSummary().catch(() => null),
-    getMyPayments().catch(() => []),
-    getMySubscriptions().catch(() => []),
+  let userId: string
+  let displayName: string
+  let displayEmail: string
+  let isImpersonating = false
+
+  if (impersonation) {
+    // Admin is viewing as a parent — use the impersonated user's ID for all data
+    userId = impersonation.parentId
+    displayName = impersonation.parentName
+    displayEmail = impersonation.parentEmail
+    isImpersonating = true
+  } else {
+    const session = await auth.api.getSession({ headers: await headers() })
+    if (!session?.user) redirect("/sign-in")
+    userId = session.user.id
+    displayName = session.user.name
+    displayEmail = session.user.email
+  }
+
+  // Fetch data scoped to the correct userId (real or impersonated)
+  const [userEnrollments, allPayments, allSubscriptions, referralSummary] = await Promise.all([
+    db.select().from(enrollments).where(eq(enrollments.userId, userId)).orderBy(desc(enrollments.createdAt)),
+    db.select().from(payments).where(eq(payments.userId, userId)).orderBy(desc(payments.createdAt)).catch(() => []),
+    db.select().from(subscriptions).where(eq(subscriptions.userId, userId)).orderBy(desc(subscriptions.createdAt)).catch(() => []),
+    // Referral summary — only available for real sessions (not during impersonation)
+    isImpersonating ? Promise.resolve(null) : getReferralSummary().catch(() => null),
   ])
 
-  const mobile = enrollments[0]?.parentMobile ?? ""
+  const mobile = userEnrollments[0]?.parentMobile ?? ""
+  // View-only mode disables mutations on sub-components
+  const viewOnly = isImpersonating && impersonation?.mode === "view-only"
 
   return (
     <main className="min-h-[70vh] bg-background">
+      {/* Impersonation banner — always at the top, impossible to miss */}
+      {isImpersonating && impersonation && (
+        <ImpersonationBanner
+          parentName={displayName}
+          parentEmail={displayEmail}
+          mode={impersonation.mode}
+        />
+      )}
+
       {/* Hero */}
       <section className="bg-navy text-navy-foreground">
         <div className="mx-auto flex max-w-5xl flex-col gap-3 px-4 py-8 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-4 sm:py-10">
           <div>
             <h1 className="text-xl font-extrabold sm:text-3xl">
-              Welcome back, {session.user.name}
+              Welcome back, {displayName}
             </h1>
-            <p className="mt-1 text-sm text-navy-foreground/80">{session.user.email}</p>
+            <p className="mt-1 text-sm text-navy-foreground/80">{displayEmail}</p>
           </div>
-          <SignOutButton />
+          {/* Only show sign-out for real users, not impersonating admins */}
+          {!isImpersonating && <SignOutButton />}
         </div>
       </section>
 
@@ -82,7 +120,7 @@ export default async function DashboardPage() {
         {/* Profile */}
         <section>
           <h2 className="text-lg font-bold text-navy">My Profile</h2>
-          <EditProfile name={session.user.name} mobile={mobile} />
+          <EditProfile name={displayName} mobile={mobile} readOnly={viewOnly} />
         </section>
 
         {/* Referral & Vouchers */}
@@ -96,15 +134,17 @@ export default async function DashboardPage() {
         <section>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-xl font-bold text-navy">My Enrollments</h2>
-            <a
-              href="/enrollment"
-              className="rounded-md bg-lime px-4 py-2 text-sm font-bold text-lime-foreground transition-colors hover:bg-lime/90"
-            >
-              Enroll Another Child
-            </a>
+            {!isImpersonating && (
+              <a
+                href="/enrollment"
+                className="rounded-md bg-lime px-4 py-2 text-sm font-bold text-lime-foreground transition-colors hover:bg-lime/90"
+              >
+                Enroll Another Child
+              </a>
+            )}
           </div>
 
-          {enrollments.length === 0 ? (
+          {userEnrollments.length === 0 ? (
             <div className="mt-8 rounded-card border border-dashed border-border bg-card p-10 text-center">
               <p className="text-muted-foreground">You don&apos;t have any enrollments yet.</p>
               <a
@@ -116,7 +156,7 @@ export default async function DashboardPage() {
             </div>
           ) : (
             <div className="mt-6 grid gap-6 md:grid-cols-2">
-              {enrollments.map((e) => {
+              {userEnrollments.map((e) => {
                 const subscription = allSubscriptions.find((s) => s.enrollmentId === e.id) ?? null
                 const enrollmentPayments = allPayments.filter((p) => p.enrollmentId === e.id)
                 const isMonthly = e.paymentType === "monthly"

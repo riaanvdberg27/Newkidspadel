@@ -16,8 +16,9 @@ import type { CoachRow } from "@/app/actions/coaches"
 import type { AdminReferralRow, AdminVoucherRow } from "@/app/actions/referrals"
 import type { Order, Payment, Subscription, WebhookLog, School } from "@/lib/db/schema"
 import { AdminSchoolsManager } from "@/components/admin/admin-schools-manager"
+import { AdminImpersonationManager } from "@/components/admin/admin-impersonation-manager"
 
-type Tab = "clubs" | "schools" | "packages" | "signups" | "contact" | "coaches" | "referrals" | "payments"
+type Tab = "clubs" | "schools" | "packages" | "signups" | "contact" | "coaches" | "referrals" | "payments" | "impersonate"
 
 export function AdminTabs({
   clubs,
@@ -59,6 +60,7 @@ export function AdminTabs({
     { id: "payments", label: "Payments" },
     { id: "referrals", label: "Referrals & Vouchers" },
     { id: "contact", label: "Contact Details" },
+    { id: "impersonate", label: "View as Parent" },
   ]
 
   return (
@@ -95,6 +97,7 @@ export function AdminTabs({
         )}
         {tab === "referrals" && <AdminReferralsManager referrals={referrals} vouchers={vouchers} campaigns={campaigns} />}
         {tab === "contact" && <AdminContactManager initialContacts={contacts} />}
+        {tab === "impersonate" && <AdminImpersonationManager />}
       </div>
     </div>
   )

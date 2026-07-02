@@ -506,3 +506,21 @@ export const webhookLogs = pgTable("webhook_logs", {
 })
 
 export type WebhookLog = typeof webhookLogs.$inferSelect
+
+// ---- Impersonation audit log ----
+
+export const impersonationLog = pgTable("impersonation_log", {
+  id: serial("id").primaryKey(),
+  adminUser: text("admin_user").notNull(),
+  parentId: text("parent_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  parentEmail: text("parent_email").notNull(),
+  reason: text("reason"),
+  // 'view-only' | 'full'
+  mode: text("mode").notNull().default("view-only"),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  startedAt: timestamp("started_at").notNull().defaultNow(),
+  endedAt: timestamp("ended_at"),
+})
+
+export type ImpersonationLog = typeof impersonationLog.$inferSelect
