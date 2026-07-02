@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { X, Play, ChevronLeft, ChevronRight } from "lucide-react"
 import type { PublicMoment } from "@/app/actions/moments"
-import { blobUrl } from "@/lib/blob"
+import { blobUrl, blobImage, blobSrcSet } from "@/lib/blob"
 
 const CATEGORIES = [
   { value: "all", label: "All" },
@@ -76,6 +76,7 @@ export function MomentsGallery({ items }: { items: PublicMoment[] }) {
         {filtered.map((m, i) => {
           const media = blobUrl(m.mediaUrl) ?? m.mediaUrl
           const thumb = m.thumbnailUrl ? (blobUrl(m.thumbnailUrl) ?? m.thumbnailUrl) : null
+          const gridSizes = "(min-width: 1280px) 23vw, (min-width: 1024px) 31vw, (min-width: 640px) 47vw, 92vw"
 
           return (
             <div
@@ -88,7 +89,15 @@ export function MomentsGallery({ items }: { items: PublicMoment[] }) {
                   <>
                     {thumb ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={thumb} alt={m.title} className="w-full object-cover" />
+                      <img
+                        src={blobImage(m.thumbnailUrl, 828) ?? thumb}
+                        srcSet={blobSrcSet(m.thumbnailUrl)}
+                        sizes={gridSizes}
+                        alt={m.title}
+                        className="w-full object-cover"
+                        loading={i < 4 ? "eager" : "lazy"}
+                        decoding="async"
+                      />
                     ) : (
                       <video src={media} className="w-full object-cover" preload="metadata" muted playsInline />
                     )}
@@ -100,14 +109,22 @@ export function MomentsGallery({ items }: { items: PublicMoment[] }) {
                   </>
                 ) : (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={media} alt={m.title} className="w-full object-cover" />
+                  <img
+                    src={blobImage(m.mediaUrl, 828) ?? media}
+                    srcSet={blobSrcSet(m.mediaUrl)}
+                    sizes={gridSizes}
+                    alt={m.title}
+                    className="w-full object-cover"
+                    loading={i < 4 ? "eager" : "lazy"}
+                    decoding="async"
+                  />
                 )}
               </div>
               {(m.title || m.caption) && (
-                <div className="px-3 py-2.5">
-                  <p className="text-sm font-bold text-navy leading-snug">{m.title}</p>
+                <div className="px-3 py-3">
+                  <h3 className="text-base font-bold text-navy leading-snug text-balance">{m.title}</h3>
                   {m.caption && (
-                    <p className="mt-0.5 text-xs text-muted-foreground line-clamp-2">{m.caption}</p>
+                    <p className="mt-1 text-sm text-muted-foreground leading-relaxed line-clamp-2">{m.caption}</p>
                   )}
                 </div>
               )}
@@ -148,7 +165,7 @@ export function MomentsGallery({ items }: { items: PublicMoment[] }) {
               ) : (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
-                  src={blobUrl(current.mediaUrl) ?? current.mediaUrl}
+                  src={blobImage(current.mediaUrl, 1600) ?? blobUrl(current.mediaUrl) ?? current.mediaUrl}
                   alt={current.title}
                   className="max-h-[70vh] w-full object-contain"
                 />
