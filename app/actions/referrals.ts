@@ -268,7 +268,7 @@ export async function redeemVoucher(voucherId: number, enrollmentId: number): Pr
 }
 
 // ---------------------------------------------------------------------------
-// Issue a Boot Camp voucher (admin action)
+// Issue a Boot Camp voucher (admin action) — accepts email OR user ID
 // ---------------------------------------------------------------------------
 
 export async function issueBootcampVoucher(
