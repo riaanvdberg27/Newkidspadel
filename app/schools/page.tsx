@@ -3,7 +3,9 @@ import Link from "next/link"
 import { SchoolsSection } from "@/components/schools-section"
 import { BreadcrumbSchema } from "@/components/breadcrumb-schema"
 
-export const dynamic = "force-dynamic"
+// Revalidate every 5 minutes — school data changes infrequently.
+// Admin mutations call revalidatePath("/schools") so updates propagate immediately.
+export const revalidate = 300
 
 export const metadata: Metadata = {
   title: "Padel Lessons at Schools in Pretoria | Schools Programme",

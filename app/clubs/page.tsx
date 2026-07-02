@@ -4,8 +4,9 @@ import Image from "next/image"
 import { ClubsSection } from "@/components/clubs-section"
 import { BreadcrumbSchema } from "@/components/breadcrumb-schema"
 
-// Always fetch the latest club list — prevents stale data on different edge nodes
-export const dynamic = "force-dynamic"
+// Revalidate every 5 minutes — club data changes infrequently.
+// Admin mutations call revalidatePath("/clubs") so updates propagate immediately.
+export const revalidate = 300
 
 export const metadata: Metadata = {
   title: "Padel Clubs in Pretoria | Brooklyn, Menlo Park, Moreleta Park, Garsfontein",

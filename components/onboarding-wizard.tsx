@@ -115,7 +115,6 @@ export function OnboardingWizard({ clubs, packages, schools }: { clubs: Club[]; 
       if (pkg.clubIds.length > 0 && clubId && !pkg.clubIds.includes(clubId)) {
         setClubId(null)
         setSlot(null)
-        setCoachId(null)
       }
     }} />
   }
