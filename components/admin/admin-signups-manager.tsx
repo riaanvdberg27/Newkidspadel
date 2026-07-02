@@ -444,11 +444,7 @@ export function AdminSignupsManager({
                   </td>
                   {/* Payment */}
                   <td className="px-2 py-2">
-                    <PaymentBadge
-                      period={allPackages.find((p) => p.name === s.packageName)?.period ?? "monthly"}
-                      status={s.paymentStatus}
-                      payfastPaymentId={s.payfastPaymentId}
-                    />
+                    <PaymentBadge status={s.paymentStatus} />
                   </td>
                   {/* Actions — icon-only with title tooltips */}
                   <td className="px-2 py-2">
@@ -542,33 +538,20 @@ export function AdminSignupsManager({
 // ---------------------------------------------------------------------------
 
 function PaymentBadge({
-  period,
   status,
-  payfastPaymentId,
 }: {
-  period: string           // "monthly" | "once-off"
   status: string           // paymentStatus from DB
-  payfastPaymentId?: string | null
 }) {
-  // Monthly packages always show Netcash — payment tracked externally
-  if (period !== "once-off") {
-    return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700">
-        <Building2 className="h-2.5 w-2.5 shrink-0" />
-        Netcash
-      </span>
-    )
-  }
+  const paid = status === "paid" || status === "complete" || status === "completed"
+  const failed = status === "failed"
+  const pending = !paid && !failed
 
-  // Once-off: PayFast — green paid, red unpaid
-  const paid =
-    status === "paid" || status === "complete" || status === "completed" || !!payfastPaymentId
   return (
     <span className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
-      paid ? "bg-green-100 text-green-700" : "bg-red-50 text-red-600"
+      paid ? "bg-lime/20 text-navy" : failed ? "bg-red-50 text-red-600" : "bg-amber-50 text-amber-700"
     }`}>
       <CreditCard className="h-2.5 w-2.5 shrink-0" />
-      {paid ? "Paid" : "Unpaid"}
+      {paid ? "Paid" : failed ? "Failed" : "Pending"}
     </span>
   )
 }

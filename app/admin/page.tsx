@@ -6,6 +6,7 @@ import { getAllSignups } from "@/app/actions/admin-signups"
 import { getContacts } from "@/app/actions/contact-settings"
 import { getCoaches } from "@/app/actions/coaches"
 import { adminGetAllReferrals, adminGetAllVouchers, adminGetCampaigns } from "@/app/actions/referrals"
+import { getAllPayments, getAllOrders, getAllSubscriptions, getAllWebhookLogs } from "@/app/actions/payments"
 import { AdminTabs } from "@/components/admin/admin-tabs"
 
 export const metadata = {
@@ -17,7 +18,7 @@ export default async function AdminPage() {
     redirect("/admin/login")
   }
 
-  const [clubs, packages, signups, contacts, coaches, referrals, vouchers, campaigns] =
+  const [clubs, packages, signups, contacts, coaches, referrals, vouchers, campaigns, allPayments, allOrders, allSubscriptions, webhookLogs] =
     await Promise.all([
       getAllClubsAdmin(),
       getAllPackagesAdmin(),
@@ -27,6 +28,10 @@ export default async function AdminPage() {
       adminGetAllReferrals(),
       adminGetAllVouchers(),
       adminGetCampaigns(),
+      getAllPayments().catch(() => []),
+      getAllOrders().catch(() => []),
+      getAllSubscriptions().catch(() => []),
+      getAllWebhookLogs().catch(() => []),
     ])
 
   return (
@@ -58,6 +63,10 @@ export default async function AdminPage() {
           referrals={referrals}
           vouchers={vouchers}
           campaigns={campaigns}
+          allPayments={allPayments}
+          allOrders={allOrders}
+          allSubscriptions={allSubscriptions}
+          webhookLogs={webhookLogs}
         />
       </section>
     </main>

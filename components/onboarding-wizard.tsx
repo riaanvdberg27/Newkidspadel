@@ -19,25 +19,13 @@ import { authClient } from "@/lib/auth-client"
 import { createEnrollment } from "@/app/actions/enrollment"
 import type { CoachRow } from "@/app/actions/coaches"
 
-import { buildPayfastPayment } from "@/app/actions/enrollment"
+import { buildNetcashPaymentForEnrollment } from "@/app/actions/enrollment"
 import { validateVoucherCode } from "@/app/actions/referrals"
 import { Tag, X } from "lucide-react"
 
-const ALL_STEPS = ["Children", "Child Details", "Club & Schedule", "Parent Account", "Debit Order", "Preferences", "Review"]
+const ALL_STEPS = ["Children", "Child Details", "Club & Schedule", "Parent Account", "Preferences", "Review"]
 const ONCE_OFF_STEPS = ["Children", "Child Details", "Club & Schedule", "Parent Account", "Preferences", "Review"]
 
-const BANKS = [
-  "Absa",
-  "Capitec",
-  "Discovery Bank",
-  "FNB",
-  "Investec",
-  "Nedbank",
-  "Standard Bank",
-  "TymeBank",
-  "African Bank",
-  "Other",
-]
 
 type Prefs = {
   prefEmail: boolean
@@ -48,13 +36,6 @@ type Prefs = {
   prefHolidayClinics: boolean
 }
 
-type DebitOrder = {
-  accountHolder: string
-  bankName: string
-  accountNumber: string
-  accountType: string
-  debitDay: string
-}
 
 export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages: PublicPackage[] }) {
   const router = useRouter()
@@ -108,13 +89,6 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
       .catch(() => setAvailableCoaches([]))
       .finally(() => setCoachesLoading(false))
   }, [clubId])
-  const [debit, setDebit] = useState<DebitOrder>({
-    accountHolder: "",
-    bankName: "",
-    accountNumber: "",
-    accountType: "Cheque",
-    debitDay: "1",
-  })
   const [prefs, setPrefs] = useState<Prefs>({
     prefEmail: true,
     prefWhatsapp: false,
@@ -144,9 +118,6 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [reference, setReference] = useState<string | null>(null)
-  // Payment method for once-off packages — PayFast only (EFT removed)
-  const [paymentMethod] = useState<"payfast">("payfast")
-
   const selectedClub = clubs.find((c) => c.id === clubId) ?? null
 
   if (!selectedPackage) {
@@ -215,9 +186,10 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
 
       // 2. Persist one enrollment per child
       const refs: string[] = []
+      const enrollmentIds: number[] = []
       for (const child of children) {
         const childFullName = `${child.firstName} ${child.lastName}`.trim()
-        const { referenceNumber } = await createEnrollment({
+        const { referenceNumber, enrollmentId } = await createEnrollment({
           parentName: `${parent.firstName} ${parent.lastName}`.trim(),
           parentEmail: parent.email,
           parentMobile: parent.mobile,
@@ -231,14 +203,7 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
           slotWeekday: slot?.weekday ?? null,
           slotHour: slot?.hour ?? null,
           slotAgeGroup: ageGroup,
-          // Debit fields — only passed for monthly
-          ...(isOnceOff ? {} : {
-            debitAccountHolder: debit.accountHolder,
-            debitBankName: debit.bankName,
-            debitAccountNumber: debit.accountNumber,
-            debitAccountType: debit.accountType,
-            debitDay: Number(debit.debitDay),
-          }),
+
           emergencyContactName: emergency.name,
           emergencyContactPhone: emergency.phone,
           agreedTerms,
@@ -254,39 +219,37 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
           discountPercent: appliedVoucher?.discountPercent ?? undefined,
         })
         refs.push(referenceNumber)
+        if (enrollmentId) enrollmentIds.push(enrollmentId)
       }
       const referenceNumber = refs.join(", ")
 
-      if (isOnceOff) {
-        // PayFast: use the first child's reference for the redirect
-        const firstRef = referenceNumber.split(", ")[0]
-        const { payfastUrl, formData } = await buildPayfastPayment({
-          referenceNumber: firstRef,
-          parentName: `${parent.firstName} ${parent.lastName}`.trim(),
-          parentEmail: parent.email,
-          packageName: selectedPackage.name,
-          packagePrice: selectedPackage.price * childCount,
-        })
+      // Both once-off and monthly redirect to Netcash Pay Now
+      const firstRef = refs[0] ?? referenceNumber
+      const firstEnrollmentId = enrollmentIds[0] ?? 0
+      const { netcashUrl, formFields } = await buildNetcashPaymentForEnrollment({
+        referenceNumber: firstRef,
+        enrollmentId: firstEnrollmentId,
+        parentName: `${parent.firstName} ${parent.lastName}`.trim(),
+        parentEmail: parent.email,
+        packageName: selectedPackage.name,
+        packagePrice: selectedPackage.price * childCount,
+        paymentType: isOnceOff ? "once-off" : "monthly",
+      })
 
-        // Build and auto-submit a hidden form to POST to PayFast
-        const form = document.createElement("form")
-        form.method = "POST"
-        form.action = payfastUrl
-        Object.entries(formData).forEach(([key, value]) => {
-          const input = document.createElement("input")
-          input.type = "hidden"
-          input.name = key
-          input.value = value
-          form.appendChild(input)
-        })
-        document.body.appendChild(form)
-        form.submit()
-        return // Don't call setSubmitting(false) — the page is navigating away
-      }
-
-      // 3b. Monthly: show the inline confirmation screen
-      setReference(referenceNumber)
-      router.refresh()
+      // Auto-submit a hidden form to POST to Netcash Pay Now
+      const form = document.createElement("form")
+      form.method = "POST"
+      form.action = netcashUrl
+      Object.entries(formFields).forEach(([key, value]) => {
+        const inp = document.createElement("input")
+        inp.type = "hidden"
+        inp.name = key
+        inp.value = value
+        form.appendChild(inp)
+      })
+      document.body.appendChild(form)
+      form.submit()
+      // Don't call setSubmitting(false) — the page is navigating away
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong. Please try again.")
     } finally {
@@ -598,43 +561,7 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
             />
           </div>
     )
-    if (step === 4 && !isOnceOff) return (
-          /* ── Step 4 (monthly only): Debit order ── */
-          <div>
-            <h2 className="text-xl font-bold text-navy">Debit Order Details</h2>
-            <p className="mt-1 text-sm text-muted-foreground">Monthly fees are collected by debit order. Please provide the account to be debited.</p>
-            <div className="mt-6 grid gap-4 sm:grid-cols-2">
-              <Field label="Account Holder Name" value={debit.accountHolder} onChange={(v) => setDebit({ ...debit, accountHolder: v })} />
-              <label className="block">
-                <span className="block text-sm font-semibold text-navy">Bank Name</span>
-                <select value={debit.bankName} onChange={(e) => setDebit({ ...debit, bankName: e.target.value })} className="mt-2 w-full rounded-md border border-border bg-card px-3 py-2 outline-none focus:border-lime">
-                  <option value="">Select your bank</option>
-                  {BANKS.map((b) => <option key={b} value={b}>{b}</option>)}
-                </select>
-              </label>
-              <Field label="Account Number" type="text" value={debit.accountNumber} onChange={(v) => setDebit({ ...debit, accountNumber: v.replace(/[^0-9]/g, "") })} placeholder="Digits only" />
-              <label className="block">
-                <span className="block text-sm font-semibold text-navy">Account Type</span>
-                <select value={debit.accountType} onChange={(e) => setDebit({ ...debit, accountType: e.target.value })} className="mt-2 w-full rounded-md border border-border bg-card px-3 py-2 outline-none focus:border-lime">
-                  <option value="Cheque">Cheque / Current</option>
-                  <option value="Savings">Savings</option>
-                </select>
-              </label>
-              <label className="block">
-                <span className="block text-sm font-semibold text-navy">Day of Debit Order</span>
-                <select value={debit.debitDay} onChange={(e) => setDebit({ ...debit, debitDay: e.target.value })} className="mt-2 w-full rounded-md border border-border bg-card px-3 py-2 outline-none focus:border-lime">
-                  {Array.from({ length: 28 }, (_, i) => i + 1).map((d) => (
-                    <option key={d} value={String(d)}>
-                      {d}{d === 1 || d === 21 ? "st" : d === 2 || d === 22 ? "nd" : d === 3 || d === 23 ? "rd" : "th"} of each month
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-            <StepNav onBack={() => setStep(3)} onNext={() => setStep(5)} nextDisabled={!debit.accountHolder || !debit.bankName || debit.accountNumber.length < 5} />
-          </div>
-    )
-    if ((step === 5 && !isOnceOff) || (step === 4 && isOnceOff)) return (
+    if (step === 4) return (
           /* ── Preferences step ── */
           <div>
             <h2 className="text-xl font-bold text-navy">Communication Preferences</h2>
@@ -647,7 +574,7 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
               <PrefToggle label="Events &amp; tournaments" checked={prefs.prefEvents} onChange={(v) => setPrefs({ ...prefs, prefEvents: v })} />
               <PrefToggle label="Holiday clinics" checked={prefs.prefHolidayClinics} onChange={(v) => setPrefs({ ...prefs, prefHolidayClinics: v })} />
             </div>
-            <StepNav onBack={() => setStep(isOnceOff ? 3 : 4)} onNext={() => setStep(isOnceOff ? 5 : 6)} />
+            <StepNav onBack={() => setStep(3)} onNext={() => setStep(5)} />
           </div>
     )
     // Review step (default)
@@ -681,12 +608,7 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
               <Row label="Email" value={parent.email} />
               <Row label="Mobile" value={parent.mobile} />
               <Row label="Emergency Contact" value={`${emergency.name} — ${emergency.phone}`} />
-              {!isOnceOff && (
-                <Row
-                  label="Debit Order"
-                  value={`${debit.bankName} ••${debit.accountNumber.slice(-4)} (${debit.accountType}), day ${debit.debitDay}`}
-                />
-              )}
+
             </dl>
             {/* Voucher code input */}
             <div className="mt-5 rounded-card border border-border bg-card p-4 shadow-sm">
@@ -744,21 +666,21 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
               {voucherError && <p className="mt-2 text-xs text-red-600">{voucherError}</p>}
             </div>
 
-            {isOnceOff && (
-              <div className="mt-5 rounded-card border border-border bg-card p-4 shadow-sm">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-lime/20">
-                    <Check className="h-5 w-5 text-lime-foreground" />
-                  </div>
-                  <div>
-                    <p className="font-bold text-navy">PayFast — Secure Online Payment</p>
-                    <p className="text-xs text-muted-foreground">
-                      Pay via card, instant EFT, or SnapScan. You will be redirected to PayFast after confirming.
-                    </p>
-                  </div>
+            <div className="mt-5 rounded-card border border-border bg-card p-4 shadow-sm">
+              <div className="flex items-center gap-3">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-lime/20">
+                  <Check className="h-5 w-5 text-lime-foreground" />
+                </div>
+                <div>
+                  <p className="font-bold text-navy">Netcash Pay Now — Secure Online Payment</p>
+                  <p className="text-xs text-muted-foreground">
+                    {isOnceOff
+                      ? "Pay securely via card or EFT. You will be redirected to Netcash after confirming."
+                      : "Set up your monthly subscription securely via Netcash. You will be redirected to complete payment."}
+                  </p>
                 </div>
               </div>
-            )}
+            </div>
 
             {/* Terms & consent */}
             <div className="mt-6 rounded-card border border-border bg-card p-5 shadow-sm">
@@ -807,7 +729,7 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
 
             <div className="mt-8 flex items-center justify-between gap-4">
               <button
-                onClick={() => setStep(isOnceOff ? 4 : 5)}
+                onClick={() => setStep(4)}
                 className="rounded-2xl border-2 border-border px-5 py-3 font-bold text-navy transition-all hover:bg-muted active:scale-95"
               >
                 Back
@@ -818,8 +740,8 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
                 className="rounded-2xl bg-lime px-6 py-3 font-black text-lime-foreground shadow-sm transition-all hover:scale-105 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-40 active:scale-95"
               >
                 {submitting
-                  ? isOnceOff ? "Redirecting to PayFast…" : "Creating account…"
-                  : isOnceOff ? "Create Account & Pay via PayFast" : "Create Account & Enroll"}
+                  ? "Redirecting to Netcash…"
+                  : "Create Account & Pay via Netcash"}
               </button>
             </div>
             {(!agreedTerms || !signatureData) && (

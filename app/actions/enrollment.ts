@@ -10,7 +10,8 @@ import { put } from "@vercel/blob"
 import { generateContractPdf } from "@/lib/contract-pdf"
 import { sendWelcomeEmail, sendAdminNotificationEmail } from "@/lib/email"
 import { formatSlot } from "@/lib/slots"
-import { buildPayfastFormData, PAYFAST_URL } from "@/lib/payfast"
+import { buildNetcashPayment } from "@/lib/netcash"
+import { orders } from "@/lib/db/schema"
 import { recordReferralOnEnrollment } from "@/app/actions/referrals"
 import { redeemVoucher } from "@/app/actions/referrals"
 
@@ -93,11 +94,7 @@ export async function createEnrollment(input: EnrollmentInput) {
       slotWeekday: input.slotWeekday ?? undefined,
       slotHour: input.slotHour != null ? String(input.slotHour) : undefined,
       slotAgeGroup: input.slotAgeGroup ?? undefined,
-      debitAccountHolder: input.debitAccountHolder ?? undefined,
-      debitBankName: input.debitBankName ?? undefined,
-      debitAccountNumber: input.debitAccountNumber ?? undefined,
-      debitAccountType: input.debitAccountType ?? undefined,
-      debitDay: input.debitDay ?? undefined,
+      // Debit order fields intentionally omitted — Netcash handles payment collection
       emergencyContactName: input.emergencyContactName,
       emergencyContactPhone: input.emergencyContactPhone,
       agreedTerms: input.agreedTerms,
@@ -215,7 +212,7 @@ export async function createEnrollment(input: EnrollmentInput) {
   }
 
   revalidatePath("/dashboard")
-  return { referenceNumber }
+  return { referenceNumber, enrollmentId: enrollmentId ?? null }
 }
 
 /** Parent changes the booked slot for one of their own enrollments. */
@@ -281,44 +278,44 @@ export async function updateProfile(input: { name: string; mobile: string }) {
 }
 
 /**
- * Build a signed PayFast payment payload for a once-off enrollment.
+ * Build a Netcash Pay Now payment request for an enrollment.
+ * Works for both once-off and monthly subscriptions.
  * Called after the enrollment record has been persisted.
- * Returns the PayFast URL and the signed form fields.
  */
-export async function buildPayfastPayment(input: {
+export async function buildNetcashPaymentForEnrollment(input: {
   referenceNumber: string
+  enrollmentId: number
   parentName: string
   parentEmail: string
   packageName: string
   packagePrice: number
+  paymentType: "once-off" | "monthly"
 }) {
-  // NEXT_PUBLIC_BASE_URL must be the public HTTPS URL of the deployment.
-  // VERCEL_URL is auto-set by Vercel (no https:// prefix), so we add it.
-  // PayFast CANNOT reach localhost — a real public URL is required for ITN.
-  const baseUrl =
-    process.env.NEXT_PUBLIC_BASE_URL ??
-    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null) ??
-    (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : null) ??
-    "https://localhost:3000"
+  // Create an order record so we can track payment state
+  const [orderRow] = await db
+    .insert(orders)
+    .values({
+      enrollmentId: input.enrollmentId,
+      userId: (await (async () => {
+        const rows = await db.select({ userId: enrollments.userId }).from(enrollments).where(eq(enrollments.id, input.enrollmentId)).limit(1)
+        return rows[0]?.userId ?? ""
+      })()),
+      packageType: input.paymentType,
+      amount: Math.round(input.packagePrice * 100), // store cents
+      status: "awaiting_payment",
+      netcashOrderId: input.referenceNumber,
+    })
+    .returning({ id: orders.id })
 
-  const notifyUrl = `${baseUrl}/api/payfast/notify`
-  console.log("[v0] PayFast notifyUrl:", notifyUrl)
-
-  const formData = buildPayfastFormData({
-    merchantId: process.env.PAYFAST_MERCHANT_ID!,
-    merchantKey: process.env.PAYFAST_MERCHANT_KEY!,
-    passphrase: process.env.PAYFAST_PASSPHRASE ?? "",
-    returnUrl: `${baseUrl}/enrollment/success?ref=${encodeURIComponent(input.referenceNumber)}&name=${encodeURIComponent(input.parentName)}`,
-    cancelUrl: `${baseUrl}/enrollment?cancelled=1`,
-    notifyUrl,
-    nameFirst: input.parentName.split(" ")[0] ?? input.parentName,
-    nameLast: input.parentName.split(" ").slice(1).join(" ") || undefined,
-    emailAddress: input.parentEmail,
-    mPaymentId: input.referenceNumber,
-    amount: input.packagePrice.toFixed(2), // price stored in Rands
-    itemName: `Next Gen Padel — ${input.packageName}`,
-    itemDescription: `Once-off enrollment fee for ${input.packageName}`,
+  const { netcashUrl, formFields } = await buildNetcashPayment({
+    referenceNumber: input.referenceNumber,
+    enrollmentId: input.enrollmentId,
+    parentName: input.parentName,
+    parentEmail: input.parentEmail,
+    packageName: input.packageName,
+    packagePrice: input.packagePrice,
+    paymentType: input.paymentType,
   })
 
-  return { payfastUrl: PAYFAST_URL, formData }
+  return { netcashUrl, formFields, orderId: orderRow?.id }
 }
