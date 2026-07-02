@@ -91,8 +91,10 @@ export function AdminSiteImagesManager({
             >
               {/* Preview */}
               <div className="relative aspect-video bg-muted overflow-hidden">
+                {/* key forces a full DOM remount so the browser fetches the new image */}
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
+                  key={cacheBust[img.imageKey] ?? img.imageKey}
                   src={imageUrl(img)}
                   alt={img.label}
                   className="h-full w-full object-cover"
