@@ -72,6 +72,29 @@ export async function createMoment(input: MomentInput): Promise<{ ok: boolean; e
   }
 }
 
+export async function createMoments(inputs: MomentInput[]): Promise<{ ok: boolean; error?: string }> {
+  if (!(await isAdminAuthenticated())) return { ok: false, error: "Unauthorized" }
+  if (!inputs.length) return { ok: false, error: "No moments provided" }
+  try {
+    await db.insert(moments).values(
+      inputs.map((input) => ({
+        title: input.title,
+        caption: input.caption ?? null,
+        mediaUrl: input.mediaUrl,
+        mediaType: input.mediaType,
+        thumbnailUrl: input.thumbnailUrl ?? null,
+        category: input.category,
+        published: input.published,
+        sortOrder: input.sortOrder,
+      })),
+    )
+    revalidatePath("/moments")
+    return { ok: true }
+  } catch (e) {
+    return { ok: false, error: String(e) }
+  }
+}
+
 export async function updateMoment(id: number, input: MomentInput): Promise<{ ok: boolean; error?: string }> {
   if (!(await isAdminAuthenticated())) return { ok: false, error: "Unauthorized" }
   try {
