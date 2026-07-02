@@ -16,13 +16,17 @@ export function blobUrl(pathname: string | null | undefined): string | null {
 // Widths the /api/blob proxy is allowed to resize to (must match the route).
 const IMAGE_WIDTHS = [200, 400, 640, 828, 1080, 1600]
 
+// Cache-bust version — bump this if the proxy logic changes and browsers need
+// to discard stale immutably-cached responses.
+const V = "2"
+
 /**
  * Returns a proxied URL that resizes the image to `width` (WebP) server-side.
  * Use for a single fixed-size <img> src fallback.
  */
 export function blobImage(pathname: string | null | undefined, width = 828): string | null {
   if (!pathname) return null
-  return `/api/blob?p=${encodeURIComponent(pathname)}&w=${width}`
+  return `/api/blob?p=${encodeURIComponent(pathname)}&w=${width}&v=${V}`
 }
 
 /**
@@ -34,5 +38,5 @@ export function blobImage(pathname: string | null | undefined, width = 828): str
 export function blobSrcSet(pathname: string | null | undefined): string | undefined {
   if (!pathname) return undefined
   const enc = encodeURIComponent(pathname)
-  return IMAGE_WIDTHS.map((w) => `/api/blob?p=${enc}&w=${w} ${w}w`).join(", ")
+  return IMAGE_WIDTHS.map((w) => `/api/blob?p=${enc}&w=${w}&v=${V} ${w}w`).join(", ")
 }

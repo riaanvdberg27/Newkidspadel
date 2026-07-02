@@ -4,7 +4,7 @@ import { useState, useTransition, useRef } from "react"
 import { upload } from "@vercel/blob/client"
 import { Plus, Trash2, Save, Check, Upload, Play, Image as ImageIcon, X } from "lucide-react"
 import { createMoments, updateMoment, deleteMoment, type PublicMoment, type MomentInput } from "@/app/actions/moments"
-import { blobUrl } from "@/lib/blob"
+import { blobUrl, blobImage } from "@/lib/blob"
 
 const CATEGORIES = [
   { value: "general", label: "General" },
@@ -456,8 +456,8 @@ export function AdminMomentsManager({ initialMoments }: { initialMoments: Public
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {filtered.map((m) => {
-            const thumb = m.thumbnailUrl ? (blobUrl(m.thumbnailUrl) ?? m.thumbnailUrl) : null
-            const media = blobUrl(m.mediaUrl) ?? m.mediaUrl
+            const thumb = m.thumbnailUrl ? (blobImage(m.thumbnailUrl, 640) ?? m.thumbnailUrl) : null
+            const media = blobImage(m.mediaUrl, 640) ?? m.mediaUrl
             return (
               <div key={m.id} className="group relative overflow-hidden rounded-xl border border-border bg-card shadow-sm">
                 {/* Thumbnail */}
@@ -467,7 +467,7 @@ export function AdminMomentsManager({ initialMoments }: { initialMoments: Public
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={thumb} alt={m.title} className="h-full w-full object-cover" />
                     ) : (
-                      <video src={media} className="h-full w-full object-cover" preload="metadata" muted playsInline />
+                      <video src={blobUrl(m.mediaUrl) ?? m.mediaUrl} className="h-full w-full object-cover" preload="metadata" muted playsInline />
                     )
                   ) : (
                     // eslint-disable-next-line @next/next/no-img-element
