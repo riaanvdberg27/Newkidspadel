@@ -19,6 +19,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "file and imageKey are required" }, { status: 400 })
   }
 
+  // The hero mascot image is hardcoded and must never be overwritten via the admin
+  const PROTECTED_KEYS = ["hero-kids"]
+  if (PROTECTED_KEYS.includes(imageKey)) {
+    return NextResponse.json({ error: "This image cannot be replaced." }, { status: 403 })
+  }
+
   const allowed = ["image/jpeg", "image/png", "image/webp", "image/gif"]
   if (!allowed.includes(file.type)) {
     return NextResponse.json({ error: "Only JPEG, PNG, WebP and GIF are supported" }, { status: 400 })
