@@ -1,22 +1,40 @@
+import type { Metadata } from "next"
 import Link from "next/link"
 import Image from "next/image"
 import { ClubsSection } from "@/components/clubs-section"
+import { BreadcrumbSchema } from "@/components/breadcrumb-schema"
 
 // Always fetch the latest club list — prevents stale data on different edge nodes
 export const dynamic = "force-dynamic"
 
+export const metadata: Metadata = {
+  title: "Padel Clubs in Pretoria | Brooklyn, Menlo Park, Moreleta Park, Garsfontein",
+  description:
+    "NextGen Padel Academy operates at premium padel clubs in Pretoria — Brooklyn, Menlo Park, Moreleta Park, Garsfontein, Waterkloof, Menlyn, Lynnwood, Faerie Glen and Silver Lakes. Find the club nearest to you.",
+  alternates: { canonical: "https://nextgenpadel.co.za/clubs" },
+  openGraph: {
+    title: "Padel Clubs in Pretoria | NextGen Padel Academy",
+    description:
+      "Find your nearest NextGen Padel venue in Pretoria — Brooklyn, Menlo Park, Moreleta Park, Garsfontein and surrounding suburbs. Kids padel lessons at premium facilities.",
+    url: "https://nextgenpadel.co.za/clubs",
+  },
+}
+
 export default function ClubsPage() {
   return (
     <main>
+      <BreadcrumbSchema crumbs={[{ name: "Padel Clubs", href: "/clubs" }]} />
       {/* Hero */}
       <section className="bg-navy px-4 py-12 text-center text-navy-foreground sm:py-16">
         <span className="inline-block rounded-full bg-lime/20 px-4 py-1.5 text-sm font-bold text-lime mb-4">
-          Near You
+          Pretoria
         </span>
-        <h1 className="text-balance text-3xl font-black sm:text-5xl">Our Affiliated Clubs</h1>
-        <p className="mt-2 text-xl font-black text-lime">Choose Your Home Court</p>
+        <h1 className="text-balance text-3xl font-black sm:text-5xl">
+          Kids Padel Clubs in Pretoria — Brooklyn, Menlo Park, Moreleta Park &amp; More
+        </h1>
+        <p className="mt-2 text-xl font-black text-lime">Find Your Nearest Padel Venue</p>
         <p className="mx-auto mt-3 max-w-xl text-sm leading-relaxed text-navy-foreground/80 sm:text-base">
-          Next Gen Padel operates at premium padel facilities across South Africa. Find the club nearest to you.
+          NextGen Padel Academy operates at premium padel facilities across Pretoria — Brooklyn, Menlo Park, Moreleta Park, Garsfontein, Waterkloof, Menlyn, Lynnwood, Faerie Glen and Silver Lakes. Find the club nearest to you and enrol today.
         </p>
       </section>
 

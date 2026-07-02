@@ -13,6 +13,7 @@ import { db } from "@/lib/db"
 import { enrollments } from "@/lib/db/schema"
 import { eq } from "drizzle-orm"
 import { verifyItnSignature } from "@/lib/payfast"
+import { completeReferralForEnrollment } from "@/app/actions/referrals"
 
 // PayFast requires a 200 text/plain response.
 function ok() {
@@ -94,6 +95,11 @@ export async function POST(req: NextRequest) {
     .returning({ id: enrollments.id })
 
   console.log("[PayFast ITN] DB updated rows:", updated.length, "for reference:", m_payment_id, "-> paymentStatus:", newPaymentStatus)
+
+  // Complete any pending referral for this enrollment and issue voucher to referrer
+  if (payment_status === "COMPLETE" && updated[0]?.id) {
+    try { await completeReferralForEnrollment(updated[0].id) } catch {}
+  }
 
   return ok()
 }

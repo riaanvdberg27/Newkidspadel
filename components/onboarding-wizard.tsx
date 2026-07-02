@@ -7,7 +7,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 // lucide-react icons used in this file
 import { Check, ChevronRight } from "lucide-react"
 import { formatSlot } from "@/lib/slots"
-import type { Club } from "@/lib/db/schema"
+import type { Club, School } from "@/lib/db/schema"
 import type { PublicPackage } from "@/app/actions/packages"
 import { SlotPicker, type SelectedSlot } from "@/components/slot-picker"
 import { PackageSlotPicker } from "@/components/package-slot-picker"
@@ -17,25 +17,16 @@ import { SignaturePad } from "@/components/signature-pad"
 import { CONSENT_TERMS_LABEL, CONSENT_MEDIA_LABEL, TERMS_TITLE, TERMS_SECTIONS } from "@/lib/terms"
 import { authClient } from "@/lib/auth-client"
 import { createEnrollment } from "@/app/actions/enrollment"
-import type { CoachRow } from "@/app/actions/coaches"
 
-import { buildPayfastPayment } from "@/app/actions/enrollment"
+import { buildNetcashPaymentForEnrollment } from "@/app/actions/enrollment"
+import { validateVoucherCode } from "@/app/actions/referrals"
+import { Tag, X } from "lucide-react"
 
-const ALL_STEPS = ["Children", "Child Details", "Club & Schedule", "Parent Account", "Debit Order", "Preferences", "Review"]
-const ONCE_OFF_STEPS = ["Children", "Child Details", "Club & Schedule", "Parent Account", "Preferences", "Review"]
+const CLUB_STEPS = ["Children", "Child Details", "Club & Schedule", "Parent Account", "Preferences", "Review"]
+const SCHOOL_STEPS = ["Children", "Child Details", "School", "Parent Account", "Preferences", "Review"]
+const ALL_STEPS = CLUB_STEPS
+const ONCE_OFF_STEPS = CLUB_STEPS
 
-const BANKS = [
-  "Absa",
-  "Capitec",
-  "Discovery Bank",
-  "FNB",
-  "Investec",
-  "Nedbank",
-  "Standard Bank",
-  "TymeBank",
-  "African Bank",
-  "Other",
-]
 
 type Prefs = {
   prefEmail: boolean
@@ -46,24 +37,22 @@ type Prefs = {
   prefHolidayClinics: boolean
 }
 
-type DebitOrder = {
-  accountHolder: string
-  bankName: string
-  accountNumber: string
-  accountType: string
-  debitDay: string
-}
 
-export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages: PublicPackage[] }) {
+export function OnboardingWizard({ clubs, packages, schools }: { clubs: Club[]; packages: PublicPackage[]; schools: School[] }) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const initialPackage = packages.find((p) => p.slug === searchParams.get("package")) ?? null
+  const initialRefCode = searchParams.get("ref") ?? null
 
   const [selectedPackage, setSelectedPackage] = useState<PublicPackage | null>(initialPackage)
   const [step, setStep] = useState(0)
 
   const isOnceOff = selectedPackage?.period === "once-off"
-  const STEPS = isOnceOff ? ONCE_OFF_STEPS : ALL_STEPS
+  // Treat as school package if the isSchool flag is set OR the slug contains "school"
+  const isSchoolPackage =
+    selectedPackage?.isSchool === true ||
+    (selectedPackage?.slug?.toLowerCase().includes("school") ?? false)
+  const STEPS = isSchoolPackage ? SCHOOL_STEPS : (isOnceOff ? ONCE_OFF_STEPS : ALL_STEPS)
 
   // If the selected package restricts to specific clubs, only show those clubs in step 1
   const availableClubs =
@@ -81,37 +70,12 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
     Array.from({ length: 1 }, () => ({ firstName: "", lastName: "", dob: "" })),
   )
   const [clubId, setClubId] = useState<number | null>(null)
+  const [schoolId, setSchoolId] = useState<number | null>(null)
   const [slot, setSlot] = useState<SelectedSlot | null>(null)
   const [ageGroup, setAgeGroup] = useState<AgeGroup | null>(null)
   const [parent, setParent] = useState({ firstName: "", lastName: "", email: "", mobile: "", password: "" })
   const [emergency, setEmergency] = useState({ name: "", phone: "" })
-  // Coach selection
-  const [availableCoaches, setAvailableCoaches] = useState<CoachRow[]>([])
-  const [coachId, setCoachId] = useState<number | null>(null)
-  const [coachesLoading, setCoachesLoading] = useState(false)
 
-  // Fetch coaches whenever the selected club changes
-  useEffect(() => {
-    if (!clubId) {
-      setAvailableCoaches([])
-      setCoachId(null)
-      return
-    }
-    setCoachesLoading(true)
-    setCoachId(null)
-    fetch(`/api/coaches/by-club?clubId=${clubId}`)
-      .then((r) => r.json())
-      .then((data: CoachRow[]) => setAvailableCoaches(Array.isArray(data) ? data : []))
-      .catch(() => setAvailableCoaches([]))
-      .finally(() => setCoachesLoading(false))
-  }, [clubId])
-  const [debit, setDebit] = useState<DebitOrder>({
-    accountHolder: "",
-    bankName: "",
-    accountNumber: "",
-    accountType: "Cheque",
-    debitDay: "1",
-  })
   const [prefs, setPrefs] = useState<Prefs>({
     prefEmail: true,
     prefWhatsapp: false,
@@ -120,6 +84,17 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
     prefEvents: false,
     prefHolidayClinics: false,
   })
+
+  // Voucher / referral
+  const [voucherInput, setVoucherInput] = useState("")
+  const [voucherValidating, setVoucherValidating] = useState(false)
+  const [voucherError, setVoucherError] = useState<string | null>(null)
+  const [appliedVoucher, setAppliedVoucher] = useState<{
+    id: number
+    code: string
+    discountPercent: number
+    campaignName: string
+  } | null>(null)
 
   // Terms, consent & signature
   const [agreedTerms, setAgreedTerms] = useState(false)
@@ -130,10 +105,8 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [reference, setReference] = useState<string | null>(null)
-  // Payment method for once-off packages — PayFast only (EFT removed)
-  const [paymentMethod] = useState<"payfast">("payfast")
-
   const selectedClub = clubs.find((c) => c.id === clubId) ?? null
+  const selectedSchool = schools.find((s) => s.id === schoolId) ?? null
 
   if (!selectedPackage) {
     return <PackagePicker packages={packages} onSelect={(pkg) => {
@@ -201,9 +174,10 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
 
       // 2. Persist one enrollment per child
       const refs: string[] = []
+      const enrollmentIds: number[] = []
       for (const child of children) {
         const childFullName = `${child.firstName} ${child.lastName}`.trim()
-        const { referenceNumber } = await createEnrollment({
+        const { referenceNumber, enrollmentId } = await createEnrollment({
           parentName: `${parent.firstName} ${parent.lastName}`.trim(),
           parentEmail: parent.email,
           parentMobile: parent.mobile,
@@ -212,19 +186,14 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
           childAge: child.dob ? Math.floor((Date.now() - new Date(child.dob).getTime()) / (1000 * 60 * 60 * 24 * 365.25)) : 0,
           packageName: selectedPackage.name,
           packagePrice: selectedPackage.price,
-          club: selectedClub?.name ?? "",
-          clubId: clubId,
-          slotWeekday: slot?.weekday ?? null,
-          slotHour: slot?.hour ?? null,
+          club: isSchoolPackage ? (selectedSchool?.name ?? "") : (selectedClub?.name ?? ""),
+          clubId: isSchoolPackage ? null : clubId,
+          schoolId: isSchoolPackage ? schoolId : null,
+          schoolName: isSchoolPackage ? (selectedSchool?.name ?? null) : null,
+          slotWeekday: isSchoolPackage ? null : (slot?.weekday ?? null),
+          slotHour: isSchoolPackage ? null : (slot?.hour ?? null),
           slotAgeGroup: ageGroup,
-          // Debit fields — only passed for monthly
-          ...(isOnceOff ? {} : {
-            debitAccountHolder: debit.accountHolder,
-            debitBankName: debit.bankName,
-            debitAccountNumber: debit.accountNumber,
-            debitAccountType: debit.accountType,
-            debitDay: Number(debit.debitDay),
-          }),
+
           emergencyContactName: emergency.name,
           emergencyContactPhone: emergency.phone,
           agreedTerms,
@@ -233,43 +202,43 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
           signedName: `${parent.firstName} ${parent.lastName}`.trim(),
           paymentType: isOnceOff ? "once-off" : "monthly",
           ...prefs,
-          coachId: coachId ?? null,
-          coachName: availableCoaches.find((c) => c.id === coachId)?.name ?? null,
+
+          referralCode: initialRefCode ?? null,
+          voucherId: appliedVoucher?.id ?? null,
+          discountPercent: appliedVoucher?.discountPercent ?? undefined,
         })
         refs.push(referenceNumber)
+        if (enrollmentId) enrollmentIds.push(enrollmentId)
       }
       const referenceNumber = refs.join(", ")
 
-      if (isOnceOff) {
-        // PayFast: use the first child's reference for the redirect
-        const firstRef = referenceNumber.split(", ")[0]
-        const { payfastUrl, formData } = await buildPayfastPayment({
-          referenceNumber: firstRef,
-          parentName: `${parent.firstName} ${parent.lastName}`.trim(),
-          parentEmail: parent.email,
-          packageName: selectedPackage.name,
-          packagePrice: selectedPackage.price * childCount,
-        })
+      // Both once-off and monthly redirect to Netcash Pay Now
+      const firstRef = refs[0] ?? referenceNumber
+      const firstEnrollmentId = enrollmentIds[0] ?? 0
+      const { netcashUrl, formFields } = await buildNetcashPaymentForEnrollment({
+        referenceNumber: firstRef,
+        enrollmentId: firstEnrollmentId,
+        parentName: `${parent.firstName} ${parent.lastName}`.trim(),
+        parentEmail: parent.email,
+        packageName: selectedPackage.name,
+        packagePrice: selectedPackage.price * childCount,
+        paymentType: isOnceOff ? "once-off" : "monthly",
+      })
 
-        // Build and auto-submit a hidden form to POST to PayFast
-        const form = document.createElement("form")
-        form.method = "POST"
-        form.action = payfastUrl
-        Object.entries(formData).forEach(([key, value]) => {
-          const input = document.createElement("input")
-          input.type = "hidden"
-          input.name = key
-          input.value = value
-          form.appendChild(input)
-        })
-        document.body.appendChild(form)
-        form.submit()
-        return // Don't call setSubmitting(false) — the page is navigating away
-      }
-
-      // 3b. Monthly: show the inline confirmation screen
-      setReference(referenceNumber)
-      router.refresh()
+      // Auto-submit a hidden form to POST to Netcash Pay Now
+      const form = document.createElement("form")
+      form.method = "POST"
+      form.action = netcashUrl
+      Object.entries(formFields).forEach(([key, value]) => {
+        const inp = document.createElement("input")
+        inp.type = "hidden"
+        inp.name = key
+        inp.value = value
+        form.appendChild(inp)
+      })
+      document.body.appendChild(form)
+      form.submit()
+      // Don't call setSubmitting(false) — the page is navigating away
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong. Please try again.")
     } finally {
@@ -416,7 +385,7 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
                 </div>
               ))}
             </div>
-            {/* Age-group category selector — applies to all children (same class) */}
+            {/* Age-group category selector ��� applies to all children (same class) */}
             <div className="mt-6">
               <p className="text-sm font-semibold text-navy">Age Category</p>
               <p className="mt-0.5 text-xs text-muted-foreground">
@@ -425,7 +394,7 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
                   : "Select the age group that best fits your child — this determines which time slots are available."}
               </p>
               <div className="mt-3 grid grid-cols-3 gap-3">
-                {(["5-8", "9-13", "14-17"] as const).map((ag) => (
+                {(["4-8", "9-13", "14-17"] as const).map((ag) => (
                   <button
                     key={ag}
                     type="button"
@@ -448,88 +417,110 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
           </div>
     )
     if (step === 2) return (
-          /* ── Step 2: Club + coach + time slot ── */
+          /* ── Step 2: School or Club + time slot ── */
           <div>
-            <h2 className="text-xl font-bold text-navy">Choose Your Club &amp; Schedule</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Showing slots available for ages{" "}
-              <span className="font-semibold text-navy">{ageGroup}</span>
-            </p>
-            {availableClubs.length < clubs.length && (
-              <p className="mt-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700">
-                The <strong>{selectedPackage?.name}</strong> package is only available at{" "}
-                {availableClubs.length === 1 ? "the venue below" : "the venues below"}.
-              </p>
-            )}
-            <div className="mt-4 space-y-3">
-              {availableClubs.map((c) => (
-                <button
-                  key={c.id}
-                  onClick={() => { setClubId(c.id); setSlot(null) }}
-                  className={`w-full rounded-card border p-4 text-left transition-colors ${
-                    clubId === c.id ? "border-lime bg-lime/10" : "border-border bg-card hover:border-lime/50"
-                  }`}
-                >
-                  <h3 className="font-bold text-navy">{c.name}</h3>
-                  <p className="text-sm text-muted-foreground">{c.location}</p>
-                </button>
-              ))}
-            </div>
-            {/* Coach picker */}
-            {clubId && (
-              <div className="mt-6">
-                <p className="block text-sm font-semibold text-navy">Select a Coach</p>
-                <p className="mb-3 text-xs text-muted-foreground">
-                  {coachesLoading ? "Loading coaches…" : availableCoaches.length === 0 ? "No coaches are currently assigned to this venue." : "Pick the coach you would like to train with."}
+            {isSchoolPackage ? (
+              <>
+                <h2 className="text-xl font-bold text-navy">Select Your School</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Choose the school where your child will attend Next Gen Padel Academy lessons.
                 </p>
-                {!coachesLoading && availableCoaches.length > 0 && (
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    {availableCoaches.map((coach) => (
-                      <button
-                        key={coach.id}
-                        type="button"
-                        onClick={() => setCoachId(coach.id === coachId ? null : coach.id)}
-                        className={`flex items-center gap-3 rounded-card border p-3 text-left transition-colors ${coachId === coach.id ? "border-lime bg-lime/10" : "border-border bg-card hover:border-lime/50"}`}
-                      >
-                        <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-full bg-muted">
-                          {coach.imageUrl ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img src={`/api/blob?p=${encodeURIComponent(coach.imageUrl)}`} alt={coach.name} className="h-full w-full object-cover" />
-                          ) : (
-                            <div className="flex h-full w-full items-center justify-center text-sm font-black text-muted-foreground">
-                              {coach.name[0]?.toUpperCase() ?? "?"}
-                            </div>
-                          )}
+                <div className="mt-6">
+                  <label htmlFor="school-select" className="block text-sm font-semibold text-navy mb-2">
+                    School
+                  </label>
+                  {schools.length === 0 ? (
+                    <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700">
+                      No schools are currently listed. Please check back soon or{" "}
+                      <a href="/contact" className="underline">contact us</a>.
+                    </p>
+                  ) : (
+                    <select
+                      id="school-select"
+                      value={schoolId ?? ""}
+                      onChange={(e) => setSchoolId(e.target.value ? Number(e.target.value) : null)}
+                      className="w-full rounded-2xl border-2 border-border bg-card px-4 py-3 text-sm font-semibold text-navy shadow-sm transition-colors focus:border-lime focus:outline-none"
+                    >
+                      <option value="">— Select a school —</option>
+                      {schools.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.name}{s.location ? ` — ${s.location}` : ""}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  {/* Show selected school confirmation */}
+                  {schoolId && (() => {
+                    const s = schools.find((sc) => sc.id === schoolId)
+                    return s ? (
+                      <div className="mt-4 flex items-center gap-3 rounded-2xl border-2 border-lime bg-lime/10 px-4 py-3">
+                        {s.logoUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={s.logoUrl} alt={s.name} className="h-10 w-10 rounded-full object-contain border border-border bg-white p-0.5 shrink-0" />
+                        ) : (
+                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-navy/10 text-sm font-black text-navy">
+                            {s.name[0]?.toUpperCase()}
+                          </div>
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <p className="font-black text-navy">{s.name}</p>
+                          {s.location && <p className="text-xs text-muted-foreground">{s.location}</p>}
                         </div>
-                        <div className="min-w-0">
-                          <p className="truncate font-bold text-navy text-sm">{coach.name}</p>
-                          <p className="truncate text-xs text-muted-foreground">{coach.role}</p>
-                        </div>
-                        {coachId === coach.id && <Check className="ml-auto h-4 w-4 shrink-0 text-lime-foreground" />}
-                      </button>
-                    ))}
-                  </div>
+                        <Check className="h-5 w-5 shrink-0 text-lime-foreground" />
+                      </div>
+                    ) : null
+                  })()}
+                </div>
+                <StepNav onBack={() => setStep(1)} onNext={() => setStep(3)} nextDisabled={!schoolId} />
+              </>
+            ) : (
+              <>
+                <h2 className="text-xl font-bold text-navy">Choose Your Club &amp; Schedule</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Showing slots available for ages{" "}
+                  <span className="font-semibold text-navy">{ageGroup}</span>
+                </p>
+                {availableClubs.length < clubs.length && (
+                  <p className="mt-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700">
+                    The <strong>{selectedPackage?.name}</strong> package is only available at{" "}
+                    {availableClubs.length === 1 ? "the venue below" : "the venues below"}.
+                  </p>
                 )}
-              </div>
+                <div className="mt-4 space-y-3">
+                  {availableClubs.map((c) => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => { setClubId(c.id); setSlot(null); }}
+                      className={`w-full rounded-card border p-4 text-left transition-colors ${
+                        clubId === c.id ? "border-lime bg-lime/10" : "border-border bg-card hover:border-lime/50"
+                      }`}
+                    >
+                      <h3 className="font-bold text-navy">{c.name}</h3>
+                      <p className="text-sm text-muted-foreground">{c.location}</p>
+                    </button>
+                  ))}
+                </div>
+                {clubId && selectedPackage?.slotType === "custom" ? (
+                  <div className="mt-6">
+                    <p className="block text-sm font-semibold text-navy">Available Time Slots</p>
+                    <p className="mb-3 text-xs text-muted-foreground">This package runs at fixed times. Pick a slot below.</p>
+                    <PackageSlotPicker packageId={selectedPackage.id} packageName={selectedPackage.name} ageGroup={ageGroup ?? "4-8"} clubId={clubId ?? undefined} selected={slot} onSelect={setSlot} />
+                  </div>
+                ) : clubId && ageGroup ? (
+                  <div className="mt-6">
+                    <p className="block text-sm font-semibold text-navy">Available Time Slots</p>
+                    <p className="mb-3 text-xs text-muted-foreground">Only times with open places for ages {ageGroup} are shown.</p>
+                    <SlotPicker clubId={clubId} ageGroup={ageGroup} selected={slot} onSelect={setSlot} />
+                  </div>
+                ) : null}
+                <StepNav onBack={() => setStep(1)} onNext={() => setStep(3)} nextDisabled={!clubId || !slot} />
+              </>
             )}
-            {clubId && selectedPackage?.slotType === "custom" ? (
-              <div className="mt-6">
-                <p className="block text-sm font-semibold text-navy">Available Time Slots</p>
-                <p className="mb-3 text-xs text-muted-foreground">This package runs at fixed times. Pick a slot below.</p>
-                <PackageSlotPicker packageId={selectedPackage.id} packageName={selectedPackage.name} ageGroup={ageGroup ?? "5-8"} clubId={clubId ?? undefined} selected={slot} onSelect={setSlot} />
-              </div>
-            ) : clubId && ageGroup ? (
-              <div className="mt-6">
-                <p className="block text-sm font-semibold text-navy">Available Time Slots</p>
-                <p className="mb-3 text-xs text-muted-foreground">Only times with open places for ages {ageGroup} are shown.</p>
-                <SlotPicker clubId={clubId} ageGroup={ageGroup} selected={slot} onSelect={setSlot} />
-              </div>
-            ) : null}
-            <StepNav onBack={() => setStep(1)} onNext={() => setStep(3)} nextDisabled={!clubId || !slot} />
           </div>
     )
     if (step === 3) return (
-          /* ── Step 3: Parent account (for both monthly & once-off) ── */
+          /* ── Step 3: Parent account (for both monthly & once-off) ���─ */
           <div>
             <h2 className="text-xl font-bold text-navy">Parent / Guardian Account</h2>
             <p className="mt-1 text-sm text-muted-foreground">
@@ -581,43 +572,7 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
             />
           </div>
     )
-    if (step === 4 && !isOnceOff) return (
-          /* ── Step 4 (monthly only): Debit order ── */
-          <div>
-            <h2 className="text-xl font-bold text-navy">Debit Order Details</h2>
-            <p className="mt-1 text-sm text-muted-foreground">Monthly fees are collected by debit order. Please provide the account to be debited.</p>
-            <div className="mt-6 grid gap-4 sm:grid-cols-2">
-              <Field label="Account Holder Name" value={debit.accountHolder} onChange={(v) => setDebit({ ...debit, accountHolder: v })} />
-              <label className="block">
-                <span className="block text-sm font-semibold text-navy">Bank Name</span>
-                <select value={debit.bankName} onChange={(e) => setDebit({ ...debit, bankName: e.target.value })} className="mt-2 w-full rounded-md border border-border bg-card px-3 py-2 outline-none focus:border-lime">
-                  <option value="">Select your bank</option>
-                  {BANKS.map((b) => <option key={b} value={b}>{b}</option>)}
-                </select>
-              </label>
-              <Field label="Account Number" type="text" value={debit.accountNumber} onChange={(v) => setDebit({ ...debit, accountNumber: v.replace(/[^0-9]/g, "") })} placeholder="Digits only" />
-              <label className="block">
-                <span className="block text-sm font-semibold text-navy">Account Type</span>
-                <select value={debit.accountType} onChange={(e) => setDebit({ ...debit, accountType: e.target.value })} className="mt-2 w-full rounded-md border border-border bg-card px-3 py-2 outline-none focus:border-lime">
-                  <option value="Cheque">Cheque / Current</option>
-                  <option value="Savings">Savings</option>
-                </select>
-              </label>
-              <label className="block">
-                <span className="block text-sm font-semibold text-navy">Day of Debit Order</span>
-                <select value={debit.debitDay} onChange={(e) => setDebit({ ...debit, debitDay: e.target.value })} className="mt-2 w-full rounded-md border border-border bg-card px-3 py-2 outline-none focus:border-lime">
-                  {Array.from({ length: 28 }, (_, i) => i + 1).map((d) => (
-                    <option key={d} value={String(d)}>
-                      {d}{d === 1 || d === 21 ? "st" : d === 2 || d === 22 ? "nd" : d === 3 || d === 23 ? "rd" : "th"} of each month
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-            <StepNav onBack={() => setStep(3)} onNext={() => setStep(5)} nextDisabled={!debit.accountHolder || !debit.bankName || debit.accountNumber.length < 5} />
-          </div>
-    )
-    if ((step === 5 && !isOnceOff) || (step === 4 && isOnceOff)) return (
+    if (step === 4) return (
           /* ── Preferences step ── */
           <div>
             <h2 className="text-xl font-bold text-navy">Communication Preferences</h2>
@@ -630,7 +585,7 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
               <PrefToggle label="Events &amp; tournaments" checked={prefs.prefEvents} onChange={(v) => setPrefs({ ...prefs, prefEvents: v })} />
               <PrefToggle label="Holiday clinics" checked={prefs.prefHolidayClinics} onChange={(v) => setPrefs({ ...prefs, prefHolidayClinics: v })} />
             </div>
-            <StepNav onBack={() => setStep(isOnceOff ? 3 : 4)} onNext={() => setStep(isOnceOff ? 5 : 6)} />
+            <StepNav onBack={() => setStep(3)} onNext={() => setStep(5)} />
           </div>
     )
     // Review step (default)
@@ -650,9 +605,15 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
                   bold
                 />
               )}
-              <Row label="Club" value={selectedClub?.name ?? ""} />
-              <Row label="Time Slot" value={slot ? formatSlot(slot.weekday, slot.hour) : ""} />
-              {coachId && <Row label="Coach" value={availableCoaches.find((c) => c.id === coachId)?.name ?? ""} />}
+              {isSchoolPackage ? (
+                <Row label="School" value={selectedSchool?.name ?? ""} />
+              ) : (
+                <>
+                  <Row label="Club" value={selectedClub?.name ?? ""} />
+                  <Row label="Time Slot" value={slot ? formatSlot(slot.weekday, slot.hour) : ""} />
+                </>
+              )}
+
               {children.map((child, idx) => (
                 <Row
                   key={idx}
@@ -664,28 +625,79 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
               <Row label="Email" value={parent.email} />
               <Row label="Mobile" value={parent.mobile} />
               <Row label="Emergency Contact" value={`${emergency.name} — ${emergency.phone}`} />
-              {!isOnceOff && (
-                <Row
-                  label="Debit Order"
-                  value={`${debit.bankName} ••${debit.accountNumber.slice(-4)} (${debit.accountType}), day ${debit.debitDay}`}
-                />
-              )}
+
             </dl>
-            {isOnceOff && (
-              <div className="mt-5 rounded-card border border-border bg-card p-4 shadow-sm">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-lime/20">
-                    <Check className="h-5 w-5 text-lime-foreground" />
-                  </div>
+            {/* Voucher code input */}
+            <div className="mt-5 rounded-card border border-border bg-card p-4 shadow-sm">
+              <div className="flex items-center gap-2 mb-3">
+                <Tag className="h-4 w-4 text-lime-foreground" />
+                <p className="font-semibold text-navy text-sm">Have a voucher code?</p>
+              </div>
+              {appliedVoucher ? (
+                <div className="flex items-center justify-between gap-3 rounded-md bg-lime/10 border border-lime/30 px-3 py-2">
                   <div>
-                    <p className="font-bold text-navy">PayFast — Secure Online Payment</p>
-                    <p className="text-xs text-muted-foreground">
-                      Pay via card, instant EFT, or SnapScan. You will be redirected to PayFast after confirming.
-                    </p>
+                    <p className="text-sm font-bold text-navy">{appliedVoucher.code}</p>
+                    <p className="text-xs text-muted-foreground">{appliedVoucher.campaignName} — {appliedVoucher.discountPercent}% off applied</p>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => { setAppliedVoucher(null); setVoucherInput(""); setVoucherError(null) }}
+                    className="text-muted-foreground hover:text-navy"
+                    aria-label="Remove voucher"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={voucherInput}
+                    onChange={(e) => { setVoucherInput(e.target.value.toUpperCase()); setVoucherError(null) }}
+                    placeholder="e.g. NGP-XXXXXXXX"
+                    className="flex-1 rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-lime"
+                  />
+                  <button
+                    type="button"
+                    disabled={voucherInput.length < 4 || voucherValidating}
+                    onClick={async () => {
+                      setVoucherValidating(true)
+                      setVoucherError(null)
+                      const result = await validateVoucherCode(
+                        voucherInput,
+                        isOnceOff ? "once-off" : "monthly",
+                      )
+                      setVoucherValidating(false)
+                      if (result.valid) {
+                        setAppliedVoucher(result.voucher)
+                      } else {
+                        setVoucherError(result.error)
+                      }
+                    }}
+                    className="rounded-md bg-navy px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                  >
+                    {voucherValidating ? "Checking..." : "Apply"}
+                  </button>
+                </div>
+              )}
+              {voucherError && <p className="mt-2 text-xs text-red-600">{voucherError}</p>}
+            </div>
+
+            <div className="mt-5 rounded-card border border-border bg-card p-4 shadow-sm">
+              <div className="flex items-center gap-3">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-lime/20">
+                  <Check className="h-5 w-5 text-lime-foreground" />
+                </div>
+                <div>
+                  <p className="font-bold text-navy">Netcash Pay Now — Secure Online Payment</p>
+                  <p className="text-xs text-muted-foreground">
+                    {isOnceOff
+                      ? "Pay securely via card or EFT. You will be redirected to Netcash after confirming."
+                      : "Set up your monthly subscription securely via Netcash. You will be redirected to complete payment."}
+                  </p>
                 </div>
               </div>
-            )}
+            </div>
 
             {/* Terms & consent */}
             <div className="mt-6 rounded-card border border-border bg-card p-5 shadow-sm">
@@ -734,7 +746,7 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
 
             <div className="mt-8 flex items-center justify-between gap-4">
               <button
-                onClick={() => setStep(isOnceOff ? 4 : 5)}
+                onClick={() => setStep(4)}
                 className="rounded-2xl border-2 border-border px-5 py-3 font-bold text-navy transition-all hover:bg-muted active:scale-95"
               >
                 Back
@@ -745,8 +757,8 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
                 className="rounded-2xl bg-lime px-6 py-3 font-black text-lime-foreground shadow-sm transition-all hover:scale-105 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-40 active:scale-95"
               >
                 {submitting
-                  ? isOnceOff ? "Redirecting to PayFast…" : "Creating account…"
-                  : isOnceOff ? "Create Account & Pay via PayFast" : "Create Account & Enroll"}
+                  ? "Redirecting to Netcash…"
+                  : "Create Account & Pay via Netcash"}
               </button>
             </div>
             {(!agreedTerms || !signatureData) && (
@@ -810,16 +822,22 @@ function PackagePicker({ packages, onSelect }: { packages: PublicPackage[]; onSe
               {/* White body */}
               <div className="bg-card p-5">
                 {pkg.features.length > 0 && (
-                  <ul className="space-y-2">
-                    {pkg.features.slice(0, 4).map((f) => (
-                      <li key={f} className="flex items-start gap-2 text-sm">
-                        <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-lime/20">
-                          <Check className="h-2.5 w-2.5 text-lime-foreground" />
-                        </span>
-                        <span>{f}</span>
-                      </li>
+                  <div className="space-y-2">
+                    {pkg.features.slice(0, 4).map((item, idx) => (
+                      <div key={idx}>
+                        {item.type === "heading" ? (
+                          <h5 className="font-semibold text-navy text-xs mb-1">{item.text}</h5>
+                        ) : (
+                          <div className="flex items-start gap-2 text-sm">
+                            <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-lime/20">
+                              <Check className="h-2.5 w-2.5 text-lime-foreground" />
+                            </span>
+                            <span>{item.text}</span>
+                          </div>
+                        )}
+                      </div>
                     ))}
-                  </ul>
+                  </div>
                 )}
                 <span className="mt-5 flex items-center justify-center gap-1.5 rounded-xl bg-lime py-3 text-sm font-black text-lime-foreground transition-all group-hover:bg-navy group-hover:text-white">
                   Select &amp; Continue

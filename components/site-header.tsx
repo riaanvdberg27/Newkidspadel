@@ -10,8 +10,11 @@ import { Menu, X } from "lucide-react"
 const NAV = [
   { label: "Home", href: "/" },
   { label: "About", href: "/about" },
-  { label: "Clubs", href: "/clubs" },
   { label: "Enroll", href: "/enrollment" },
+  { label: "Clubs", href: "/clubs" },
+  { label: "Schools", href: "/schools" },
+  { label: "Blog", href: "/blog" },
+  { label: "FAQ", href: "/faq" },
   { label: "Contact", href: "/contact" },
 ]
 
@@ -27,7 +30,7 @@ export function SiteHeader() {
     <header className="sticky top-0 z-50 bg-navy text-navy-foreground shadow-lg">
       <nav className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
         {/* Logo */}
-        <Link href="/" className="flex items-center gap-2.5 shrink-0" onClick={() => setOpen(false)}>
+        <Link href="/" className="flex items-center gap-2 shrink-0" onClick={() => setOpen(false)}>
           <Image
             src="/images/tennis-ball.png"
             alt="Next Gen Padel"
@@ -35,21 +38,21 @@ export function SiteHeader() {
             height={32}
             className="h-8 w-8"
           />
-          <span className="hidden font-extrabold text-lime sm:inline text-sm leading-tight">
+          <span className="hidden font-extrabold text-lime lg:inline text-sm leading-tight">
             Next Gen<br />
             <span className="text-white">Padel Academy</span>
           </span>
         </Link>
 
-        {/* Desktop nav */}
-        <ul className="hidden md:flex items-center gap-1">
+        {/* Desktop nav — visible only on large screens */}
+        <ul className="hidden lg:flex items-center gap-0.5 xl:gap-1">
           {NAV.map((item) => {
             const active = pathname === item.href
             return (
               <li key={item.href}>
                 <Link
                   href={item.href}
-                  className={`rounded-full px-4 py-2 text-sm font-bold transition-all ${
+                  className={`rounded-full px-3 py-2 text-xs font-bold transition-all xl:px-4 xl:text-sm ${
                     active
                       ? "bg-lime text-lime-foreground shadow-sm"
                       : "text-navy-foreground/80 hover:bg-white/10 hover:text-white"
@@ -60,18 +63,18 @@ export function SiteHeader() {
               </li>
             )
           })}
-          <li className="ml-2">
+          <li className="ml-1.5">
             <Link
               href={accountLink.href}
-              className="rounded-full bg-lime px-4 py-2 text-sm font-bold text-lime-foreground transition-all hover:bg-lime/80 btn-wiggle"
+              className="rounded-full bg-lime px-3 py-2 text-xs font-bold text-lime-foreground transition-all hover:bg-lime/80 btn-wiggle xl:px-4 xl:text-sm"
             >
               {accountLink.label}
             </Link>
           </li>
         </ul>
 
-        {/* Mobile right side */}
-        <div className="flex items-center gap-2 md:hidden">
+        {/* Mobile / tablet right side — hamburger shown below lg */}
+        <div className="flex items-center gap-2 lg:hidden">
           <Link
             href={accountLink.href}
             className="rounded-full bg-lime px-3 py-1.5 text-xs font-bold text-lime-foreground"
@@ -89,9 +92,9 @@ export function SiteHeader() {
         </div>
       </nav>
 
-      {/* Mobile dropdown */}
+      {/* Mobile / tablet dropdown — shown below lg */}
       {open && (
-        <div className="border-t border-white/10 bg-navy pb-4 md:hidden">
+        <div className="border-t border-white/10 bg-navy pb-4 lg:hidden">
           <ul className="flex flex-col gap-1 px-4 pt-2">
             {NAV.map((item) => {
               const active = pathname === item.href

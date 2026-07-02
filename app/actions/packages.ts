@@ -7,6 +7,8 @@ import { packages, packageSlots, packageClubs, clubs, enrollments } from "@/lib/
 import { requireAdmin } from "@/lib/admin-auth"
 import type { PackageSlot } from "@/lib/db/schema"
 
+export type FeatureItem = { type: "heading" | "bullet"; text: string }
+
 export type PublicPackage = {
   id: number
   slug: string
@@ -14,7 +16,7 @@ export type PublicPackage = {
   price: number
   period: string
   tagline: string
-  features: string[]
+  features: FeatureItem[]
   description: string
   popular: boolean
   published: boolean
@@ -22,11 +24,27 @@ export type PublicPackage = {
   sortOrder: number
   /** IDs of clubs this package is restricted to. Empty = available at all clubs. */
   clubIds: number[]
+  /** If true, this is a school-based package — wizard shows school picker instead of club picker. */
+  isSchool: boolean
 }
 
 export type CustomSlot = Pick<PackageSlot, "id" | "packageId" | "clubId" | "weekday" | "hour" | "capacity" | "ageGroup">
 
 function toPublic(row: typeof packages.$inferSelect, clubIds: number[] = []): PublicPackage {
+  // Support both old format (string[]) and new format (FeatureItem[])
+  let features: FeatureItem[] = []
+  if (Array.isArray(row.features)) {
+    const raw = row.features as unknown[]
+    features = raw.map((f) => {
+      if (typeof f === "string") {
+        // Legacy: convert old string to bullet item
+        return { type: "bullet", text: f }
+      }
+      // New format: already a FeatureItem
+      return f as FeatureItem
+    })
+  }
+
   return {
     id: row.id,
     slug: row.slug,
@@ -34,13 +52,14 @@ function toPublic(row: typeof packages.$inferSelect, clubIds: number[] = []): Pu
     price: row.price,
     period: row.period,
     tagline: row.tagline,
-    features: Array.isArray(row.features) ? (row.features as string[]) : [],
+    features,
     description: row.description ?? "",
     popular: row.popular,
     published: row.published,
     slotType: row.slotType ?? "standard",
     sortOrder: row.sortOrder,
     clubIds,
+    isSchool: row.isSchool ?? false,
   }
 }
 
@@ -111,7 +130,7 @@ export async function getPublicPackageSlotAvailability(
   // 1. Get slot definitions scoped to this club (or fall back to clubId=0 rows)
   const conditions = [eq(packageSlots.packageId, packageId)]
   // Only filter by ageGroup when one is explicitly provided — never hard-code a default here
-  // (the wizard passes ageGroup ?? "5-8" so it's always set, but guard for safety)
+  // (the wizard passes ageGroup ?? "4-8" so it's always set, but guard for safety)
   if (ageGroup) conditions.push(eq(packageSlots.ageGroup, ageGroup))
   // If a specific club is requested, fetch rows for that club; otherwise fetch all
   if (clubId != null && clubId !== 0) {
@@ -210,7 +229,7 @@ export type PackageInput = {
   price: number
   period: string
   tagline: string
-  features: string[]
+  features: FeatureItem[]
   description: string
   popular: boolean
   published: boolean
@@ -220,6 +239,8 @@ export type PackageInput = {
   customSlots?: { clubId: number; weekday: number; hour: number; capacity: number; ageGroup: string }[]
   /** Club IDs this package is restricted to. Empty array = available everywhere. */
   clubIds?: number[]
+  /** If true, wizard shows school picker instead of club picker. */
+  isSchool?: boolean
 }
 
 function clean(input: PackageInput) {
@@ -233,12 +254,13 @@ function clean(input: PackageInput) {
     price: Math.max(0, Math.round(input.price)),
     period: input.period || "monthly",
     tagline: input.tagline.trim(),
-    features: input.features.map((f) => f.trim()).filter(Boolean),
+    features: input.features.map((f) => ({ type: f.type, text: f.text.trim() })).filter((f) => f.text),
     description: input.description.trim(),
     popular: input.popular,
     published: input.published,
     slotType: input.slotType === "custom" ? "custom" : "standard",
     sortOrder: Math.round(input.sortOrder),
+    isSchool: input.isSchool ?? false,
   }
 }
 

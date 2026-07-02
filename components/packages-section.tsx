@@ -10,7 +10,7 @@ export function PackagesSection({ packages }: { packages: PublicPackage[] }) {
   if (packages.length === 0) return null
 
   return (
-    <section className="py-16 overflow-hidden">
+    <section className="py-16 overflow-x-hidden w-full">
       <div className="px-4 text-center">
         <span className="inline-block rounded-full bg-lime/20 px-4 py-1.5 text-sm font-bold text-lime-foreground mb-3">
           Choose Your Path
@@ -151,16 +151,22 @@ function PackageCard({ pkg, colorIdx = 0 }: { pkg: PublicPackage; colorIdx?: num
       {/* Body */}
       <div className="bg-card p-6">
         {pkg.features.length > 0 && (
-          <ul className="space-y-2.5">
-            {pkg.features.map((feature) => (
-              <li key={feature} className="flex items-start gap-2.5 text-sm">
-                <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-lime/20">
-                  <Check className="h-3 w-3 text-lime-foreground" />
-                </span>
-                <span className="text-foreground">{feature}</span>
-              </li>
+          <div className="space-y-3">
+            {pkg.features.map((item, idx) => (
+              <div key={idx}>
+                {item.type === "heading" ? (
+                  <h4 className="font-semibold text-navy text-sm mb-2">{item.text}</h4>
+                ) : (
+                  <div className="flex items-start gap-2.5 text-sm">
+                    <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-lime/20">
+                      <Check className="h-3 w-3 text-lime-foreground" />
+                    </span>
+                    <span className="text-foreground">{item.text}</span>
+                  </div>
+                )}
+              </div>
             ))}
-          </ul>
+          </div>
         )}
 
         {pkg.description && (

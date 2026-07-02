@@ -1,5 +1,12 @@
+import type { Metadata } from "next"
 import Link from "next/link"
 import { CheckCircle } from "lucide-react"
+
+export const metadata: Metadata = {
+  title: "Enrolment Confirmed | NextGen Padel Academy",
+  description: "Your child's padel enrolment is confirmed. Welcome to NextGen Padel Academy.",
+  robots: { index: false, follow: false },
+}
 
 type Props = {
   searchParams: Promise<{ ref?: string; name?: string }>

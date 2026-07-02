@@ -79,6 +79,8 @@ export const packages = pgTable("packages", {
   // 'standard' | 'custom'
   slotType: text("slotType").notNull().default("standard"),
   sortOrder: integer("sortOrder").notNull().default(0),
+  // If true, this package is for school programs — wizard shows school picker instead of club picker
+  isSchool: boolean("isSchool").notNull().default(false),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
   updatedAt: timestamp("updatedAt").notNull().defaultNow(),
 })
@@ -101,7 +103,26 @@ export const clubs = pgTable("clubs", {
   updatedAt: timestamp("updatedAt").notNull().defaultNow(),
 })
 
-export const AGE_GROUPS = ["5-8", "9-13", "14-17"] as const
+// ---- Schools ----
+export const schools = pgTable("schools", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  location: text("location").notNull().default(""),
+  address: text("address").notNull().default(""),
+  phone: text("phone").notNull().default(""),
+  email: text("email").notNull().default(""),
+  website: text("website").notNull().default(""),
+  description: text("description").notNull().default(""),
+  logoUrl: text("logoUrl"),
+  contactPerson: text("contactPerson").notNull().default(""),
+  published: boolean("published").notNull().default(true),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+  updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+})
+
+export type School = typeof schools.$inferSelect
+
+export const AGE_GROUPS = ["4-8", "9-13", "14-17"] as const
 export type AgeGroup = (typeof AGE_GROUPS)[number]
 
 export const clubSlots = pgTable(
@@ -115,7 +136,7 @@ export const clubSlots = pgTable(
     hour: numeric("hour", { precision: 4, scale: 1 }).notNull(),
     capacity: integer("capacity").notNull().default(0),
     // Age group this slot is available for
-    ageGroup: text("ageGroup").notNull().default("5-8"),
+    ageGroup: text("ageGroup").notNull().default("4-8"),
     createdAt: timestamp("createdAt").notNull().defaultNow(),
     updatedAt: timestamp("updatedAt").notNull().defaultNow(),
   },
@@ -140,6 +161,9 @@ export const enrollments = pgTable("enrollments", {
   packageName: text("packageName").notNull(),
   club: text("club").notNull(),
   clubId: integer("clubId"),
+  // School program (null for standard club-based packages)
+  schoolId: integer("schoolId"),
+  schoolName: text("schoolName"),
   slotWeekday: integer("slotWeekday"),
   slotHour: numeric("slotHour", { precision: 4, scale: 1 }),
   slotAgeGroup: text("slotAgeGroup"),
@@ -195,7 +219,7 @@ export const packageSlots = pgTable(
     hour: numeric("hour", { precision: 4, scale: 1 }).notNull(),
     capacity: integer("capacity").notNull().default(10),
     // Age group this package slot is available for
-    ageGroup: text("ageGroup").notNull().default("5-8"),
+    ageGroup: text("ageGroup").notNull().default("4-8"),
     createdAt: timestamp("createdAt").notNull().defaultNow(),
   },
   (t) => ({
@@ -274,3 +298,211 @@ export const packageClubs = pgTable(
 )
 
 export type PackageClub = typeof packageClubs.$inferSelect
+
+// ---- Referral system ----
+
+// One referral profile per user — auto-created on first dashboard visit
+export const referralProfiles = pgTable("referral_profiles", {
+  id: serial("id").primaryKey(),
+  userId: text("userId")
+    .notNull()
+    .unique()
+    .references(() => user.id, { onDelete: "cascade" }),
+  // Short code used in the referral URL, e.g. "AB12C"
+  code: text("code").notNull().unique(),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+})
+
+export type ReferralProfile = typeof referralProfiles.$inferSelect
+
+// Tracks each referral attempt — one row per referred enrollment
+export const referrals = pgTable("referrals", {
+  id: serial("id").primaryKey(),
+  // The parent who shared the referral link
+  referrerId: text("referrerId")
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+  referralCode: text("referralCode").notNull(),
+  // The enrollment that used the code
+  enrollmentId: integer("enrollmentId").references(() => enrollments.id, { onDelete: "set null" }),
+  // 'pending' | 'complete'
+  // pending = registered but not yet paid first month; complete = first payment confirmed
+  status: text("status").notNull().default("pending"),
+  // Set when status becomes 'complete'
+  completedAt: timestamp("completedAt"),
+  // Voucher issued to referrer after completion
+  voucherId: integer("voucherId"),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+  updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+})
+
+export type Referral = typeof referrals.$inferSelect
+
+// ---- Voucher campaigns ----
+
+export const voucherCampaigns = pgTable("voucher_campaigns", {
+  id: serial("id").primaryKey(),
+  // 'referral' | 'bootcamp' | 'custom'
+  type: text("type").notNull().default("custom"),
+  name: text("name").notNull(),
+  description: text("description").notNull().default(""),
+  // Discount percent (e.g. 20 = 20%)
+  discountPercent: integer("discountPercent").notNull().default(20),
+  // Which package periods this applies to: 'monthly' | 'once-off' | 'both'
+  appliesTo: text("appliesTo").notNull().default("monthly"),
+  // Configurable expiry relative to issuance (days); null = no expiry
+  expiryDays: integer("expiryDays"),
+  enabled: boolean("enabled").notNull().default(true),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+  updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+})
+
+export type VoucherCampaign = typeof voucherCampaigns.$inferSelect
+
+// ---- Individual vouchers ----
+
+export const vouchers = pgTable("vouchers", {
+  id: serial("id").primaryKey(),
+  code: text("code").notNull().unique(),
+  campaignId: integer("campaignId")
+    .notNull()
+    .references(() => voucherCampaigns.id, { onDelete: "cascade" }),
+  // The parent who owns this voucher
+  userId: text("userId")
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+  discountPercent: integer("discountPercent").notNull(),
+  // 'active' | 'used' | 'expired'
+  status: text("status").notNull().default("active"),
+  // Enrollment this voucher was redeemed against (set on redemption)
+  redeemedOnEnrollmentId: integer("redeemedOnEnrollmentId").references(() => enrollments.id, {
+    onDelete: "set null",
+  }),
+  // Referral that triggered this voucher issuance (null for bootcamp vouchers)
+  referralId: integer("referralId").references(() => referrals.id, { onDelete: "set null" }),
+  expiresAt: timestamp("expiresAt"),
+  usedAt: timestamp("usedAt"),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+})
+
+export type Voucher = typeof vouchers.$inferSelect
+
+// ---- Netcash payment tables ----
+
+/**
+ * orders — one row per checkout attempt.
+ * Created immediately when the parent clicks "Pay" before they leave the site.
+ */
+export const orders = pgTable("orders", {
+  id: serial("id").primaryKey(),
+  enrollmentId: integer("enrollmentId")
+    .notNull()
+    .references(() => enrollments.id, { onDelete: "cascade" }),
+  userId: text("userId")
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+  packageType: text("packageType").notNull(), // 'once-off' | 'monthly'
+  amount: integer("amount").notNull(),         // cents
+  currency: text("currency").notNull().default("ZAR"),
+  // 'pending' | 'awaiting_payment' | 'paid' | 'failed' | 'refunded' | 'cancelled'
+  status: text("status").notNull().default("pending"),
+  netcashOrderId: text("netcashOrderId"),       // Netcash-assigned order reference
+  netcashCheckoutId: text("netcashCheckoutId"), // Netcash checkout session token
+  failureReason: text("failureReason"),
+  paidAt: timestamp("paidAt"),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+  updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+})
+
+export type Order = typeof orders.$inferSelect
+
+/**
+ * payments — one row per successful (or failed) payment attempt.
+ */
+export const payments = pgTable("payments", {
+  id: serial("id").primaryKey(),
+  orderId: integer("orderId")
+    .notNull()
+    .references(() => orders.id, { onDelete: "cascade" }),
+  enrollmentId: integer("enrollmentId")
+    .notNull()
+    .references(() => enrollments.id, { onDelete: "cascade" }),
+  userId: text("userId")
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+  amount: integer("amount").notNull(), // cents
+  currency: text("currency").notNull().default("ZAR"),
+  provider: text("provider").notNull().default("netcash"),
+  // 'pending' | 'awaiting_payment' | 'paid' | 'failed' | 'refunded' | 'cancelled'
+  status: text("status").notNull().default("pending"),
+  netcashTransactionId: text("netcashTransactionId"),
+  netcashSubscriptionRef: text("netcashSubscriptionRef"),
+  failureReason: text("failureReason"),
+  paidAt: timestamp("paidAt"),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+  updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+})
+
+export type Payment = typeof payments.$inferSelect
+
+/**
+ * subscriptions — one row per active recurring subscription.
+ * Only created for monthly packages.
+ */
+export const subscriptions = pgTable("subscriptions", {
+  id: serial("id").primaryKey(),
+  enrollmentId: integer("enrollmentId")
+    .notNull()
+    .references(() => enrollments.id, { onDelete: "cascade" }),
+  userId: text("userId")
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+  provider: text("provider").notNull().default("netcash"),
+  netcashSubscriptionRef: text("netcashSubscriptionRef"), // Netcash recurring token
+  // 'active' | 'pending' | 'paused' | 'cancelled' | 'expired' | 'payment_failed'
+  status: text("status").notNull().default("pending"),
+  billingFrequency: text("billingFrequency").notNull().default("monthly"),
+  amount: integer("amount").notNull(), // cents
+  currency: text("currency").notNull().default("ZAR"),
+  nextBillingDate: timestamp("nextBillingDate"),
+  lastPaymentDate: timestamp("lastPaymentDate"),
+  failureReason: text("failureReason"),
+  cancelledAt: timestamp("cancelledAt"),
+  cancelReason: text("cancelReason"),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+  updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+})
+
+export type Subscription = typeof subscriptions.$inferSelect
+
+/**
+ * payment_events — immutable audit log; one row per significant event.
+ */
+export const paymentEvents = pgTable("payment_events", {
+  id: serial("id").primaryKey(),
+  orderId: integer("orderId").references(() => orders.id, { onDelete: "set null" }),
+  paymentId: integer("paymentId").references(() => payments.id, { onDelete: "set null" }),
+  subscriptionId: integer("subscriptionId").references(() => subscriptions.id, { onDelete: "set null" }),
+  enrollmentId: integer("enrollmentId").references(() => enrollments.id, { onDelete: "set null" }),
+  eventType: text("eventType").notNull(), // 'order_created' | 'payment_complete' | 'payment_failed' | 'subscription_created' | 'subscription_cancelled' | etc.
+  payload: jsonb("payload"),              // raw data for the event
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+})
+
+export type PaymentEvent = typeof paymentEvents.$inferSelect
+
+/**
+ * webhook_logs — raw incoming webhook bodies for auditing.
+ */
+export const webhookLogs = pgTable("webhook_logs", {
+  id: serial("id").primaryKey(),
+  provider: text("provider").notNull().default("netcash"),
+  eventType: text("eventType"),
+  rawBody: text("rawBody").notNull(),
+  headers: jsonb("headers"),
+  processed: boolean("processed").notNull().default(false),
+  processingError: text("processingError"),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+})
+
+export type WebhookLog = typeof webhookLogs.$inferSelect
