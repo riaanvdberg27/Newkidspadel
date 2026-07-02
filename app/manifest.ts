@@ -4,7 +4,7 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "NextGen Padel Academy",
     short_name: "NextGen Padel",
-    description: "Kids padel coaching in Pretoria and Gauteng for ages 4–17.",
+    description: "Kids padel coaching in Pretoria — Brooklyn, Menlo Park, Moreleta Park, Garsfontein and more — for ages 4–17.",
     start_url: "/",
     display: "standalone",
     background_color: "#0B1C3F",

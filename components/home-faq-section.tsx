@@ -7,7 +7,7 @@ const HOME_FAQS = [
   },
   {
     question: "Where do you offer kids padel coaching in Pretoria?",
-    answer: "We operate at affiliated padel clubs across Pretoria, Centurion, Midrand, Waterkloof, Menlyn, Lynnwood, Faerie Glen, Moreleta Park and Silver Lakes, plus schools throughout Gauteng.",
+    answer: "We operate at affiliated padel clubs across Pretoria — Brooklyn, Menlo Park, Moreleta Park, Garsfontein, Waterkloof, Menlyn, Lynnwood, Faerie Glen and Silver Lakes — plus at schools throughout Pretoria.",
   },
   {
     question: "Does my child need experience to join?",

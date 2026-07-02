@@ -25,7 +25,7 @@ const localBusinessSchema = {
   "@type": ["LocalBusiness", "SportsActivityLocation"],
   name: "NextGen Padel Academy",
   description:
-    "NextGen Padel Academy offers professional padel coaching for children aged 4–17 across Pretoria, Centurion, Midrand and Gauteng, South Africa.",
+    "NextGen Padel Academy offers professional padel coaching for children aged 4–17 across Pretoria — Brooklyn, Menlo Park, Moreleta Park, Garsfontein, Waterkloof, Menlyn, Lynnwood, Faerie Glen and Silver Lakes.",
   url: "https://nextgenpadel.co.za",
   image: "https://nextgenpadel.co.za/images/mk-padel-logo.png",
   priceRange: "R300–R1200/month",
@@ -46,8 +46,8 @@ const localBusinessSchema = {
     { "@type": "OpeningHoursSpecification", dayOfWeek: ["Saturday"], opens: "08:00", closes: "13:00" },
   ],
   areaServed: [
-    "Pretoria", "Centurion", "Midrand", "Waterkloof", "Menlyn",
-    "Lynnwood", "Faerie Glen", "Moreleta Park", "Silver Lakes", "Gauteng",
+    "Pretoria", "Brooklyn", "Menlo Park", "Moreleta Park", "Garsfontein",
+    "Waterkloof", "Menlyn", "Lynnwood", "Faerie Glen", "Silver Lakes",
   ],
   sport: "Padel",
   audience: { "@type": "PeopleAudience", suggestedMinAge: 4, suggestedMaxAge: 17 },
@@ -77,7 +77,7 @@ export default async function ContactPage() {
         <h1 className="text-balance text-3xl font-black sm:text-5xl">Contact Us</h1>
         <p className="mt-2 text-xl font-black text-lime">We&apos;d Love to Hear From You</p>
         <p className="mx-auto mt-3 max-w-xl text-sm leading-relaxed text-navy-foreground/80 sm:text-base">
-          Questions about our junior padel programmes in Pretoria or Gauteng? Want to enrol your child? Reach out — our coaching team responds fast.
+          Questions about our junior padel programmes in Pretoria? Want to enrol your child? Reach out — our coaching team responds fast.
         </p>
       </section>
 
@@ -153,9 +153,9 @@ export default async function ContactPage() {
             </p>
           </div>
           <div className="rounded-2xl bg-lime/10 border border-lime/30 p-4 sm:p-5">
-            <h3 className="font-black text-navy mb-2">Serving Pretoria &amp; Gauteng</h3>
+            <h3 className="font-black text-navy mb-2">Serving Pretoria</h3>
             <p className="text-sm leading-relaxed text-muted-foreground">
-              We offer kids padel coaching at venues across Pretoria, Centurion, Midrand, Waterkloof, Menlyn, Lynnwood, Faerie Glen, Moreleta Park and Silver Lakes. We also deliver lessons at schools throughout Gauteng.
+              We offer kids padel coaching at venues across Pretoria — Brooklyn, Menlo Park, Moreleta Park, Garsfontein, Waterkloof, Menlyn, Lynnwood, Faerie Glen and Silver Lakes. We also deliver lessons at schools throughout Pretoria.
             </p>
             <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
               We aim to respond within 24 hours on business days. For urgent enquiries call or WhatsApp us directly.

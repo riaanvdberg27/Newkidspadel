@@ -4,12 +4,12 @@ import Link from "next/link"
 export const metadata: Metadata = {
   title: "Blog | Padel Tips, Junior Coaching & Academy News | NextGen Padel",
   description:
-    "Padel tips for kids, junior coaching advice, parent guides, tournament news and academy updates from NextGen Padel Academy in Pretoria, Gauteng.",
+    "Padel tips for kids, junior coaching advice, parent guides, tournament news and academy updates from NextGen Padel Academy in Pretoria.",
   alternates: { canonical: "https://nextgenpadel.co.za/blog" },
   openGraph: {
     title: "Blog | NextGen Padel Academy Pretoria",
     description:
-      "Padel tips, junior coaching advice and academy news from NextGen Padel Academy in Pretoria and Gauteng.",
+      "Padel tips, junior coaching advice and academy news from NextGen Padel Academy in Pretoria — Brooklyn, Menlo Park, Moreleta Park and Garsfontein.",
     url: "https://nextgenpadel.co.za/blog",
   },
 }
@@ -18,7 +18,7 @@ const CATEGORIES = [
   { label: "Padel Tips", slug: "padel-tips", description: "Technique, tactics and training tips for junior padel players." },
   { label: "Junior Coaching", slug: "junior-coaching", description: "Insights from our coaching team on developing young padel talent." },
   { label: "Parent Advice", slug: "parent-advice", description: "How to support your child's padel journey from the sidelines." },
-  { label: "Tournament News", slug: "tournament-news", description: "Results, fixtures and updates from junior padel tournaments in Gauteng." },
+  { label: "Tournament News", slug: "tournament-news", description: "Results, fixtures and updates from junior padel tournaments in Pretoria." },
   { label: "Holiday Camps", slug: "holiday-camps", description: "Everything about our padel holiday camps in Pretoria." },
   { label: "Academy News", slug: "academy-news", description: "Latest news, club expansions and announcements from NextGen Padel Academy." },
 ]
@@ -37,9 +37,9 @@ const POSTS = [
   {
     slug: "why-padel-is-the-fastest-growing-sport-for-kids",
     category: "Junior Coaching",
-    title: "Why Padel is the Fastest-Growing Sport for Kids in Gauteng",
+    title: "Why Padel is the Fastest-Growing Sport for Kids in Pretoria",
     excerpt:
-      "Padel combines the social nature of tennis with easy-to-learn gameplay. Here is why thousands of families across Pretoria and Gauteng are choosing padel.",
+      "Padel combines the social nature of tennis with easy-to-learn gameplay. Here is why thousands of families across Brooklyn, Menlo Park, Moreleta Park and Pretoria are choosing padel.",
     date: "2026-05-15",
     readTime: "3 min read",
   },
@@ -55,9 +55,9 @@ const POSTS = [
   {
     slug: "holiday-camp-winter-2026",
     category: "Holiday Camps",
-    title: "Winter Holiday Padel Camp 2026 — Pretoria & Centurion",
+    title: "Winter Holiday Padel Camp 2026 — Pretoria",
     excerpt:
-      "Our winter holiday camp is back! Three days of padel, fun and skills development for kids aged 4–17 across Pretoria and Centurion.",
+      "Our winter holiday camp is back! Three days of padel, fun and skills development for kids aged 4–17 across Pretoria — Brooklyn, Menlo Park, Moreleta Park and Garsfontein.",
     date: "2026-04-20",
     readTime: "2 min read",
   },
@@ -74,7 +74,7 @@ export default function BlogPage() {
         <h1 className="text-balance text-3xl font-black sm:text-5xl">Padel Tips, News &amp; Coaching Advice</h1>
         <p className="mt-2 text-xl font-black text-lime">From Pretoria&#39;s Junior Padel Academy</p>
         <p className="mx-auto mt-3 max-w-xl text-sm leading-relaxed text-navy-foreground/80 sm:text-base">
-          Coaching insights, parent guides, tournament news and holiday camp updates from NextGen Padel Academy in Pretoria and Gauteng.
+          Coaching insights, parent guides, tournament news and holiday camp updates from NextGen Padel Academy in Pretoria.
         </p>
       </section>
 
@@ -132,7 +132,7 @@ export default function BlogPage() {
           <Link href="/contact" className="font-bold text-navy hover:underline">
             contact us
           </Link>{" "}
-          with any questions about our padel coaching programmes in Pretoria and Gauteng.
+          with any questions about our padel coaching programmes in Pretoria.
         </p>
       </section>
 
@@ -140,7 +140,7 @@ export default function BlogPage() {
       <section className="bg-lime px-4 py-12 text-center sm:py-16">
         <h2 className="text-2xl font-black text-navy sm:text-3xl">Ready to Start Your Child&#39;s Padel Journey?</h2>
         <p className="mx-auto mt-3 max-w-md text-sm leading-relaxed text-navy/80">
-          Junior padel coaching in Pretoria, Centurion, Midrand and across Gauteng for ages 4–17.
+          Junior padel coaching in Pretoria — Brooklyn, Menlo Park, Moreleta Park, Garsfontein and surrounding suburbs — for ages 4–17.
         </p>
         <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-center">
           <Link

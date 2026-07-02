@@ -4,12 +4,12 @@ import Link from "next/link"
 export const metadata: Metadata = {
   title: "Frequently Asked Questions | NextGen Padel Academy Pretoria",
   description:
-    "Answers to the most common questions about kids padel lessons at NextGen Padel Academy in Pretoria and Gauteng — age requirements, costs, experience needed, and more.",
+    "Answers to the most common questions about kids padel lessons at NextGen Padel Academy in Pretoria — age requirements, costs, experience needed, and more.",
   alternates: { canonical: "https://nextgenpadel.co.za/faq" },
   openGraph: {
     title: "FAQ | NextGen Padel Academy Pretoria",
     description:
-      "Everything parents need to know about enrolling their child in padel coaching in Pretoria and Gauteng.",
+      "Everything parents need to know about enrolling their child in padel coaching in Pretoria — Brooklyn, Menlo Park, Moreleta Park and Garsfontein.",
     url: "https://nextgenpadel.co.za/faq",
   },
 }
@@ -23,7 +23,7 @@ const FAQS = [
   {
     question: "Where is NextGen Padel Academy located?",
     answer:
-      "We operate at affiliated padel clubs across Pretoria and Gauteng, including venues in Centurion, Midrand, Waterkloof, Menlyn, Lynnwood, Faerie Glen, Moreleta Park and Silver Lakes. We also deliver lessons directly at schools in Pretoria. Visit our Clubs or Schools pages to find the venue nearest to you.",
+      "We operate at affiliated padel clubs across Pretoria — Brooklyn, Menlo Park, Moreleta Park, Garsfontein, Waterkloof, Menlyn, Lynnwood, Faerie Glen and Silver Lakes. We also deliver lessons directly at schools in Pretoria. Visit our Clubs or Schools pages to find the venue nearest to you.",
   },
   {
     question: "How much do padel lessons cost?",
@@ -38,7 +38,7 @@ const FAQS = [
   {
     question: "Do you offer holiday camps?",
     answer:
-      "Yes — we run holiday camp programmes during school holidays. Check our latest packages or contact us directly to find out about upcoming holiday camps in Pretoria and Gauteng.",
+      "Yes — we run holiday camp programmes during school holidays. Check our latest packages or contact us directly to find out about upcoming holiday camps in Pretoria.",
   },
   {
     question: "Can my child join mid-year?",
@@ -93,7 +93,7 @@ export default function FAQPage() {
         <h1 className="text-balance text-3xl font-black sm:text-5xl">Frequently Asked Questions</h1>
         <p className="mt-2 text-xl font-black text-lime">Everything You Need to Know</p>
         <p className="mx-auto mt-3 max-w-xl text-sm leading-relaxed text-navy-foreground/80 sm:text-base">
-          Common questions from parents about NextGen Padel Academy&#39;s kids padel coaching programmes in Pretoria and Gauteng.
+          Common questions from parents about NextGen Padel Academy&#39;s kids padel coaching programmes in Pretoria.
         </p>
       </section>
 

@@ -17,7 +17,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "About NextGen Padel Academy | Junior Padel Coaching Pretoria",
     description:
-      "Meet the team behind Pretoria's top kids padel academy. Qualified coaches. Structured programmes. A passion for junior sport in Gauteng.",
+      "Meet the team behind Pretoria's top kids padel academy. Qualified coaches. Structured programmes. A passion for junior sport in Brooklyn, Menlo Park, Moreleta Park and across Pretoria.",
     url: "https://nextgenpadel.co.za/about",
   },
 }
@@ -40,7 +40,7 @@ export default async function AboutPage() {
         </h1>
         <p className="mt-2 text-xl font-black text-lime">Play. Learn. Grow.</p>
         <p className="mx-auto mt-4 max-w-2xl text-pretty text-sm leading-relaxed text-navy-foreground/80 sm:text-base">
-          Introducing young athletes across Pretoria and Gauteng to the exciting world of padel — in a fun, safe, and encouraging environment for children aged 4–17.
+          Introducing young athletes across Pretoria — Brooklyn, Menlo Park, Moreleta Park, Garsfontein and surrounding suburbs — to the exciting world of padel, in a fun, safe, and encouraging environment for children aged 4–17.
         </p>
       </section>
 
@@ -66,13 +66,13 @@ export default async function AboutPage() {
             </h2>
             <div className="mt-4 space-y-3 text-sm leading-relaxed text-foreground/80 sm:text-base">
               <p>
-                We nurture young talent across Pretoria, Centurion and Midrand — building confidence and instilling values of teamwork, discipline, and respect through padel.
+                We nurture young talent across Pretoria — in Brooklyn, Menlo Park, Moreleta Park, Garsfontein, Waterkloof, Menlyn, Lynnwood, Faerie Glen and Silver Lakes — building confidence and instilling values of teamwork, discipline, and respect through padel.
               </p>
               <p>
                 Whether your child is a complete beginner or looking to advance their skills, our programmes meet them where they are and help them grow at their own pace.
               </p>
               <p>
-                Structured junior padel coaching, affordable monthly subscriptions, and qualified coaches — designed to grow padel participation across Gauteng and South Africa.
+                Structured junior padel coaching, affordable monthly subscriptions, and qualified coaches — designed to grow padel participation across Pretoria and South Africa.
               </p>
             </div>
             <Link

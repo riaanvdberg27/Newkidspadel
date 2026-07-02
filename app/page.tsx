@@ -13,14 +13,14 @@ import { getPublishedCoaches } from "@/app/actions/coaches"
 export const dynamic = "force-dynamic"
 
 export const metadata: Metadata = {
-  title: "Kids Padel Coaching in Pretoria & Gauteng — Ages 4–17",
+  title: "Kids Padel Coaching in Pretoria — Ages 4–17 | Brooklyn, Menlo Park, Moreleta Park",
   description:
-    "NextGen Padel Academy offers fun, structured padel lessons for children aged 4–17 in Pretoria, Centurion, Midrand and across Gauteng. Enrol online today.",
+    "NextGen Padel Academy offers fun, structured padel lessons for children aged 4–17 in Pretoria — Brooklyn, Menlo Park, Moreleta Park, Garsfontein, Waterkloof, Menlyn and more. Enrol online today.",
   alternates: { canonical: "https://nextgenpadel.co.za" },
   openGraph: {
-    title: "NextGen Padel Academy | Kids Padel Coaching Pretoria & Gauteng",
+    title: "NextGen Padel Academy | Kids Padel Coaching Pretoria",
     description:
-      "Structured padel coaching for boys and girls aged 4–17 across Pretoria, Centurion, Midrand and Gauteng. Qualified coaches. Affordable programmes.",
+      "Structured padel coaching for boys and girls aged 4–17 in Pretoria — Brooklyn, Menlo Park, Moreleta Park, Garsfontein and surrounding suburbs. Qualified coaches. Affordable programmes.",
     url: "https://nextgenpadel.co.za",
     images: [{ url: "https://nextgenpadel.co.za/og-home.png", width: 1200, height: 630, alt: "Kids playing padel at NextGen Padel Academy Pretoria" }],
   },
@@ -33,12 +33,12 @@ const homeFaqSchema = {
     {
       "@type": "Question",
       name: "What age can children start padel at NextGen Padel Academy?",
-      acceptedAnswer: { "@type": "Answer", text: "We welcome children from age 4 up to 17. Our three age groups ensure every child is coached with peers of similar age and ability in Pretoria and Gauteng." },
+      acceptedAnswer: { "@type": "Answer", text: "We welcome children from age 4 up to 17. Our three age groups ensure every child is coached with peers of similar age and ability in Pretoria." },
     },
     {
       "@type": "Question",
       name: "Where does NextGen Padel Academy offer kids padel coaching in Pretoria?",
-      acceptedAnswer: { "@type": "Answer", text: "We operate at affiliated padel clubs across Pretoria, Centurion, Midrand, Waterkloof, Menlyn, Lynnwood, Faerie Glen, Moreleta Park and Silver Lakes, plus schools throughout Gauteng." },
+      acceptedAnswer: { "@type": "Answer", text: "We operate at affiliated padel clubs across Pretoria — Brooklyn, Menlo Park, Moreleta Park, Garsfontein, Waterkloof, Menlyn, Lynnwood, Faerie Glen and Silver Lakes — plus at schools throughout Pretoria." },
     },
     {
       "@type": "Question",
@@ -48,7 +48,7 @@ const homeFaqSchema = {
     {
       "@type": "Question",
       name: "Can my child enrol in padel lessons during the school year?",
-      acceptedAnswer: { "@type": "Answer", text: "Yes — enrolment is open year-round. Sign up online and your child can start at the next available session at any of our Pretoria or Gauteng venues." },
+      acceptedAnswer: { "@type": "Answer", text: "Yes — enrolment is open year-round. Sign up online and your child can start at the next available session at any of our Pretoria venues." },
     },
   ],
 }
@@ -58,7 +58,7 @@ const sportsClubSchema = {
   "@type": "SportsClub",
   name: "NextGen Padel Academy",
   description:
-    "NextGen Padel Academy provides structured padel coaching for children aged 4–17 in Pretoria, Centurion, Midrand and across Gauteng, South Africa.",
+    "NextGen Padel Academy provides structured padel coaching for children aged 4–17 in Pretoria — Brooklyn, Menlo Park, Moreleta Park, Garsfontein, Waterkloof, Menlyn, Lynnwood, Faerie Glen and Silver Lakes.",
   url: "https://nextgenpadel.co.za",
   image: "https://nextgenpadel.co.za/images/hero-kids.png",
   sport: "Padel",
@@ -94,14 +94,14 @@ export default async function HomePage() {
         <div className="relative z-10 mx-auto max-w-6xl px-4 pt-10 pb-4 sm:py-20 lg:py-24">
           <div className="max-w-[460px] text-center sm:text-left mx-auto sm:mx-0">
             <p className="mb-2 text-sm font-bold uppercase tracking-widest text-lime">
-              NextGen Padel Academy — Pretoria &amp; Gauteng
+              NextGen Padel Academy — Pretoria
             </p>
             <h1 className="text-balance text-4xl font-black leading-tight text-white sm:text-5xl lg:text-6xl">
-              Kids Padel Coaching in Pretoria &amp; Gauteng
+              Kids Padel Coaching in Pretoria
             </h1>
             <p className="mt-3 text-xl font-black text-lime sm:text-2xl lg:text-3xl">Ages 4–17 Years</p>
             <p className="mt-4 text-pretty text-sm leading-relaxed text-white/70 sm:text-base">
-              Structured junior padel lessons at clubs and schools across Pretoria, Centurion, Midrand and Gauteng. Fun, safe, and with qualified coaches who care.
+              Structured junior padel lessons at clubs and schools across Brooklyn, Menlo Park, Moreleta Park, Garsfontein, Waterkloof, Menlyn, Lynnwood, Faerie Glen and Silver Lakes. Fun, safe, and with qualified coaches who care.
             </p>
             <div className="mt-7 flex flex-col gap-3 sm:flex-row justify-center sm:justify-start">
               <Link

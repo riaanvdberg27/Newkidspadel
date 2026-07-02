@@ -8,12 +8,12 @@ export const dynamic = "force-dynamic"
 export const metadata: Metadata = {
   title: "Padel Lessons at Schools in Pretoria | Schools Programme",
   description:
-    "NextGen Padel Academy brings certified padel coaching directly to schools in Pretoria and Gauteng. 30-minute weekly lessons, racket hire included. No travel required.",
+    "NextGen Padel Academy brings certified padel coaching directly to schools in Pretoria — Brooklyn, Menlo Park, Moreleta Park, Garsfontein and surrounding suburbs. 30-minute weekly lessons, racket hire included. No travel required.",
   alternates: { canonical: "https://nextgenpadel.co.za/schools" },
   openGraph: {
     title: "Padel Lessons at Schools in Pretoria | NextGen Padel Academy",
     description:
-      "Professional padel coaching delivered directly to your child's school in Pretoria, Centurion and across Gauteng. Enrol online today.",
+      "Professional padel coaching delivered directly to your child's school in Pretoria — Brooklyn, Menlo Park, Moreleta Park, Garsfontein and surrounding suburbs. Enrol online today.",
     url: "https://nextgenpadel.co.za/schools",
   },
 }
@@ -23,7 +23,7 @@ const courseSchema = {
   "@type": "Course",
   name: "Junior Padel School Programme — NextGen Padel Academy",
   description:
-    "Weekly 30-minute padel lessons delivered directly at schools in Pretoria and Gauteng for children aged 4–17. Racket hire included.",
+    "Weekly 30-minute padel lessons delivered directly at schools in Pretoria — Brooklyn, Menlo Park, Moreleta Park, Garsfontein and surrounding suburbs — for children aged 4–17. Racket hire included.",
   provider: {
     "@type": "Organization",
     name: "NextGen Padel Academy",
@@ -59,14 +59,14 @@ export default function SchoolsPage() {
       {/* Hero */}
       <section className="bg-navy px-4 py-12 text-center text-navy-foreground sm:py-16">
         <span className="inline-block rounded-full bg-lime/20 px-4 py-1.5 text-sm font-bold text-lime mb-4">
-          Schools Programme — Pretoria &amp; Gauteng
+          Schools Programme — Pretoria
         </span>
         <h1 className="text-balance text-3xl font-black sm:text-5xl">
-          Padel Lessons at Schools in Pretoria &amp; Gauteng
+          Padel Lessons at Schools in Pretoria
         </h1>
         <p className="mt-2 text-xl font-black text-lime">Certified Padel Coaching at Your Child&apos;s School</p>
         <p className="mx-auto mt-3 max-w-xl text-sm leading-relaxed text-navy-foreground/80 sm:text-base">
-          NextGen Padel Academy brings certified padel coaching directly to schools in Pretoria, Centurion and across Gauteng — no travel required. Every 30-minute weekly lesson includes equipment, skill development, and lots of fun.
+          NextGen Padel Academy brings certified padel coaching directly to schools in Pretoria — Brooklyn, Menlo Park, Moreleta Park, Garsfontein and surrounding suburbs — no travel required. Every 30-minute weekly lesson includes equipment, skill development, and lots of fun.
         </p>
         <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-center">
           <Link

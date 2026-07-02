@@ -15,9 +15,9 @@ const QUICK_LINKS = [
 ]
 
 const SERVICE_AREAS = [
-  "Pretoria", "Centurion", "Midrand",
-  "Waterkloof", "Menlyn", "Lynnwood",
-  "Faerie Glen", "Moreleta Park", "Silver Lakes",
+  "Pretoria", "Brooklyn", "Menlo Park",
+  "Moreleta Park", "Garsfontein", "Waterkloof",
+  "Menlyn", "Lynnwood", "Faerie Glen", "Silver Lakes",
 ]
 
 export async function SiteFooter() {
@@ -38,7 +38,7 @@ export async function SiteFooter() {
               </div>
             </Link>
             <p className="text-sm text-navy-foreground/60 leading-relaxed">
-              Pretoria&apos;s junior padel academy — structured coaching for boys and girls aged 4–17 across Pretoria, Centurion, Midrand and Gauteng. Play. Learn. Grow.
+              Pretoria&apos;s junior padel academy — structured coaching for boys and girls aged 4–17 in Brooklyn, Menlo Park, Moreleta Park, Garsfontein and across Pretoria. Play. Learn. Grow.
             </p>
             <div className="flex flex-wrap gap-2 mt-1">
               <Link href="/enrollment" className="rounded-full bg-lime px-4 py-2 text-xs font-black text-lime-foreground transition-all hover:bg-lime/80">
@@ -70,7 +70,7 @@ export async function SiteFooter() {
           {/* Service Areas */}
           <div>
             <h3 className="font-black text-white text-sm mb-4">
-              Kids Padel in Pretoria &amp; Gauteng
+              Kids Padel in Pretoria
             </h3>
             <ul className="space-y-2">
               {SERVICE_AREAS.map((area) => (
@@ -78,7 +78,7 @@ export async function SiteFooter() {
               ))}
             </ul>
             <p className="mt-3 text-xs text-navy-foreground/50 leading-relaxed">
-              Gauteng &middot; South Africa
+              Pretoria &middot; South Africa
             </p>
           </div>
 
@@ -126,7 +126,7 @@ export async function SiteFooter() {
             &copy; {new Date().getFullYear()} NextGen Padel Academy. All rights reserved.
           </p>
           <p className="text-xs text-navy-foreground/30">
-            Kids padel coaching in Pretoria, Centurion, Midrand &amp; Gauteng, South Africa.
+            Kids padel coaching in Pretoria — Brooklyn, Menlo Park, Moreleta Park &amp; Garsfontein, South Africa.
           </p>
         </div>
       </div>
