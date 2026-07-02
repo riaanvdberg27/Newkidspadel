@@ -13,11 +13,32 @@ const CATEGORIES = [
   { value: "tournaments", label: "Tournaments" },
 ]
 
+// Build a stable ordered list of groups from the items, preserving first-seen order.
+function buildGroups(items: PublicMoment[], filter: string) {
+  const filtered = filter === "all" ? items : items.filter((m) => m.category === filter)
+
+  // Group photos by their shared title+caption combo (or just by category if no title).
+  // We preserve insertion order so groups appear in the same order as the items.
+  const groupMap = new Map<string, { title: string; caption: string | null; items: PublicMoment[] }>()
+
+  for (const m of filtered) {
+    // Use title as the grouping key — photos uploaded together share the same title.
+    // Fall back to category so ungrouped photos still appear.
+    const key = m.title || m.category
+    if (!groupMap.has(key)) {
+      groupMap.set(key, { title: m.title, caption: m.caption, items: [] })
+    }
+    groupMap.get(key)!.items.push(m)
+  }
+
+  return { groups: Array.from(groupMap.values()), filtered }
+}
+
 export function MomentsGallery({ items }: { items: PublicMoment[] }) {
   const [filter, setFilter] = useState("all")
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
 
-  const filtered = filter === "all" ? items : items.filter((m) => m.category === filter)
+  const { groups, filtered } = buildGroups(items, filter)
 
   // Find categories that actually have items
   const activeCategories = CATEGORIES.filter(
@@ -50,6 +71,9 @@ export function MomentsGallery({ items }: { items: PublicMoment[] }) {
     )
   }
 
+  // Track a running index into `filtered` so lightbox indices stay consistent.
+  let runningIndex = 0
+
   return (
     <>
       {/* Category filter */}
@@ -71,64 +95,80 @@ export function MomentsGallery({ items }: { items: PublicMoment[] }) {
         </div>
       )}
 
-      {/* Masonry-style grid */}
-      <div className="columns-1 gap-4 sm:columns-2 lg:columns-3 xl:columns-4 space-y-4">
-        {filtered.map((m, i) => {
-          const media = blobUrl(m.mediaUrl) ?? m.mediaUrl
-          const thumb = m.thumbnailUrl ? (blobUrl(m.thumbnailUrl) ?? m.thumbnailUrl) : null
+      {/* Groups — each group shows a section heading once, then the photo grid */}
+      <div className="space-y-12">
+        {groups.map((group) => {
+          const groupStartIndex = runningIndex
+          runningIndex += group.items.length
           const gridSizes = "(min-width: 1280px) 23vw, (min-width: 1024px) 31vw, (min-width: 640px) 47vw, 92vw"
 
           return (
-            <div
-              key={m.id}
-              className="break-inside-avoid cursor-pointer overflow-hidden rounded-xl border border-border bg-card shadow-sm transition-transform hover:-translate-y-1 hover:shadow-md"
-              onClick={() => openLightbox(i)}
-            >
-              <div className="relative bg-muted">
-                {m.mediaType === "video" ? (
-                  <>
-                    {thumb ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={blobImage(m.thumbnailUrl, 828) ?? thumb}
-                        srcSet={blobSrcSet(m.thumbnailUrl)}
-                        sizes={gridSizes}
-                        alt={m.title}
-                        className="w-full object-cover"
-                        loading={i < 4 ? "eager" : "lazy"}
-                        decoding="async"
-                      />
-                    ) : (
-                      <video src={media} className="w-full object-cover" preload="metadata" muted playsInline />
-                    )}
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <div className="rounded-full bg-navy/75 p-4 shadow-lg">
-                        <Play className="h-6 w-6 fill-white text-white" />
-                      </div>
-                    </div>
-                  </>
-                ) : (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={blobImage(m.mediaUrl, 828) ?? media}
-                    srcSet={blobSrcSet(m.mediaUrl)}
-                    sizes={gridSizes}
-                    alt={m.title}
-                    className="w-full object-cover"
-                    loading={i < 4 ? "eager" : "lazy"}
-                    decoding="async"
-                  />
-                )}
-              </div>
-              {(m.title || m.caption) && (
-                <div className="px-3 py-3">
-                  <h3 className="text-base font-bold text-navy leading-snug text-balance">{m.title}</h3>
-                  {m.caption && (
-                    <p className="mt-1 text-sm text-muted-foreground leading-relaxed line-clamp-2">{m.caption}</p>
+            <section key={group.title || group.items[0]?.id}>
+              {/* Group heading — shown once per group, not per photo */}
+              {group.title && (
+                <div className="mb-5">
+                  <h2 className="text-xl font-bold text-navy leading-snug text-balance">{group.title}</h2>
+                  {group.caption && (
+                    <p className="mt-1 text-sm text-muted-foreground leading-relaxed">{group.caption}</p>
                   )}
                 </div>
               )}
-            </div>
+
+              {/* Masonry-style photo grid for this group */}
+              <div className="columns-1 gap-4 sm:columns-2 lg:columns-3 xl:columns-4 space-y-4">
+                {group.items.map((m, i) => {
+                  const itemIndex = groupStartIndex + i
+                  const media = blobUrl(m.mediaUrl) ?? m.mediaUrl
+                  const thumb = m.thumbnailUrl ? (blobUrl(m.thumbnailUrl) ?? m.thumbnailUrl) : null
+
+                  return (
+                    <div
+                      key={m.id}
+                      className="break-inside-avoid cursor-pointer overflow-hidden rounded-xl border border-border bg-card shadow-sm transition-transform hover:-translate-y-1 hover:shadow-md"
+                      onClick={() => openLightbox(itemIndex)}
+                    >
+                      <div className="relative bg-muted">
+                        {m.mediaType === "video" ? (
+                          <>
+                            {thumb ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={blobImage(m.thumbnailUrl, 828) ?? thumb}
+                                srcSet={blobSrcSet(m.thumbnailUrl)}
+                                sizes={gridSizes}
+                                alt={group.title || m.category}
+                                className="w-full object-cover"
+                                loading={itemIndex < 4 ? "eager" : "lazy"}
+                                decoding="async"
+                              />
+                            ) : (
+                              <video src={media} className="w-full object-cover" preload="metadata" muted playsInline />
+                            )}
+                            <div className="absolute inset-0 flex items-center justify-center">
+                              <div className="rounded-full bg-navy/75 p-4 shadow-lg">
+                                <Play className="h-6 w-6 fill-white text-white" />
+                              </div>
+                            </div>
+                          </>
+                        ) : (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={blobImage(m.mediaUrl, 828) ?? media}
+                            srcSet={blobSrcSet(m.mediaUrl)}
+                            sizes={gridSizes}
+                            alt={group.title || m.category}
+                            className="w-full object-cover"
+                            loading={itemIndex < 4 ? "eager" : "lazy"}
+                            decoding="async"
+                          />
+                        )}
+                      </div>
+                      {/* No per-photo title or caption — those appear once as the group heading above */}
+                    </div>
+                  )
+                })}
+              </div>
+            </section>
           )
         })}
       </div>
@@ -139,7 +179,6 @@ export function MomentsGallery({ items }: { items: PublicMoment[] }) {
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4"
           onClick={closeLightbox}
         >
-          {/* Content */}
           <div
             className="relative flex max-h-full max-w-5xl w-full flex-col"
             onClick={(e) => e.stopPropagation()}
@@ -166,21 +205,11 @@ export function MomentsGallery({ items }: { items: PublicMoment[] }) {
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={blobImage(current.mediaUrl, 1600) ?? blobUrl(current.mediaUrl) ?? current.mediaUrl}
-                  alt={current.title}
+                  alt={current.title || current.category}
                   className="max-h-[70vh] w-full object-contain"
                 />
               )}
             </div>
-
-            {/* Caption */}
-            {(current.title || current.caption) && (
-              <div className="mt-3 px-1 text-center text-white">
-                <p className="font-bold">{current.title}</p>
-                {current.caption && (
-                  <p className="mt-1 text-sm text-white/70">{current.caption}</p>
-                )}
-              </div>
-            )}
 
             {/* Counter + nav */}
             {filtered.length > 1 && (
