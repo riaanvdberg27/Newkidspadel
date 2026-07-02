@@ -20,6 +20,8 @@ import { createEnrollment } from "@/app/actions/enrollment"
 import type { CoachRow } from "@/app/actions/coaches"
 
 import { buildPayfastPayment } from "@/app/actions/enrollment"
+import { validateVoucherCode } from "@/app/actions/referrals"
+import { Tag, X } from "lucide-react"
 
 const ALL_STEPS = ["Children", "Child Details", "Club & Schedule", "Parent Account", "Debit Order", "Preferences", "Review"]
 const ONCE_OFF_STEPS = ["Children", "Child Details", "Club & Schedule", "Parent Account", "Preferences", "Review"]
@@ -58,6 +60,7 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
   const router = useRouter()
   const searchParams = useSearchParams()
   const initialPackage = packages.find((p) => p.slug === searchParams.get("package")) ?? null
+  const initialRefCode = searchParams.get("ref") ?? null
 
   const [selectedPackage, setSelectedPackage] = useState<PublicPackage | null>(initialPackage)
   const [step, setStep] = useState(0)
@@ -120,6 +123,17 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
     prefEvents: false,
     prefHolidayClinics: false,
   })
+
+  // Voucher / referral
+  const [voucherInput, setVoucherInput] = useState("")
+  const [voucherValidating, setVoucherValidating] = useState(false)
+  const [voucherError, setVoucherError] = useState<string | null>(null)
+  const [appliedVoucher, setAppliedVoucher] = useState<{
+    id: number
+    code: string
+    discountPercent: number
+    campaignName: string
+  } | null>(null)
 
   // Terms, consent & signature
   const [agreedTerms, setAgreedTerms] = useState(false)
@@ -235,6 +249,9 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
           ...prefs,
           coachId: coachId ?? null,
           coachName: availableCoaches.find((c) => c.id === coachId)?.name ?? null,
+          referralCode: initialRefCode ?? null,
+          voucherId: appliedVoucher?.id ?? null,
+          discountPercent: appliedVoucher?.discountPercent ?? undefined,
         })
         refs.push(referenceNumber)
       }

@@ -11,6 +11,8 @@ import { generateContractPdf } from "@/lib/contract-pdf"
 import { sendWelcomeEmail, sendAdminNotificationEmail } from "@/lib/email"
 import { formatSlot } from "@/lib/slots"
 import { buildPayfastFormData, PAYFAST_URL } from "@/lib/payfast"
+import { recordReferralOnEnrollment } from "@/app/actions/referrals"
+import { redeemVoucher } from "@/app/actions/referrals"
 
 async function getUserId() {
   const session = await auth.api.getSession({ headers: await headers() })
@@ -61,6 +63,10 @@ export type EnrollmentInput = {
   // Coach selection
   coachId?: number | null
   coachName?: string | null
+  // Referral & voucher
+  referralCode?: string | null
+  voucherId?: number | null
+  discountPercent?: number
 }
 
 export async function createEnrollment(input: EnrollmentInput) {
@@ -119,6 +125,17 @@ export async function createEnrollment(input: EnrollmentInput) {
     .returning({ id: enrollments.id })
 
   const enrollmentId = inserted[0]?.id
+
+  // Record referral (best-effort — never block enrollment)
+  if (enrollmentId != null && input.referralCode) {
+    try { await recordReferralOnEnrollment(input.referralCode, enrollmentId) } catch {}
+  }
+
+  // Redeem voucher (best-effort)
+  if (enrollmentId != null && input.voucherId) {
+    try { await redeemVoucher(input.voucherId, enrollmentId) } catch {}
+  }
+
   const slotLabel =
     input.slotWeekday != null && input.slotHour != null ? formatSlot(input.slotWeekday, input.slotHour) : "To be confirmed"
 

@@ -274,3 +274,91 @@ export const packageClubs = pgTable(
 )
 
 export type PackageClub = typeof packageClubs.$inferSelect
+
+// ---- Referral system ----
+
+// One referral profile per user — auto-created on first dashboard visit
+export const referralProfiles = pgTable("referral_profiles", {
+  id: serial("id").primaryKey(),
+  userId: text("userId")
+    .notNull()
+    .unique()
+    .references(() => user.id, { onDelete: "cascade" }),
+  // Short code used in the referral URL, e.g. "AB12C"
+  code: text("code").notNull().unique(),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+})
+
+export type ReferralProfile = typeof referralProfiles.$inferSelect
+
+// Tracks each referral attempt — one row per referred enrollment
+export const referrals = pgTable("referrals", {
+  id: serial("id").primaryKey(),
+  // The parent who shared the referral link
+  referrerId: text("referrerId")
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+  referralCode: text("referralCode").notNull(),
+  // The enrollment that used the code
+  enrollmentId: integer("enrollmentId").references(() => enrollments.id, { onDelete: "set null" }),
+  // 'pending' | 'complete'
+  // pending = registered but not yet paid first month; complete = first payment confirmed
+  status: text("status").notNull().default("pending"),
+  // Set when status becomes 'complete'
+  completedAt: timestamp("completedAt"),
+  // Voucher issued to referrer after completion
+  voucherId: integer("voucherId"),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+  updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+})
+
+export type Referral = typeof referrals.$inferSelect
+
+// ---- Voucher campaigns ----
+
+export const voucherCampaigns = pgTable("voucher_campaigns", {
+  id: serial("id").primaryKey(),
+  // 'referral' | 'bootcamp' | 'custom'
+  type: text("type").notNull().default("custom"),
+  name: text("name").notNull(),
+  description: text("description").notNull().default(""),
+  // Discount percent (e.g. 20 = 20%)
+  discountPercent: integer("discountPercent").notNull().default(20),
+  // Which package periods this applies to: 'monthly' | 'once-off' | 'both'
+  appliesTo: text("appliesTo").notNull().default("monthly"),
+  // Configurable expiry relative to issuance (days); null = no expiry
+  expiryDays: integer("expiryDays"),
+  enabled: boolean("enabled").notNull().default(true),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+  updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+})
+
+export type VoucherCampaign = typeof voucherCampaigns.$inferSelect
+
+// ---- Individual vouchers ----
+
+export const vouchers = pgTable("vouchers", {
+  id: serial("id").primaryKey(),
+  code: text("code").notNull().unique(),
+  campaignId: integer("campaignId")
+    .notNull()
+    .references(() => voucherCampaigns.id, { onDelete: "cascade" }),
+  // The parent who owns this voucher
+  userId: text("userId")
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+  discountPercent: integer("discountPercent").notNull(),
+  // 'active' | 'used' | 'expired'
+  status: text("status").notNull().default("active"),
+  // Enrollment this voucher was redeemed against (set on redemption)
+  redeemedOnEnrollmentId: integer("redeemedOnEnrollmentId").references(() => enrollments.id, {
+    onDelete: "set null",
+  }),
+  // Referral that triggered this voucher issuance (null for bootcamp vouchers)
+  referralId: integer("referralId").references(() => referrals.id, { onDelete: "set null" }),
+  expiresAt: timestamp("expiresAt"),
+  usedAt: timestamp("usedAt"),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+})
+
+export type Voucher = typeof vouchers.$inferSelect

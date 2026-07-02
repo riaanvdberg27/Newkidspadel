@@ -2,9 +2,11 @@ import { redirect } from "next/navigation"
 import { headers } from "next/headers"
 import { auth } from "@/lib/auth"
 import { getMyEnrollments } from "@/app/actions/enrollment"
+import { getReferralSummary } from "@/app/actions/referrals"
 import { SignOutButton } from "@/components/sign-out-button"
 import { ChangeSlot } from "@/components/change-slot"
 import { EditProfile } from "@/components/edit-profile"
+import { ReferralPanel } from "@/components/referral-panel"
 import { CalendarDays, Mail, Phone, ShieldCheck, User } from "lucide-react"
 
 const STATUS_STYLES: Record<string, string> = {
@@ -18,7 +20,10 @@ export default async function DashboardPage() {
   const session = await auth.api.getSession({ headers: await headers() })
   if (!session?.user) redirect("/sign-in")
 
-  const enrollments = await getMyEnrollments()
+  const [enrollments, referralSummary] = await Promise.all([
+    getMyEnrollments(),
+    getReferralSummary().catch(() => null),
+  ])
   // Use parent mobile from first enrollment as a default (may be empty for new accounts)
   const mobile = enrollments[0]?.parentMobile ?? ""
 
@@ -43,6 +48,13 @@ export default async function DashboardPage() {
           <h2 className="text-lg font-bold text-navy">My Profile</h2>
           <EditProfile name={session.user.name} mobile={mobile} />
         </section>
+
+        {/* Referral & Vouchers section */}
+        {referralSummary && (
+          <section>
+            <ReferralPanel summary={referralSummary} />
+          </section>
+        )}
 
         {/* Enrollments section */}
         <section>
