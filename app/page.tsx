@@ -90,68 +90,59 @@ export default async function HomePage() {
       />
 
       {/* Hero */}
-      <section className="relative bg-navy overflow-hidden min-h-0 sm:min-h-[640px] lg:min-h-[720px]">
-        <div className="relative z-10 mx-auto max-w-6xl px-4 pt-10 pb-4 sm:py-20 lg:py-24">
-          <div className="max-w-[520px] text-center sm:text-left mx-auto sm:mx-0">
-            {/* Brand name — the star of the hero */}
-            <div className="mb-1">
-              <span className="inline-block rounded-full bg-lime/15 border border-lime/30 px-3 py-1 text-xs font-bold uppercase tracking-widest text-lime mb-3">
+      <section className="bg-navy overflow-hidden">
+        <div className="mx-auto max-w-6xl px-4">
+          {/* Two-column grid: text left, mascot right — stacks on mobile */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 items-end gap-0">
+
+            {/* Left — text content */}
+            <div className="py-10 sm:py-16 lg:py-24 text-center sm:text-left">
+              <span className="inline-block rounded-full bg-lime/15 border border-lime/30 px-3 py-1 text-xs font-bold uppercase tracking-widest text-lime mb-4">
                 Pretoria&apos;s Junior Padel Academy
               </span>
+              <h1 className="leading-none text-white">
+                <span className="block text-5xl font-black sm:text-6xl lg:text-7xl text-lime drop-shadow-sm">
+                  Next Gen
+                </span>
+                <span className="block text-5xl font-black sm:text-6xl lg:text-7xl">
+                  Padel Academy
+                </span>
+              </h1>
+              <p className="mt-4 text-lg font-black text-white/90 sm:text-xl lg:text-2xl">
+                Kids Padel Coaching in Pretoria &mdash; Ages 4–17
+              </p>
+              <p className="mt-3 text-pretty text-sm leading-relaxed text-white/65 sm:text-base">
+                Structured junior padel lessons at clubs and schools across Brooklyn, Menlo Park, Moreleta Park, Garsfontein, Waterkloof, Menlyn, Lynnwood, Faerie Glen and Silver Lakes. Fun, safe, and with qualified coaches who care.
+              </p>
+              <div className="mt-7 flex flex-col gap-3 sm:flex-row justify-center sm:justify-start">
+                <Link
+                  href="/enrollment"
+                  className="rounded-2xl bg-lime px-8 py-4 text-base font-black text-lime-foreground shadow-lg transition-all hover:scale-105 hover:shadow-xl active:scale-95 text-center"
+                >
+                  Enrol Your Child Today
+                </Link>
+                <Link
+                  href="/about"
+                  className="rounded-2xl border-2 border-white/30 px-8 py-4 text-base font-bold text-white transition-all hover:bg-white/10 text-center"
+                >
+                  Learn More
+                </Link>
+              </div>
             </div>
-            <h1 className="text-balance leading-none text-white">
-              <span className="block text-5xl font-black sm:text-6xl lg:text-7xl text-lime drop-shadow-sm">
-                Next Gen
-              </span>
-              <span className="block text-5xl font-black sm:text-6xl lg:text-7xl">
-                Padel Academy
-              </span>
-            </h1>
-            <p className="mt-4 text-lg font-black text-white/90 sm:text-xl lg:text-2xl">
-              Kids Padel Coaching in Pretoria &mdash; Ages 4–17
-            </p>
-            <p className="mt-3 text-pretty text-sm leading-relaxed text-white/65 sm:text-base">
-              Structured junior padel lessons at clubs and schools across Brooklyn, Menlo Park, Moreleta Park, Garsfontein, Waterkloof, Menlyn, Lynnwood, Faerie Glen and Silver Lakes. Fun, safe, and with qualified coaches who care.
-            </p>
-            <div className="mt-7 flex flex-col gap-3 sm:flex-row justify-center sm:justify-start">
-              <Link
-                href="/enrollment"
-                className="rounded-2xl bg-lime px-8 py-4 text-base font-black text-lime-foreground shadow-lg transition-all hover:scale-105 hover:shadow-xl active:scale-95 text-center"
-              >
-                Enrol Your Child Today
-              </Link>
-              <Link
-                href="/about"
-                className="rounded-2xl border-2 border-white/30 px-8 py-4 text-base font-bold text-white transition-all hover:bg-white/10 text-center"
-              >
-                Learn More
-              </Link>
+
+            {/* Right — mascot image, sits in its own column so it never overlaps text */}
+            <div className="flex items-end justify-center pointer-events-none select-none h-full min-h-[280px] sm:min-h-0">
+              <Image
+                src="/images/hero-kids.png"
+                alt="Children learning padel at NextGen Padel Academy Pretoria"
+                width={900}
+                height={1100}
+                priority
+                className="w-full max-w-[320px] sm:max-w-none h-auto object-contain object-bottom"
+              />
             </div>
+
           </div>
-        </div>
-
-        {/* Mobile mascot */}
-        <div className="sm:hidden flex justify-center pointer-events-none select-none">
-          <Image
-            src="/images/hero-kids.png"
-            alt="Children learning padel at NextGen Padel Academy Pretoria"
-            width={900}
-            height={1100}
-            priority
-            className="w-[220px] h-auto"
-          />
-        </div>
-
-        {/* Desktop mascot */}
-        <div className="hidden sm:block absolute top-[-80px] right-[-40px] bottom-[-120px] w-[75%] lg:w-[68%] pointer-events-none select-none z-20">
-          <Image
-            src="/images/hero-kids.png"
-            alt="Children learning padel at NextGen Padel Academy Pretoria"
-            fill
-            priority
-            sizes="(min-width: 1024px) 68vw, 75vw"
-            className="object-contain object-bottom"
-          />
         </div>
       </section>
 
