@@ -688,6 +688,62 @@ export function OnboardingWizard({ clubs, packages }: { clubs: Club[]; packages:
                 />
               )}
             </dl>
+            {/* Voucher code input */}
+            <div className="mt-5 rounded-card border border-border bg-card p-4 shadow-sm">
+              <div className="flex items-center gap-2 mb-3">
+                <Tag className="h-4 w-4 text-lime-foreground" />
+                <p className="font-semibold text-navy text-sm">Have a voucher code?</p>
+              </div>
+              {appliedVoucher ? (
+                <div className="flex items-center justify-between gap-3 rounded-md bg-lime/10 border border-lime/30 px-3 py-2">
+                  <div>
+                    <p className="text-sm font-bold text-navy">{appliedVoucher.code}</p>
+                    <p className="text-xs text-muted-foreground">{appliedVoucher.campaignName} — {appliedVoucher.discountPercent}% off applied</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => { setAppliedVoucher(null); setVoucherInput(""); setVoucherError(null) }}
+                    className="text-muted-foreground hover:text-navy"
+                    aria-label="Remove voucher"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={voucherInput}
+                    onChange={(e) => { setVoucherInput(e.target.value.toUpperCase()); setVoucherError(null) }}
+                    placeholder="e.g. NGP-XXXXXXXX"
+                    className="flex-1 rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-lime"
+                  />
+                  <button
+                    type="button"
+                    disabled={voucherInput.length < 4 || voucherValidating}
+                    onClick={async () => {
+                      setVoucherValidating(true)
+                      setVoucherError(null)
+                      const result = await validateVoucherCode(
+                        voucherInput,
+                        isOnceOff ? "once-off" : "monthly",
+                      )
+                      setVoucherValidating(false)
+                      if (result.valid) {
+                        setAppliedVoucher(result.voucher)
+                      } else {
+                        setVoucherError(result.error)
+                      }
+                    }}
+                    className="rounded-md bg-navy px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                  >
+                    {voucherValidating ? "Checking..." : "Apply"}
+                  </button>
+                </div>
+              )}
+              {voucherError && <p className="mt-2 text-xs text-red-600">{voucherError}</p>}
+            </div>
+
             {isOnceOff && (
               <div className="mt-5 rounded-card border border-border bg-card p-4 shadow-sm">
                 <div className="flex items-center gap-3">
