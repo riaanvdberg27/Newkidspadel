@@ -28,6 +28,7 @@ export function AdminSiteImagesManager({
     try {
       const res = await fetch("/api/admin/upload-site-image", { method: "POST", body: fd })
       const json = await res.json()
+      if (res.status === 401) throw new Error("Session expired — please sign out and sign in again.")
       if (!res.ok) throw new Error(json.error ?? "Upload failed")
 
       const now = Date.now()
@@ -91,8 +92,10 @@ export function AdminSiteImagesManager({
             >
               {/* Preview */}
               <div className="relative aspect-video bg-muted overflow-hidden">
+                {/* key forces a full DOM remount so the browser fetches the new image */}
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
+                  key={cacheBust[img.imageKey] ?? img.imageKey}
                   src={imageUrl(img)}
                   alt={img.label}
                   className="h-full w-full object-cover"

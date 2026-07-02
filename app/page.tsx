@@ -138,11 +138,11 @@ export default async function HomePage() {
               </div>
             </div>
 
-            {/* Right — mascot image, sits in its own column so it never overlaps text */}
+            {/* Right — mascot image. ALWAYS use the local file — this image is never admin-replaceable */}
             <div className="flex items-end justify-center self-end pointer-events-none select-none">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src={img("hero-kids")}
+                src="/images/hero-kids.png"
                 alt="Children learning padel at NextGen Padel Academy Pretoria"
                 width={900}
                 height={1100}
