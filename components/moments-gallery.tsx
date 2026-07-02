@@ -13,32 +13,11 @@ const CATEGORIES = [
   { value: "tournaments", label: "Tournaments" },
 ]
 
-// Build a stable ordered list of groups from the items, preserving first-seen order.
-function buildGroups(items: PublicMoment[], filter: string) {
-  const filtered = filter === "all" ? items : items.filter((m) => m.category === filter)
-
-  // Group photos by their shared title+caption combo (or just by category if no title).
-  // We preserve insertion order so groups appear in the same order as the items.
-  const groupMap = new Map<string, { title: string; caption: string | null; items: PublicMoment[] }>()
-
-  for (const m of filtered) {
-    // Use title as the grouping key — photos uploaded together share the same title.
-    // Fall back to category so ungrouped photos still appear.
-    const key = m.title || m.category
-    if (!groupMap.has(key)) {
-      groupMap.set(key, { title: m.title, caption: m.caption, items: [] })
-    }
-    groupMap.get(key)!.items.push(m)
-  }
-
-  return { groups: Array.from(groupMap.values()), filtered }
-}
-
 export function MomentsGallery({ items }: { items: PublicMoment[] }) {
   const [filter, setFilter] = useState("all")
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
 
-  const { groups, filtered } = buildGroups(items, filter)
+  const filtered = filter === "all" ? items : items.filter((m) => m.category === filter)
 
   // Find categories that actually have items
   const activeCategories = CATEGORIES.filter(
@@ -71,9 +50,6 @@ export function MomentsGallery({ items }: { items: PublicMoment[] }) {
     )
   }
 
-  // Track a running index into `filtered` so lightbox indices stay consistent.
-  let runningIndex = 0
-
   return (
     <>
       {/* Category filter */}
@@ -95,80 +71,56 @@ export function MomentsGallery({ items }: { items: PublicMoment[] }) {
         </div>
       )}
 
-      {/* Groups — each group shows a section heading once, then the photo grid */}
-      <div className="space-y-12">
-        {groups.map((group) => {
-          const groupStartIndex = runningIndex
-          runningIndex += group.items.length
+      {/* Masonry-style grid — no title/caption on individual cards */}
+      <div className="columns-1 gap-4 sm:columns-2 lg:columns-3 xl:columns-4 space-y-4">
+        {filtered.map((m, i) => {
+          const media = blobUrl(m.mediaUrl) ?? m.mediaUrl
+          const thumb = m.thumbnailUrl ? (blobUrl(m.thumbnailUrl) ?? m.thumbnailUrl) : null
           const gridSizes = "(min-width: 1280px) 23vw, (min-width: 1024px) 31vw, (min-width: 640px) 47vw, 92vw"
 
           return (
-            <section key={group.title || group.items[0]?.id}>
-              {/* Group heading — shown once per group, not per photo */}
-              {group.title && (
-                <div className="mb-5">
-                  <h2 className="text-xl font-bold text-navy leading-snug text-balance">{group.title}</h2>
-                  {group.caption && (
-                    <p className="mt-1 text-sm text-muted-foreground leading-relaxed">{group.caption}</p>
-                  )}
-                </div>
-              )}
-
-              {/* Masonry-style photo grid for this group */}
-              <div className="columns-1 gap-4 sm:columns-2 lg:columns-3 xl:columns-4 space-y-4">
-                {group.items.map((m, i) => {
-                  const itemIndex = groupStartIndex + i
-                  const media = blobUrl(m.mediaUrl) ?? m.mediaUrl
-                  const thumb = m.thumbnailUrl ? (blobUrl(m.thumbnailUrl) ?? m.thumbnailUrl) : null
-
-                  return (
-                    <div
-                      key={m.id}
-                      className="break-inside-avoid cursor-pointer overflow-hidden rounded-xl border border-border bg-card shadow-sm transition-transform hover:-translate-y-1 hover:shadow-md"
-                      onClick={() => openLightbox(itemIndex)}
-                    >
-                      <div className="relative bg-muted">
-                        {m.mediaType === "video" ? (
-                          <>
-                            {thumb ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img
-                                src={blobImage(m.thumbnailUrl, 828) ?? thumb}
-                                srcSet={blobSrcSet(m.thumbnailUrl)}
-                                sizes={gridSizes}
-                                alt={group.title || m.category}
-                                className="w-full object-cover"
-                                loading={itemIndex < 4 ? "eager" : "lazy"}
-                                decoding="async"
-                              />
-                            ) : (
-                              <video src={media} className="w-full object-cover" preload="metadata" muted playsInline />
-                            )}
-                            <div className="absolute inset-0 flex items-center justify-center">
-                              <div className="rounded-full bg-navy/75 p-4 shadow-lg">
-                                <Play className="h-6 w-6 fill-white text-white" />
-                              </div>
-                            </div>
-                          </>
-                        ) : (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={blobImage(m.mediaUrl, 828) ?? media}
-                            srcSet={blobSrcSet(m.mediaUrl)}
-                            sizes={gridSizes}
-                            alt={group.title || m.category}
-                            className="w-full object-cover"
-                            loading={itemIndex < 4 ? "eager" : "lazy"}
-                            decoding="async"
-                          />
-                        )}
+            <div
+              key={m.id}
+              className="break-inside-avoid cursor-pointer overflow-hidden rounded-xl border border-border bg-card shadow-sm transition-transform hover:-translate-y-1 hover:shadow-md"
+              onClick={() => openLightbox(i)}
+            >
+              <div className="relative bg-muted">
+                {m.mediaType === "video" ? (
+                  <>
+                    {thumb ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={blobImage(m.thumbnailUrl, 828) ?? thumb}
+                        srcSet={blobSrcSet(m.thumbnailUrl)}
+                        sizes={gridSizes}
+                        alt={m.category}
+                        className="w-full object-cover"
+                        loading={i < 4 ? "eager" : "lazy"}
+                        decoding="async"
+                      />
+                    ) : (
+                      <video src={media} className="w-full object-cover" preload="metadata" muted playsInline />
+                    )}
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <div className="rounded-full bg-navy/75 p-4 shadow-lg">
+                        <Play className="h-6 w-6 fill-white text-white" />
                       </div>
-                      {/* No per-photo title or caption — those appear once as the group heading above */}
                     </div>
-                  )
-                })}
+                  </>
+                ) : (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={blobImage(m.mediaUrl, 828) ?? media}
+                    srcSet={blobSrcSet(m.mediaUrl)}
+                    sizes={gridSizes}
+                    alt={m.category}
+                    className="w-full object-cover"
+                    loading={i < 4 ? "eager" : "lazy"}
+                    decoding="async"
+                  />
+                )}
               </div>
-            </section>
+            </div>
           )
         })}
       </div>
