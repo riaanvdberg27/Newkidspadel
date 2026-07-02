@@ -38,19 +38,20 @@ const DEFAULTS: ContactPerson[] = [
 ]
 
 export async function getContacts(): Promise<ContactPerson[]> {
-  const rows = await db
-    .select()
-    .from(siteSettings)
-    .where(eq(siteSettings.key, LEGACY_KEY))
-    .limit(1)
-
-  if (rows.length === 0 || !rows[0].value) return DEFAULTS
-
   try {
+    const rows = await db
+      .select()
+      .from(siteSettings)
+      .where(eq(siteSettings.key, LEGACY_KEY))
+      .limit(1)
+
+    if (rows.length === 0 || !rows[0].value) return DEFAULTS
+
     const parsed = JSON.parse(rows[0].value)
     if (Array.isArray(parsed) && parsed.length > 0) return parsed
   } catch {
-    // fall through to defaults
+    // DB unreachable (e.g. at static build time) or JSON parse failure —
+    // fall back to hardcoded defaults so the layout can still prerender.
   }
   return DEFAULTS
 }
