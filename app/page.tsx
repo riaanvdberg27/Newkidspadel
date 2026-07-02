@@ -180,15 +180,15 @@ export default async function HomePage() {
           <div className="relative aspect-[4/3] overflow-hidden rounded-2xl">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={img("kids-playing-padel")}
-              alt="Children playing padel at a NextGen Padel Academy session in Pretoria"
+              src={img("home-action-1")}
+              alt="Junior players doing agility drills with a coach at a NextGen Padel Academy session in Pretoria"
               className="h-full w-full object-cover object-center"
             />
           </div>
           <div className="relative aspect-[4/3] overflow-hidden rounded-2xl">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={img("coach-kids")}
+              src={img("home-action-2")}
               alt="NextGen Padel Academy coach guiding junior players in Pretoria"
               className="h-full w-full object-cover object-center"
             />
