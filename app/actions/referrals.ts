@@ -295,6 +295,13 @@ export async function issueBootcampVoucher(
     resolvedUserId = found.id
   }
 
+  // CRITICAL: Never allow an email address to be inserted as userId.
+  // This is a foreign key to user.id (UUID), not an email field.
+  if (!resolvedUserId || resolvedUserId.includes("@")) {
+    console.error("[v0] CRITICAL: Attempted to insert email as userId:", resolvedUserId)
+    return { error: "Invalid user ID — must be a UUID, not an email address." }
+  }
+
   const expiresAt = campaign.expiryDays
     ? new Date(Date.now() + campaign.expiryDays * 86_400_000)
     : null
