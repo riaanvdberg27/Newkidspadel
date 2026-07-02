@@ -20,7 +20,7 @@ const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 // SLOT_HOURS is imported from lib/slots — half-hour increments 08:00–18:00
 
 const AGE_GROUP_LABELS: Record<AgeGroup, string> = {
-  "5-8": "Ages 5 – 8",
+  "4-8": "Ages 4 – 8",
   "9-13": "Ages 9 – 13",
   "14-17": "Ages 14 – 17",
 }
@@ -263,7 +263,7 @@ function PackageForm({
   const [published, setPublished] = useState(pkg?.published ?? true)
   const [slotType, setSlotType] = useState(pkg?.slotType ?? "standard")
   const [sortOrder, setSortOrder] = useState(String(pkg?.sortOrder ?? 0))
-  const [activeAgeGroup, setActiveAgeGroup] = useState<AgeGroup>("5-8")
+  const [activeAgeGroup, setActiveAgeGroup] = useState<AgeGroup>("4-8")
   // Club restrictions
   const [selectedClubIds, setSelectedClubIds] = useState<number[]>(pkg?.clubIds ?? [])
   // Which club's slot grid is currently visible (defaults to first selected club, or first available)

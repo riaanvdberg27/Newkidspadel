@@ -20,7 +20,7 @@ export async function SiteFooter() {
               </div>
             </div>
             <p className="text-sm text-navy-foreground/60 leading-relaxed">
-              Coaching boys and girls ages 5–17 across South Africa. Play. Learn. Grow.
+              Coaching boys and girls ages 4–17 across South Africa. Play. Learn. Grow.
             </p>
             <div className="flex gap-2 mt-1">
               <Link href="/enrollment" className="rounded-full bg-lime px-4 py-2 text-xs font-black text-lime-foreground transition-all hover:bg-lime/80">

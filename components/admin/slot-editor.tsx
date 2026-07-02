@@ -10,7 +10,7 @@ import { AGE_GROUPS, type AgeGroup, type ClubSlot } from "@/lib/db/schema"
 const WEEKDAY_ORDER = [1, 2, 3, 4, 5, 6, 0]
 
 const AGE_GROUP_LABELS: Record<AgeGroup, string> = {
-  "5-8": "Ages 5 – 8",
+  "4-8": "Ages 4 – 8",
   "9-13": "Ages 9 – 13",
   "14-17": "Ages 14 – 17",
 }
@@ -124,7 +124,7 @@ function AgeGroupGrid({ clubId, ageGroup }: { clubId: number; ageGroup: AgeGroup
 }
 
 export function SlotEditor({ clubId }: { clubId: number }) {
-  const [activeGroup, setActiveGroup] = useState<AgeGroup>("5-8")
+  const [activeGroup, setActiveGroup] = useState<AgeGroup>("4-8")
 
   return (
     <div>

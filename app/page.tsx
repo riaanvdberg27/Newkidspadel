@@ -28,7 +28,7 @@ export default async function HomePage() {
             <h1 className="text-balance text-4xl font-black leading-tight text-white sm:text-5xl lg:text-6xl">
               Coaching for Boys &amp; Girls
             </h1>
-            <p className="mt-3 text-xl font-black text-lime sm:text-2xl lg:text-3xl">Ages 5 – 17 Years</p>
+            <p className="mt-3 text-xl font-black text-lime sm:text-2xl lg:text-3xl">Ages 4 – 17 Years</p>
             <p className="mt-4 text-pretty text-sm leading-relaxed text-white/70 sm:text-base">
               Learn padel the right way — fun, safe, and with coaches who care.
             </p>
@@ -78,7 +78,7 @@ export default async function HomePage() {
       <section className="bg-lime">
         <div className="mx-auto grid grid-cols-2 max-w-4xl gap-4 px-4 py-6 sm:flex sm:flex-wrap sm:justify-center sm:gap-12">
           {[
-            { value: "5–17", label: "Age Range" },
+            { value: "4–17", label: "Age Range" },
             { value: "3", label: "Age Groups" },
             { value: String(coaches.length), label: "Expert Coaches" },
             { value: "100%", label: "Fun Guaranteed" },
