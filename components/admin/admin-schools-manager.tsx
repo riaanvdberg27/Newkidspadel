@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation"
 import { Plus, Pencil, Trash2, X, Upload, Globe, Phone, Mail, MapPin, User, ExternalLink } from "lucide-react"
 import type { School } from "@/lib/db/schema"
 import { createSchool, updateSchool, deleteSchool, type SchoolInput } from "@/app/actions/schools"
-import { blobUrl } from "@/lib/blob"
 
 const EMPTY: SchoolInput = {
   name: "",
@@ -44,9 +43,7 @@ function SchoolForm({
 
   // Logo
   const [logoUrl, setLogoUrl] = useState<string | null>(school?.logoUrl ?? null)
-  const [logoPreview, setLogoPreview] = useState<string | null>(
-    school?.logoUrl ? blobUrl(school.logoUrl) ?? null : null,
-  )
+  const [logoPreview, setLogoPreview] = useState<string | null>(school?.logoUrl ?? null)
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -67,7 +64,7 @@ function SchoolForm({
       const res = await fetch("/api/admin/upload-school-logo", { method: "POST", body: fd })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? "Upload failed")
-      setLogoUrl(json.pathname as string)
+      setLogoUrl(json.url as string)
     } catch (err) {
       setUploadError(err instanceof Error ? err.message : "Upload failed")
     } finally {
@@ -283,7 +280,7 @@ export function AdminSchoolsManager({ initialSchools }: { initialSchools: School
           <p className="text-sm text-muted-foreground">No schools added yet. Click &quot;Add School&quot; to get started.</p>
         )}
         {schools.map((school) => {
-          const logo = blobUrl(school.logoUrl) ?? null
+          const logo = school.logoUrl ?? null
           return (
             <article key={school.id} className="rounded-card border border-border bg-card p-5 shadow-sm">
               {editing?.id === school.id ? (
