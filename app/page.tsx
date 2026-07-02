@@ -93,7 +93,7 @@ export default async function HomePage() {
       <section className="bg-navy overflow-hidden">
         <div className="mx-auto max-w-6xl px-4">
           {/* Two-column grid: text left, mascot right — stacks on mobile */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 items-end gap-0">
+          <div className="grid grid-cols-1 sm:grid-cols-2 items-end gap-x-4 gap-y-0">
 
             {/* Left — text content */}
             <div className="pt-6 pb-8 sm:pt-8 sm:pb-10 lg:pt-10 lg:pb-12 text-center sm:text-left">
@@ -131,14 +131,14 @@ export default async function HomePage() {
             </div>
 
             {/* Right — mascot image, sits in its own column so it never overlaps text */}
-            <div className="flex items-end justify-center pointer-events-none select-none h-full min-h-[280px] sm:min-h-0">
+            <div className="flex items-end justify-center self-end pointer-events-none select-none">
               <Image
                 src="/images/hero-kids.png"
                 alt="Children learning padel at NextGen Padel Academy Pretoria"
                 width={900}
                 height={1100}
                 priority
-                className="w-full max-w-[320px] sm:max-w-none h-auto object-contain object-bottom"
+                className="w-full max-w-[260px] sm:max-w-[340px] lg:max-w-[420px] h-auto object-contain object-bottom"
               />
             </div>
 
