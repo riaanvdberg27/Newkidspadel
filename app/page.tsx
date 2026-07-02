@@ -96,7 +96,7 @@ export default async function HomePage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 items-end gap-0">
 
             {/* Left — text content */}
-            <div className="py-10 sm:py-16 lg:py-24 text-center sm:text-left">
+            <div className="pt-6 pb-8 sm:pt-8 sm:pb-10 lg:pt-10 lg:pb-12 text-center sm:text-left">
               <span className="inline-block rounded-full bg-lime/15 border border-lime/30 px-3 py-1 text-xs font-bold uppercase tracking-widest text-lime mb-4">
                 Pretoria&apos;s Junior Padel Academy
               </span>
