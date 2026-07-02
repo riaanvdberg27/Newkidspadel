@@ -524,3 +524,22 @@ export const impersonationLog = pgTable("impersonation_log", {
 })
 
 export type ImpersonationLog = typeof impersonationLog.$inferSelect
+
+// ---- Next Gen Moments (gallery) ----
+
+export const moments = pgTable("moments", {
+  id: serial("id").primaryKey(),
+  title: text("title").notNull(),
+  caption: text("caption"),
+  mediaUrl: text("media_url").notNull(),
+  // 'image' | 'video'
+  mediaType: text("media_type").notNull().default("image"),
+  thumbnailUrl: text("thumbnail_url"),
+  // 'general' | 'clubs' | 'schools' | 'tournaments'
+  category: text("category").notNull().default("general"),
+  published: boolean("published").notNull().default(true),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+})
+
+export type Moment = typeof moments.$inferSelect
