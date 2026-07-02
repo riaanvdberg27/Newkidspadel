@@ -92,15 +92,25 @@ export default async function HomePage() {
       {/* Hero */}
       <section className="relative bg-navy overflow-hidden min-h-0 sm:min-h-[640px] lg:min-h-[720px]">
         <div className="relative z-10 mx-auto max-w-6xl px-4 pt-10 pb-4 sm:py-20 lg:py-24">
-          <div className="max-w-[460px] text-center sm:text-left mx-auto sm:mx-0">
-            <p className="mb-2 text-sm font-bold uppercase tracking-widest text-lime">
-              NextGen Padel Academy — Pretoria
-            </p>
-            <h1 className="text-balance text-4xl font-black leading-tight text-white sm:text-5xl lg:text-6xl">
-              Kids Padel Coaching in Pretoria
+          <div className="max-w-[520px] text-center sm:text-left mx-auto sm:mx-0">
+            {/* Brand name — the star of the hero */}
+            <div className="mb-1">
+              <span className="inline-block rounded-full bg-lime/15 border border-lime/30 px-3 py-1 text-xs font-bold uppercase tracking-widest text-lime mb-3">
+                Pretoria&apos;s Junior Padel Academy
+              </span>
+            </div>
+            <h1 className="text-balance leading-none text-white">
+              <span className="block text-5xl font-black sm:text-6xl lg:text-7xl text-lime drop-shadow-sm">
+                Next Gen
+              </span>
+              <span className="block text-5xl font-black sm:text-6xl lg:text-7xl">
+                Padel Academy
+              </span>
             </h1>
-            <p className="mt-3 text-xl font-black text-lime sm:text-2xl lg:text-3xl">Ages 4–17 Years</p>
-            <p className="mt-4 text-pretty text-sm leading-relaxed text-white/70 sm:text-base">
+            <p className="mt-4 text-lg font-black text-white/90 sm:text-xl lg:text-2xl">
+              Kids Padel Coaching in Pretoria &mdash; Ages 4–17
+            </p>
+            <p className="mt-3 text-pretty text-sm leading-relaxed text-white/65 sm:text-base">
               Structured junior padel lessons at clubs and schools across Brooklyn, Menlo Park, Moreleta Park, Garsfontein, Waterkloof, Menlyn, Lynnwood, Faerie Glen and Silver Lakes. Fun, safe, and with qualified coaches who care.
             </p>
             <div className="mt-7 flex flex-col gap-3 sm:flex-row justify-center sm:justify-start">
