@@ -1,8 +1,9 @@
 "use client"
 
 import { useState, useTransition, useRef } from "react"
-import { Plus, Trash2, Save, Check, Upload, Eye, EyeOff, Play, Image as ImageIcon, X } from "lucide-react"
-import { createMoment, updateMoment, deleteMoment, type PublicMoment, type MomentInput } from "@/app/actions/moments"
+import { upload } from "@vercel/blob/client"
+import { Plus, Trash2, Save, Check, Upload, Play, Image as ImageIcon, X } from "lucide-react"
+import { createMoments, updateMoment, deleteMoment, type PublicMoment, type MomentInput } from "@/app/actions/moments"
 import { blobUrl } from "@/lib/blob"
 
 const CATEGORIES = [
@@ -42,73 +43,123 @@ function MediaPreview({ url, type }: { url: string; type: string }) {
 
 type EditState = PublicMoment | { id: 0 }
 
+type MediaItem = { url: string; type: "image" | "video" }
+
+function isVideoFile(file: File) {
+  return file.type.startsWith("video/")
+}
+
 function MomentForm({
   initial,
   onSave,
   onCancel,
 }: {
   initial: PublicMoment | null
-  onSave: (input: MomentInput) => Promise<void>
+  onSave: (inputs: MomentInput[]) => Promise<void>
   onCancel: () => void
 }) {
+  const isEditing = !!initial
   const [title, setTitle] = useState(initial?.title ?? "")
   const [caption, setCaption] = useState(initial?.caption ?? "")
-  const [mediaUrl, setMediaUrl] = useState(initial?.mediaUrl ?? "")
-  const [mediaType, setMediaType] = useState<"image" | "video">(
-    (initial?.mediaType as "image" | "video") ?? "image"
+  const [mediaItems, setMediaItems] = useState<MediaItem[]>(
+    initial?.mediaUrl
+      ? [{ url: initial.mediaUrl, type: (initial.mediaType as "image" | "video") ?? "image" }]
+      : []
   )
   const [thumbnailUrl, setThumbnailUrl] = useState(initial?.thumbnailUrl ?? "")
   const [category, setCategory] = useState(initial?.category ?? "general")
   const [published, setPublished] = useState(initial?.published ?? true)
   const [sortOrder, setSortOrder] = useState(initial?.sortOrder ?? 0)
   const [uploading, setUploading] = useState(false)
+  const [progress, setProgress] = useState("")
   const [uploadError, setUploadError] = useState("")
   const [pending, startTransition] = useTransition()
   const fileRef = useRef<HTMLInputElement>(null)
   const thumbRef = useRef<HTMLInputElement>(null)
 
-  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>, isThumb = false) {
+  async function uploadOne(file: File): Promise<MediaItem> {
+    const isVideo = isVideoFile(file)
+    const folder = isVideo ? "moments/videos" : "moments/images"
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "-") || (isVideo ? "video.mp4" : "image.jpg")
+    const result = await upload(`${folder}/${safeName}`, file, {
+      access: "private",
+      handleUploadUrl: "/api/admin/upload-moment",
+      contentType: file.type,
+      multipart: file.size > 5 * 1024 * 1024,
+    })
+    return { url: result.url, type: isVideo ? "video" : "image" }
+  }
+
+  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? [])
+    if (!files.length) return
+    // When editing an existing moment we only keep a single media item.
+    const selected = isEditing ? files.slice(0, 1) : files
+    setUploading(true)
+    setUploadError("")
+    try {
+      const uploaded: MediaItem[] = []
+      for (let i = 0; i < selected.length; i++) {
+        setProgress(selected.length > 1 ? `Uploading ${i + 1} of ${selected.length}…` : "Uploading…")
+        uploaded.push(await uploadOne(selected[i]))
+      }
+      setMediaItems((prev) => (isEditing ? uploaded : [...prev, ...uploaded]))
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : "Upload failed")
+    } finally {
+      setUploading(false)
+      setProgress("")
+      if (fileRef.current) fileRef.current.value = ""
+    }
+  }
+
+  async function handleThumbUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
     setUploading(true)
     setUploadError("")
     try {
-      const fd = new FormData()
-      fd.append("file", file)
-      const res = await fetch("/api/admin/upload-moment", { method: "POST", body: fd })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error ?? "Upload failed")
-      if (isThumb) {
-        setThumbnailUrl(data.url)
-      } else {
-        setMediaUrl(data.url)
-        if (data.mediaType) setMediaType(data.mediaType)
-      }
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "-") || "thumb.jpg"
+      const result = await upload(`moments/thumbnails/${safeName}`, file, {
+        access: "private",
+        handleUploadUrl: "/api/admin/upload-moment",
+        contentType: file.type,
+      })
+      setThumbnailUrl(result.url)
     } catch (err) {
       setUploadError(err instanceof Error ? err.message : "Upload failed")
     } finally {
       setUploading(false)
+      if (thumbRef.current) thumbRef.current.value = ""
     }
   }
 
+  function removeMedia(index: number) {
+    setMediaItems((prev) => prev.filter((_, i) => i !== index))
+  }
+
   function handleSubmit() {
-    if (!title.trim() || !mediaUrl.trim()) return
+    if (!title.trim() || mediaItems.length === 0) return
+    const multiple = mediaItems.length > 1
+    const base = Number(sortOrder)
+    const inputs: MomentInput[] = mediaItems.map((m, i) => ({
+      title: multiple ? `${title.trim()} (${i + 1})` : title.trim(),
+      caption: caption.trim() || undefined,
+      mediaUrl: m.url,
+      mediaType: m.type,
+      thumbnailUrl: !multiple && m.type === "video" && thumbnailUrl.trim() ? thumbnailUrl.trim() : undefined,
+      category,
+      published,
+      sortOrder: base + i,
+    }))
     startTransition(async () => {
-      await onSave({
-        title: title.trim(),
-        caption: caption.trim() || undefined,
-        mediaUrl: mediaUrl.trim(),
-        mediaType,
-        thumbnailUrl: thumbnailUrl.trim() || undefined,
-        category,
-        published,
-        sortOrder: Number(sortOrder),
-      })
+      await onSave(inputs)
     })
   }
 
   const inputCls = "mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-navy focus:outline-none focus:ring-2 focus:ring-lime"
-  const hasMedia = !!mediaUrl
+  const hasMedia = mediaItems.length > 0
+  const singleVideo = mediaItems.length === 1 && mediaItems[0].type === "video"
 
   return (
     <div className="space-y-4">
@@ -131,13 +182,14 @@ function MomentForm({
       </Field>
 
       {/* Media upload */}
-      <Field label="Photo or Video *">
+      <Field label={isEditing ? "Photo or Video *" : "Photos or Videos *"}>
         <input
           ref={fileRef}
           type="file"
+          multiple={!isEditing}
           accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/quicktime,video/webm"
           className="hidden"
-          onChange={(e) => handleFileUpload(e, false)}
+          onChange={handleFileUpload}
         />
         <button
           type="button"
@@ -146,41 +198,62 @@ function MomentForm({
           className="mt-1 flex items-center gap-2 rounded-md border border-dashed border-border bg-card px-4 py-3 text-sm font-medium text-muted-foreground transition-colors hover:border-lime hover:text-navy disabled:opacity-50"
         >
           <Upload className="h-4 w-4" />
-          {uploading ? "Uploading…" : hasMedia ? "Replace file" : "Upload photo or video"}
+          {uploading
+            ? progress || "Uploading…"
+            : isEditing
+              ? hasMedia
+                ? "Replace file"
+                : "Upload photo or video"
+              : "Upload photos or videos"}
         </button>
+        {!isEditing && (
+          <p className="mt-1 text-xs text-muted-foreground">
+            You can select multiple files at once — each becomes its own moment.
+          </p>
+        )}
         {uploadError && <p className="mt-1 text-xs text-red-600">{uploadError}</p>}
 
-        {/* Preview */}
+        {/* Preview grid */}
         {hasMedia && (
-          <div className="mt-2 relative h-40 w-full overflow-hidden rounded-md bg-muted">
-            <MediaPreview url={mediaUrl} type={mediaType} />
-            {mediaType === "video" && (
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="rounded-full bg-navy/70 p-3">
-                  <Play className="h-5 w-5 fill-white text-white" />
-                </div>
+          <div className="mt-2 grid grid-cols-3 gap-2">
+            {mediaItems.map((m, i) => (
+              <div key={`${m.url}-${i}`} className="relative aspect-square overflow-hidden rounded-md bg-muted">
+                <MediaPreview url={m.url} type={m.type} />
+                {m.type === "video" && (
+                  <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                    <div className="rounded-full bg-navy/70 p-2">
+                      <Play className="h-4 w-4 fill-white text-white" />
+                    </div>
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => removeMedia(i)}
+                  className="absolute right-1 top-1 rounded-full bg-navy/80 p-1 text-white hover:bg-navy"
+                  aria-label="Remove file"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
               </div>
-            )}
-            <button
-              type="button"
-              onClick={() => { setMediaUrl(""); setMediaType("image") }}
-              className="absolute right-1 top-1 rounded-full bg-navy/80 p-1 text-white hover:bg-navy"
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
+            ))}
           </div>
+        )}
+        {mediaItems.length > 1 && (
+          <p className="mt-1 text-xs text-muted-foreground">
+            {mediaItems.length} files — creating {mediaItems.length} moments.
+          </p>
         )}
       </Field>
 
-      {/* Thumbnail override (for videos) */}
-      {mediaType === "video" && (
+      {/* Thumbnail override (single video only) */}
+      {singleVideo && (
         <Field label="Thumbnail image (optional — shown as video cover)">
           <input
             ref={thumbRef}
             type="file"
             accept="image/jpeg,image/png,image/webp"
             className="hidden"
-            onChange={(e) => handleFileUpload(e, true)}
+            onChange={handleThumbUpload}
           />
           <button
             type="button"
@@ -247,11 +320,11 @@ function MomentForm({
         <button
           type="button"
           onClick={handleSubmit}
-          disabled={pending || uploading || !title.trim() || !mediaUrl.trim()}
+          disabled={pending || uploading || !title.trim() || mediaItems.length === 0}
           className="flex items-center gap-2 rounded-md bg-lime px-4 py-2 text-sm font-bold text-lime-foreground transition-colors hover:bg-lime/90 disabled:opacity-50"
         >
           {pending ? <Check className="h-4 w-4 animate-pulse" /> : <Save className="h-4 w-4" />}
-          {initial ? "Save changes" : "Add moment"}
+          {isEditing ? "Save changes" : mediaItems.length > 1 ? `Add ${mediaItems.length} moments` : "Add moment"}
         </button>
       </div>
     </div>
@@ -269,15 +342,16 @@ export function AdminMomentsManager({ initialMoments }: { initialMoments: Public
     ? items
     : items.filter((m) => m.category === filterCategory)
 
-  async function handleSave(input: MomentInput) {
-    if (!editing) return
+  async function handleSave(inputs: MomentInput[]) {
+    if (!editing || inputs.length === 0) return
     if (editing.id === 0) {
-      const res = await createMoment(input)
+      const res = await createMoments(inputs)
       if (res.ok) {
         // Re-fetch by reloading; simplest approach
         window.location.reload()
       }
     } else {
+      const input = inputs[0]
       const res = await updateMoment(editing.id, input)
       if (res.ok) {
         setItems((prev) =>
