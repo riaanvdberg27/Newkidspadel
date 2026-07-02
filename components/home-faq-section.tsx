@@ -3,7 +3,7 @@ import Link from "next/link"
 const HOME_FAQS = [
   {
     question: "What age can children start padel at NextGen Padel Academy?",
-    answer: "We welcome children from age 4 up to 17. Our three age groups ensure every child is coached with peers of similar age and ability.",
+    answer: "We welcome children aged 4 to 17. Our three age groups — Mini Padel (4–8), Junior Padel (9–13), and Advanced Junior (14–17) — ensure every child is coached alongside peers of a similar age and ability.",
   },
   {
     question: "Where do you offer kids padel coaching in Pretoria?",

@@ -75,7 +75,7 @@ const ARTICLES: Record<string, Article> = {
       },
       {
         type: "p",
-        text: "NextGen Padel Academy runs structured programmes for three age groups: Mini Padel (4–7 years), Junior Padel (8–12 years), and Advanced Junior (13–17 years). Each group is coached at the right pace with appropriate equipment so every child is challenged but never frustrated.",
+        text: "NextGen Padel Academy runs structured programmes for three age groups: Mini Padel (4–8 years), Junior Padel (9–13 years), and Advanced Junior (14–17 years). Each group is coached at the right pace with appropriate equipment so every child is challenged but never frustrated.",
       },
       {
         type: "cta",
@@ -268,7 +268,7 @@ const ARTICLES: Record<string, Article> = {
       },
       {
         type: "p",
-        text: "The camp is designed for all ability levels. Our coaches run separate sessions for Mini Padel (4–7 years), Junior Padel (8–12 years), and Advanced Junior (13–17 years). Children who have never held a racket before will leave having played their first real rally. Children who are already training weekly will leave having sharpened their game and made new friends.",
+        text: "The camp is designed for all ability levels. Our coaches run separate sessions for Mini Padel (4–8 years), Junior Padel (9–13 years), and Advanced Junior (14–17 years). Children who have never held a racket before will leave having played their first real rally. Children who are already training weekly will leave having sharpened their game and made new friends.",
       },
       {
         type: "h2",

@@ -33,7 +33,7 @@ const homeFaqSchema = {
     {
       "@type": "Question",
       name: "What age can children start padel at NextGen Padel Academy?",
-      acceptedAnswer: { "@type": "Answer", text: "We welcome children from age 4 up to 17. Our three age groups ensure every child is coached with peers of similar age and ability in Pretoria." },
+      acceptedAnswer: { "@type": "Answer", text: "We welcome children aged 4 to 17. Our three age groups — Mini Padel (4–8), Junior Padel (9–13), and Advanced Junior (14–17) — ensure every child is coached alongside peers of a similar age and ability in Pretoria." },
     },
     {
       "@type": "Question",
