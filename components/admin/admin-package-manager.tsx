@@ -14,7 +14,7 @@ import {
   type FeatureItem,
 } from "@/app/actions/packages"
 import { SLOT_HOURS, formatHour, formatEndHour } from "@/lib/slots"
-import { AGE_GROUPS, type AgeGroup, type Club } from "@/lib/db/schema"
+import { AGE_GROUPS, type AgeGroup, type Club, type School } from "@/lib/db/schema"
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 // SLOT_HOURS is imported from lib/slots — half-hour increments 08:00–18:00
@@ -44,9 +44,11 @@ const EMPTY: PackageInput = {
 export function AdminPackageManager({
   initialPackages,
   allClubs,
+  allSchools,
 }: {
   initialPackages: PublicPackage[]
   allClubs: Club[]
+  allSchools: School[]
 }) {
   const router = useRouter()
   const [editing, setEditing] = useState<{ pkg: PublicPackage; slots: CustomSlot[] } | null>(null)
@@ -217,6 +219,7 @@ export function AdminPackageManager({
             pkg={editing?.pkg ?? null}
             initialSlots={editing?.slots ?? []}
             allClubs={allClubs}
+            allSchools={allSchools}
             pending={pending}
             onSubmit={handleSave}
             onCancel={closeModal}
@@ -242,6 +245,7 @@ function PackageForm({
   pkg,
   initialSlots,
   allClubs,
+  allSchools,
   pending,
   onSubmit,
   onCancel,
@@ -249,6 +253,7 @@ function PackageForm({
   pkg: PublicPackage | null
   initialSlots: CustomSlot[]
   allClubs: Club[]
+  allSchools: School[]
   pending: boolean
   onSubmit: (input: PackageInput) => void
   onCancel: () => void
@@ -266,8 +271,10 @@ function PackageForm({
   const [slotType, setSlotType] = useState(pkg?.slotType ?? "standard")
   const [sortOrder, setSortOrder] = useState(String(pkg?.sortOrder ?? 0))
   const [activeAgeGroup, setActiveAgeGroup] = useState<AgeGroup>("4-8")
-  // Club restrictions
+  // Club restrictions (only used when isSchool is false)
   const [selectedClubIds, setSelectedClubIds] = useState<number[]>(pkg?.clubIds ?? [])
+  // School restrictions (only used when isSchool is true)
+  const [selectedSchoolIds, setSelectedSchoolIds] = useState<number[]>(pkg?.schoolIds ?? [])
   // Which club's slot grid is currently visible (defaults to first selected club, or first available)
   const [activeSlotClubId, setActiveSlotClubId] = useState<number>(() => pkg?.clubIds?.[0] ?? allClubs.find((c) => c.published)?.id ?? 0)
 
@@ -340,11 +347,13 @@ function PackageForm({
       description,
       popular,
       published,
-      slotType,
+      // School packages use school IDs, not club IDs; clear clubs to avoid confusion
+      slotType: isSchool ? "standard" : slotType,
       isSchool,
       sortOrder: Number(sortOrder),
-      customSlots: slotType === "custom" ? customSlotList : [],
-      clubIds: selectedClubIds,
+      customSlots: isSchool || slotType !== "custom" ? [] : customSlotList,
+      clubIds: isSchool ? [] : selectedClubIds,
+      schoolIds: isSchool ? selectedSchoolIds : [],
     })
   }
 
@@ -460,36 +469,38 @@ function PackageForm({
         />
       </Field>
 
-      {/* Slot type toggle */}
-      <Field label="Booking slot type">
-        <div className="mt-2 flex gap-3">
-          <label className="flex cursor-pointer items-center gap-2 rounded-md border border-border px-4 py-2 has-[:checked]:border-lime has-[:checked]:bg-lime/10">
-            <input
-              type="radio"
-              name="slotType"
-              value="standard"
-              checked={slotType === "standard"}
-              onChange={() => setSlotType("standard")}
-              className="accent-lime"
-            />
-            <span className="text-sm font-medium text-navy">Standard (club availability)</span>
-          </label>
-          <label className="flex cursor-pointer items-center gap-2 rounded-md border border-border px-4 py-2 has-[:checked]:border-lime has-[:checked]:bg-lime/10">
-            <input
-              type="radio"
-              name="slotType"
-              value="custom"
-              checked={slotType === "custom"}
-              onChange={() => setSlotType("custom")}
-              className="accent-lime"
-            />
-            <span className="text-sm font-medium text-navy">Custom (specific days &amp; times)</span>
-          </label>
-        </div>
-      </Field>
+      {/* Slot type toggle — hidden for school packages */}
+      {!isSchool && (
+        <Field label="Booking slot type">
+          <div className="mt-2 flex gap-3">
+            <label className="flex cursor-pointer items-center gap-2 rounded-md border border-border px-4 py-2 has-[:checked]:border-lime has-[:checked]:bg-lime/10">
+              <input
+                type="radio"
+                name="slotType"
+                value="standard"
+                checked={slotType === "standard"}
+                onChange={() => setSlotType("standard")}
+                className="accent-lime"
+              />
+              <span className="text-sm font-medium text-navy">Standard (club availability)</span>
+            </label>
+            <label className="flex cursor-pointer items-center gap-2 rounded-md border border-border px-4 py-2 has-[:checked]:border-lime has-[:checked]:bg-lime/10">
+              <input
+                type="radio"
+                name="slotType"
+                value="custom"
+                checked={slotType === "custom"}
+                onChange={() => setSlotType("custom")}
+                className="accent-lime"
+              />
+              <span className="text-sm font-medium text-navy">Custom (specific days &amp; times)</span>
+            </label>
+          </div>
+        </Field>
+      )}
 
-      {/* Custom slots — tabbed by club, then by age group */}
-      {slotType === "custom" && (
+      {/* Custom slots — tabbed by club, then by age group — hidden for school packages */}
+      {!isSchool && slotType === "custom" && (
         <div className="rounded-lg border border-border bg-muted/30 p-4">
           <p className="mb-1 text-sm font-semibold text-navy">Set available slots per venue per age group</p>
           <p className="mb-4 text-xs text-muted-foreground">
@@ -628,8 +639,58 @@ function PackageForm({
         </div>
       )}
 
-      {/* Club restrictions */}
-      {allClubs.length > 0 && (
+      {/* School package: school selector only */}
+      {isSchool && (
+        <Field label="Available at schools (leave blank for all schools)">
+          <p className="mb-3 mt-1 text-xs text-muted-foreground">
+            Select the schools where this package is available. If nothing is selected, it will appear for every school.
+          </p>
+          {allSchools.length === 0 ? (
+            <p className="rounded-md border border-dashed border-border bg-card px-4 py-3 text-sm text-muted-foreground">
+              No schools configured yet. Add schools in the Schools tab first.
+            </p>
+          ) : (
+            <div className="grid gap-2 sm:grid-cols-2">
+              {allSchools.map((school) => {
+                const checked = selectedSchoolIds.includes(school.id)
+                return (
+                  <label
+                    key={school.id}
+                    className={`flex cursor-pointer items-center gap-3 rounded-md border p-3 transition-colors ${
+                      checked ? "border-lime bg-lime/10" : "border-border bg-card hover:border-lime/50"
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() =>
+                        setSelectedSchoolIds((prev) =>
+                          checked ? prev.filter((id) => id !== school.id) : [...prev, school.id]
+                        )
+                      }
+                      className="h-4 w-4 accent-lime"
+                    />
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-navy">{school.name}</p>
+                      {school.location && (
+                        <p className="truncate text-xs text-muted-foreground">{school.location}</p>
+                      )}
+                    </div>
+                  </label>
+                )
+              })}
+            </div>
+          )}
+          {selectedSchoolIds.length > 0 && (
+            <p className="mt-2 text-xs font-semibold text-amber-700">
+              Restricted to {selectedSchoolIds.length} school{selectedSchoolIds.length !== 1 ? "s" : ""}.
+            </p>
+          )}
+        </Field>
+      )}
+
+      {/* Club restrictions — only shown for non-school packages */}
+      {!isSchool && allClubs.length > 0 && (
         <Field label="Available at (leave blank for all venues)">
           <p className="mb-3 mt-1 text-xs text-muted-foreground">
             Select specific clubs/venues where this package can be booked. If nothing is selected, it will appear at every venue.

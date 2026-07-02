@@ -8,9 +8,11 @@ import { updateProfile } from "@/app/actions/enrollment"
 export function EditProfile({
   name,
   mobile,
+  readOnly = false,
 }: {
   name: string
   mobile: string
+  readOnly?: boolean
 }) {
   const router = useRouter()
   const [editing, setEditing] = useState(false)
@@ -51,13 +53,15 @@ export function EditProfile({
           <p className="text-sm font-bold text-navy">{name}</p>
           {mobile && <p className="text-xs text-muted-foreground">{mobile}</p>}
         </div>
-        <button
-          onClick={open}
-          className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm font-semibold text-navy transition-colors hover:bg-muted"
-        >
-          <Pencil className="h-4 w-4 text-lime" />
-          Edit profile
-        </button>
+        {!readOnly && (
+          <button
+            onClick={open}
+            className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm font-semibold text-navy transition-colors hover:bg-muted"
+          >
+            <Pencil className="h-4 w-4 text-lime" />
+            Edit profile
+          </button>
+        )}
       </div>
     )
   }

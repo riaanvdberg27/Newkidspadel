@@ -1,4 +1,3 @@
-import Image from "next/image"
 import { MapPin, Phone, Clock } from "lucide-react"
 import { getPublishedClubs } from "@/app/actions/clubs"
 import { blobUrl } from "@/lib/blob"
@@ -35,12 +34,11 @@ export async function ClubsSection({ heading = true }: { heading?: boolean }) {
                     {/* Club image */}
                     <div className="relative flex h-48 items-center justify-center overflow-hidden bg-navy/90 sm:h-auto">
                       {imgSrc ? (
-                        <Image
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
                           src={imgSrc}
                           alt={club.name}
-                          fill
-                          sizes="(min-width: 640px) 200px, 100vw"
-                          className="object-cover"
+                          className="h-full w-full object-cover"
                         />
                       ) : (
                         <span className="text-center text-xl font-black text-lime px-4">
