@@ -545,3 +545,31 @@ export async function adminDeleteVoucher(id: number): Promise<void> {
   revalidatePath("/admin")
   revalidatePath("/dashboard")
 }
+
+export async function adminUpdateReferral(
+  id: number,
+  data: { status: string; completedAt?: Date | null },
+): Promise<void> {
+  await db
+    .update(referrals)
+    .set({ ...data, updatedAt: new Date() })
+    .where(eq(referrals.id, id))
+  revalidatePath("/admin")
+  revalidatePath("/dashboard")
+}
+
+export async function adminDeleteReferral(id: number): Promise<{ error?: string }> {
+  // Prevent deletion if a voucher was already issued for this referral
+  const [linked] = await db
+    .select({ id: referrals.id, voucherId: referrals.voucherId })
+    .from(referrals)
+    .where(eq(referrals.id, id))
+    .limit(1)
+  if (linked?.voucherId) {
+    return { error: "Cannot delete a referral that has an associated voucher. Delete the voucher first." }
+  }
+  await db.delete(referrals).where(eq(referrals.id, id))
+  revalidatePath("/admin")
+  revalidatePath("/dashboard")
+  return {}
+}
