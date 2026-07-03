@@ -1,7 +1,7 @@
 import Link from "next/link"
 import { MapPin, Phone, Mail, Globe, User } from "lucide-react"
 import { getPublishedSchools } from "@/app/actions/schools"
-import { blobUrl } from "@/lib/blob"
+import { blobUrl, blobImage } from "@/lib/blob"
 
 export async function SchoolsSection() {
   const schools = await getPublishedSchools()
@@ -26,9 +26,11 @@ export async function SchoolsSection() {
                   {school.logoUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
-                      src={blobUrl(school.logoUrl) ?? school.logoUrl}
+                      src={blobImage(school.logoUrl, 390) ?? blobUrl(school.logoUrl) ?? school.logoUrl}
                       alt={`${school.name} logo`}
                       className="max-h-24 max-w-[180px] object-contain"
+                      loading="lazy"
+                      decoding="async"
                     />
                   ) : (
                     <div className="flex h-20 w-20 items-center justify-center rounded-full bg-navy text-3xl font-black text-lime">

@@ -178,7 +178,7 @@ export function MomentsGallery({ items }: { items: PublicMoment[] }) {
               ) : (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
-                  src={blobImage(current.mediaUrl, 1600) ?? blobUrl(current.mediaUrl) ?? current.mediaUrl}
+                  src={blobImage(current.mediaUrl, 1600, 80) ?? blobUrl(current.mediaUrl) ?? current.mediaUrl}
                   alt={current.title || current.category}
                   className="max-h-[70vh] w-full object-contain"
                 />
