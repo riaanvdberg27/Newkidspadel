@@ -511,3 +511,37 @@ export async function adminCreateCampaign(data: {
   await db.insert(voucherCampaigns).values({ ...data, type: "custom" })
   revalidatePath("/admin")
 }
+
+export async function adminDeleteCampaign(id: number): Promise<{ error?: string }> {
+  // Prevent deletion if vouchers are linked to this campaign
+  const linked = await db
+    .select({ id: vouchers.id })
+    .from(vouchers)
+    .where(eq(vouchers.campaignId, id))
+    .limit(1)
+  if (linked.length > 0) {
+    return { error: "Cannot delete a campaign that has issued vouchers. Disable it instead." }
+  }
+  await db.delete(voucherCampaigns).where(eq(voucherCampaigns.id, id))
+  revalidatePath("/admin")
+  return {}
+}
+
+export async function adminUpdateVoucher(
+  id: number,
+  data: {
+    discountPercent?: number
+    status?: string
+    expiresAt?: Date | null
+  },
+): Promise<void> {
+  await db.update(vouchers).set(data).where(eq(vouchers.id, id))
+  revalidatePath("/admin")
+  revalidatePath("/dashboard")
+}
+
+export async function adminDeleteVoucher(id: number): Promise<void> {
+  await db.delete(vouchers).where(eq(vouchers.id, id))
+  revalidatePath("/admin")
+  revalidatePath("/dashboard")
+}
