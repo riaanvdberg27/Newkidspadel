@@ -155,6 +155,31 @@ export function ReferralPanel({ summary }: Props) {
         <canvas ref={canvasRef} className="hidden" />
       </div>
 
+      {/* Boot Camp Offer block — shown when the parent holds a bootcamp voucher */}
+      {vouchers.some((v) => v.campaignName?.toLowerCase().includes("boot camp") || v.campaignName?.toLowerCase().includes("bootcamp")) && (
+        <div className="rounded-card border border-lime/40 bg-lime/5 p-5 shadow-sm space-y-2">
+          <h3 className="font-bold text-navy">Exclusive Boot Camp Offer</h3>
+          <p className="text-sm text-muted-foreground">
+            As a thank you for joining our Holiday Boot Camp, you&apos;ll receive 40% OFF your first
+            month&apos;s package when you enrol at Next Gen Padel Academy.
+          </p>
+          <ul className="space-y-1 text-sm text-muted-foreground">
+            <li className="flex items-start gap-1.5">
+              <span className="font-bold text-lime">&#10003;</span>
+              Valid for new enrolments from the Holiday Boot Camp only.
+            </li>
+            <li className="flex items-start gap-1.5">
+              <span className="font-bold text-lime">&#10003;</span>
+              Applies to either the Beginner or Advanced Package.
+            </li>
+            <li className="flex items-start gap-1.5">
+              <span className="font-bold text-lime">&#10003;</span>
+              40% discount is valid for the first month&apos;s package fee only and may be redeemed once per learner.
+            </li>
+          </ul>
+        </div>
+      )}
+
       {/* Vouchers */}
       {vouchers.length > 0 && (
         <div className="rounded-card border border-border bg-card shadow-sm">
