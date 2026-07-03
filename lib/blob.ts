@@ -1,42 +1,66 @@
 /**
- * Returns a browser-loadable URL for any stored image value.
+ * Returns a browser-loadable URL for any stored media value (ORIGINAL bytes).
  *
  * Private Vercel Blob URLs (*.private.blob.vercel-storage.com) cannot be
  * fetched directly by browsers — they require an Authorization header.
- * This function always routes through the /api/blob proxy which adds the
- * token server-side, regardless of whether the stored value is a full URL
- * or a bare pathname.
+ * This routes through the /api/blob proxy which adds the token server-side.
+ *
+ * Use this for videos, downloads, and as the source that the Next.js image
+ * optimizer fetches (see blobImage / blobSrcSet below).
  */
 export function blobUrl(pathname: string | null | undefined): string | null {
   if (!pathname) return null
-  // Always proxy — the route handler accepts both full URLs and bare paths.
   return `/api/blob?p=${encodeURIComponent(pathname)}`
 }
 
-// Widths the /api/blob proxy is allowed to resize to (must match the route).
-const IMAGE_WIDTHS = [200, 400, 640, 828, 1080, 1600]
-
-// Cache-bust version — bump this if the proxy logic changes and browsers need
-// to discard stale immutably-cached responses.
-const V = "2"
+/**
+ * Widths the Next.js image optimizer may resize to. Every value MUST exist in
+ * next.config's images.deviceSizes / imageSizes, otherwise /_next/image 400s.
+ */
+const OPT_WIDTHS = [256, 390, 640, 750, 828, 1080, 1200, 1920]
+// Curated subset used for responsive <img srcSet> in grids/galleries.
+const SRCSET_WIDTHS = [256, 390, 640, 828, 1080]
+// Default quality — must be listed in next.config's images.qualities.
+const GRID_QUALITY = 72
 
 /**
- * Returns a proxied URL that resizes the image to `width` (WebP) server-side.
- * Use for a single fixed-size <img> src fallback.
+ * Build a Next.js Image Optimization URL for a proxied blob.
+ *
+ * Rather than resizing images ourselves (which requires `sharp` and fails in
+ * some serverless runtimes), we delegate resizing/format-conversion to Vercel's
+ * built-in optimizer at /_next/image. It fetches the ORIGINAL bytes from our
+ * same-origin /api/blob proxy, then serves a resized AVIF/WebP — turning
+ * multi-MB originals into a few KB, with heavy CDN caching.
  */
-export function blobImage(pathname: string | null | undefined, width = 828): string | null {
-  if (!pathname) return null
-  return `/api/blob?p=${encodeURIComponent(pathname)}&w=${width}&v=${V}`
+function optimized(pathname: string, width: number, quality: number): string {
+  const proxy = `/api/blob?p=${encodeURIComponent(pathname)}`
+  return `/_next/image?url=${encodeURIComponent(proxy)}&w=${width}&q=${quality}`
+}
+
+function snapWidth(width: number): number {
+  return OPT_WIDTHS.find((w) => w >= width) ?? OPT_WIDTHS[OPT_WIDTHS.length - 1]
 }
 
 /**
- * Builds a responsive srcset string of resized WebP variants through the
- * proxy, e.g. "/api/blob?p=..&w=200 200w, /api/blob?p=..&w=400 400w, …".
- * Pair with a `sizes` attribute so the browser downloads the smallest
- * variant that fits the layout — turning multi-MB originals into a few KB.
+ * A single optimized (resized, WebP/AVIF) image URL. Use as the <img> `src`.
  */
-export function blobSrcSet(pathname: string | null | undefined): string | undefined {
+export function blobImage(
+  pathname: string | null | undefined,
+  width = 828,
+  quality: number = GRID_QUALITY,
+): string | null {
+  if (!pathname) return null
+  return optimized(pathname, snapWidth(width), quality)
+}
+
+/**
+ * A responsive srcSet of optimized variants. Pair with a `sizes` attribute so
+ * the browser downloads the smallest variant that fits the layout.
+ */
+export function blobSrcSet(
+  pathname: string | null | undefined,
+  quality: number = GRID_QUALITY,
+): string | undefined {
   if (!pathname) return undefined
-  const enc = encodeURIComponent(pathname)
-  return IMAGE_WIDTHS.map((w) => `/api/blob?p=${enc}&w=${w}&v=${V} ${w}w`).join(", ")
+  return SRCSET_WIDTHS.map((w) => `${optimized(pathname, w, quality)} ${w}w`).join(", ")
 }

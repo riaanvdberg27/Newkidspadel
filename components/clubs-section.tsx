@@ -1,6 +1,6 @@
 import { MapPin, Phone, Clock } from "lucide-react"
 import { getPublishedClubs } from "@/app/actions/clubs"
-import { blobUrl } from "@/lib/blob"
+import { blobUrl, blobImage, blobSrcSet } from "@/lib/blob"
 
 export async function ClubsSection({ heading = true }: { heading?: boolean }) {
   const clubs = await getPublishedClubs()
@@ -24,7 +24,8 @@ export async function ClubsSection({ heading = true }: { heading?: boolean }) {
           <div className="space-y-4">
             {clubs.map((club) => {
               const features = Array.isArray(club.features) ? (club.features as string[]) : []
-              const imgSrc = blobUrl(club.imageUrl) ?? club.image
+              const imgSrc = blobImage(club.imageUrl, 640) ?? blobUrl(club.imageUrl) ?? club.image
+              const imgSrcSet = blobSrcSet(club.imageUrl)
               return (
                 <article
                   key={club.id}
@@ -37,8 +38,12 @@ export async function ClubsSection({ heading = true }: { heading?: boolean }) {
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
                           src={imgSrc}
+                          srcSet={imgSrcSet}
+                          sizes="(min-width: 640px) 200px, 100vw"
                           alt={club.name}
                           className="h-full w-full object-cover"
+                          loading="lazy"
+                          decoding="async"
                         />
                       ) : (
                         <span className="text-center text-xl font-black text-lime px-4">
