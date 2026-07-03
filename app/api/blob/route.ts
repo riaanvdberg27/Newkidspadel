@@ -65,21 +65,42 @@ export async function GET(request: NextRequest) {
     const immutableCache = "public, max-age=31536000, immutable"
 
     // Resize + re-encode images to WebP when a valid width is requested.
+    // If sharp is unavailable or fails for any reason in the runtime (e.g. a
+    // serverless environment where the native binary didn't load), we must NOT
+    // return an error — instead fall back to streaming the original bytes so
+    // the image still renders. A broken photo is far worse than an unoptimized one.
     if (width && isResizable) {
-      const input = Buffer.from(await upstream.arrayBuffer())
-      const output = await sharp(input)
-        .rotate() // respect EXIF orientation
-        .resize({ width, withoutEnlargement: true })
-        .webp({ quality: 72 })
-        .toBuffer()
+      try {
+        const input = Buffer.from(await upstream.arrayBuffer())
+        const output = await sharp(input)
+          .rotate() // respect EXIF orientation
+          .resize({ width, withoutEnlargement: true })
+          .webp({ quality: 72 })
+          .toBuffer()
 
-      return new NextResponse(new Uint8Array(output), {
-        headers: {
-          "Content-Type": "image/webp",
-          "Content-Length": String(output.length),
-          "Cache-Control": immutableCache,
-        },
-      })
+        return new NextResponse(new Uint8Array(output), {
+          headers: {
+            "Content-Type": "image/webp",
+            "Content-Length": String(output.length),
+            "Cache-Control": immutableCache,
+          },
+        })
+      } catch (resizeError) {
+        console.error("[blob proxy] resize failed, serving original:", resizeError)
+        // Re-fetch the original bytes (the previous response body was consumed).
+        const original = await fetch(blobUrl, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        if (original.ok) {
+          return new NextResponse(original.body, {
+            headers: {
+              "Content-Type": original.headers.get("content-type") ?? contentType,
+              "Cache-Control": immutableCache,
+            },
+          })
+        }
+        // Fall through to the streaming path below as a last resort.
+      }
     }
 
     // Otherwise stream the original bytes through.

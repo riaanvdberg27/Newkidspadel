@@ -1,4 +1,7 @@
 const nextConfig = {
+  // Ensure sharp's native binary is treated as an external package and bundled
+  // correctly into the serverless function on production (not traced/inlined).
+  serverExternalPackages: ["sharp"],
   images: {
     // Serve AVIF first (best compression), fall back to WebP — browser picks best supported format.
     formats: ["image/avif", "image/webp"],

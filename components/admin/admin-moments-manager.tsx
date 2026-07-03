@@ -4,7 +4,7 @@ import { useState, useTransition, useRef } from "react"
 import { upload } from "@vercel/blob/client"
 import { Plus, Trash2, Save, Check, Upload, Play, Image as ImageIcon, X } from "lucide-react"
 import { createMoments, updateMoment, deleteMoment, type PublicMoment, type MomentInput } from "@/app/actions/moments"
-import { blobUrl, blobImage } from "@/lib/blob"
+import { blobUrl, blobImage, blobSrcSet } from "@/lib/blob"
 
 const CATEGORIES = [
   { value: "general", label: "General" },
@@ -454,32 +454,57 @@ export function AdminMomentsManager({ initialMoments }: { initialMoments: Public
           <p className="text-sm text-muted-foreground">No moments yet. Click &ldquo;Add Moment&rdquo; to get started.</p>
         </div>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        // Masonry layout matching the public /moments gallery — same columns,
+        // break-inside-avoid, and natural-aspect images. Admin controls
+        // (badges + Edit/Delete) are overlaid on hover instead of a text footer.
+        <div className="columns-1 gap-4 sm:columns-2 lg:columns-3 xl:columns-4 space-y-4">
           {filtered.map((m) => {
-            const thumb = m.thumbnailUrl ? (blobImage(m.thumbnailUrl, 640) ?? m.thumbnailUrl) : null
-            const media = blobImage(m.mediaUrl, 640) ?? m.mediaUrl
+            const gridSizes = "(min-width: 1280px) 23vw, (min-width: 1024px) 31vw, (min-width: 640px) 47vw, 92vw"
+            const thumb = m.thumbnailUrl ? (blobImage(m.thumbnailUrl, 828) ?? m.thumbnailUrl) : null
             return (
-              <div key={m.id} className="group relative overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-                {/* Thumbnail */}
-                <div className="relative h-44 bg-muted overflow-hidden">
+              <div
+                key={m.id}
+                className="group relative break-inside-avoid overflow-hidden rounded-xl border border-border bg-card shadow-sm"
+              >
+                {/* Media — natural aspect ratio, just like the public gallery */}
+                <div className="relative bg-muted">
                   {m.mediaType === "video" ? (
                     thumb ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={thumb} alt={m.title} className="h-full w-full object-cover" />
+                      <img
+                        src={thumb}
+                        srcSet={blobSrcSet(m.thumbnailUrl)}
+                        sizes={gridSizes}
+                        alt={m.title}
+                        className="w-full object-cover"
+                        loading="lazy"
+                        decoding="async"
+                      />
                     ) : (
-                      <video src={blobUrl(m.mediaUrl) ?? m.mediaUrl} className="h-full w-full object-cover" preload="metadata" muted playsInline />
+                      <video src={blobUrl(m.mediaUrl) ?? m.mediaUrl} className="w-full object-cover" preload="metadata" muted playsInline />
                     )
                   ) : (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={media} alt={m.title} className="h-full w-full object-cover" />
+                    <img
+                      src={blobImage(m.mediaUrl, 828) ?? blobUrl(m.mediaUrl) ?? m.mediaUrl}
+                      srcSet={blobSrcSet(m.mediaUrl)}
+                      sizes={gridSizes}
+                      alt={m.title}
+                      className="w-full object-cover"
+                      loading="lazy"
+                      decoding="async"
+                    />
                   )}
+
+                  {/* Video play icon */}
                   {m.mediaType === "video" && (
                     <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                      <div className="rounded-full bg-navy/70 p-3">
-                        <Play className="h-5 w-5 fill-white text-white" />
+                      <div className="rounded-full bg-navy/75 p-4 shadow-lg">
+                        <Play className="h-6 w-6 fill-white text-white" />
                       </div>
                     </div>
                   )}
+
                   {/* Published badge */}
                   <span className={`absolute left-2 top-2 rounded-full px-2 py-0.5 text-[10px] font-bold ${m.published ? "bg-lime text-lime-foreground" : "bg-muted-foreground text-white"}`}>
                     {m.published ? "Published" : "Hidden"}
@@ -488,30 +513,23 @@ export function AdminMomentsManager({ initialMoments }: { initialMoments: Public
                   <span className="absolute right-2 top-2 rounded-full bg-navy/80 px-2 py-0.5 text-[10px] font-bold text-white capitalize">
                     {m.category}
                   </span>
-                </div>
 
-                {/* Info */}
-                <div className="p-3">
-                  <p className="truncate text-sm font-bold text-navy">{m.title}</p>
-                  {m.caption && (
-                    <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{m.caption}</p>
-                  )}
-                </div>
-
-                {/* Actions */}
-                <div className="flex items-center justify-end gap-2 border-t border-border px-3 py-2">
-                  <button
-                    onClick={() => setEditing(m)}
-                    className="rounded-md border border-border px-3 py-1 text-xs font-semibold text-navy hover:bg-muted"
-                  >
-                    Edit
-                  </button>
-                  <button
-                    onClick={() => setDeleteId(m.id)}
-                    className="rounded-md border border-red-200 px-3 py-1 text-xs font-semibold text-red-600 hover:bg-red-50"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
+                  {/* Hover overlay with Edit / Delete controls */}
+                  <div className="absolute inset-x-0 bottom-0 flex items-center justify-end gap-2 bg-gradient-to-t from-black/70 to-transparent p-3 opacity-0 transition-opacity group-hover:opacity-100">
+                    <button
+                      onClick={() => setEditing(m)}
+                      className="rounded-md bg-white/90 px-3 py-1 text-xs font-semibold text-navy hover:bg-white"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => setDeleteId(m.id)}
+                      className="rounded-md bg-red-600/90 px-2.5 py-1 text-xs font-semibold text-white hover:bg-red-600"
+                      aria-label="Delete moment"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                 </div>
               </div>
             )
