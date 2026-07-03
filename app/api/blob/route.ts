@@ -46,13 +46,46 @@ export async function GET(request: NextRequest) {
 
     const contentType = upstream.headers.get("content-type") ?? "application/octet-stream"
     const isVideo = contentType.startsWith("video/")
+    const isImage = contentType.startsWith("image/")
 
-    // Long, immutable cache — blob pathnames are unique per upload.
+    const cacheControl = isVideo
+      ? "public, max-age=86400, stale-while-revalidate=604800"
+      : "public, max-age=31536000, immutable"
+
+    // Optional resize (used by the local/sandbox path, which has no Vercel image
+    // optimizer). `sharp` is imported LAZILY and wrapped in try/catch: on
+    // production it fetches originals without `w`, so this never runs there —
+    // and even if sharp failed to load, we fall through to the original bytes.
+    const widthParam = request.nextUrl.searchParams.get("w")
+    const width = widthParam ? Number.parseInt(widthParam, 10) : 0
+    if (isImage && !isVideo && width > 0 && contentType !== "image/svg+xml") {
+      try {
+        const q = Number.parseInt(request.nextUrl.searchParams.get("q") ?? "72", 10)
+        const { default: sharp } = await import("sharp")
+        const input = Buffer.from(await upstream.arrayBuffer())
+        const output = await sharp(input)
+          .rotate()
+          .resize({ width, withoutEnlargement: true })
+          .webp({ quality: Number.isFinite(q) ? q : 72 })
+          .toBuffer()
+        return new NextResponse(new Uint8Array(output), {
+          headers: { "Content-Type": "image/webp", "Cache-Control": cacheControl },
+        })
+      } catch (resizeError) {
+        // Fall back to streaming the original below.
+        console.error("[blob proxy] resize failed, serving original:", resizeError)
+        const original = await fetch(blobUrl, { headers: { Authorization: `Bearer ${token}` } })
+        return new NextResponse(original.body, {
+          headers: { "Content-Type": contentType, "Cache-Control": cacheControl },
+        })
+      }
+    }
+
+    // Default: stream the original bytes. Long, immutable cache — blob pathnames
+    // are unique per upload.
     const headers: Record<string, string> = {
       "Content-Type": contentType,
-      "Cache-Control": isVideo
-        ? "public, max-age=86400, stale-while-revalidate=604800"
-        : "public, max-age=31536000, immutable",
+      "Cache-Control": cacheControl,
     }
     const contentLength = upstream.headers.get("content-length")
     const etag = upstream.headers.get("etag")
