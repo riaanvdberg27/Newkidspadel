@@ -1,8 +1,13 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { list } from "@vercel/blob"
-import sharp from "sharp"
 
 export const runtime = "nodejs"
+
+// NOTE: `sharp` is imported lazily inside the request handler (not at module
+// scope). Its native binary can fail to load in some serverless runtimes, and
+// a top-level import would crash the ENTIRE route module on load — making every
+// request (even ones that don't resize) return a 500. A lazy import contains
+// any failure to the resize path, where we gracefully fall back to the original.
 
 /**
  * Proxy + optimizer for private Vercel Blob media.
@@ -71,6 +76,7 @@ export async function GET(request: NextRequest) {
     // the image still renders. A broken photo is far worse than an unoptimized one.
     if (width && isResizable) {
       try {
+        const { default: sharp } = await import("sharp")
         const input = Buffer.from(await upstream.arrayBuffer())
         const output = await sharp(input)
           .rotate() // respect EXIF orientation

@@ -475,7 +475,7 @@ export function AdminMomentsManager({ initialMoments }: { initialMoments: Public
                         src={thumb}
                         srcSet={blobSrcSet(m.thumbnailUrl)}
                         sizes={gridSizes}
-                        alt={m.title}
+                        alt={m.category}
                         className="w-full object-cover"
                         loading="lazy"
                         decoding="async"
@@ -489,7 +489,7 @@ export function AdminMomentsManager({ initialMoments }: { initialMoments: Public
                       src={blobImage(m.mediaUrl, 828) ?? blobUrl(m.mediaUrl) ?? m.mediaUrl}
                       srcSet={blobSrcSet(m.mediaUrl)}
                       sizes={gridSizes}
-                      alt={m.title}
+                      alt={m.category}
                       className="w-full object-cover"
                       loading="lazy"
                       decoding="async"
