@@ -61,10 +61,24 @@ export function ReferralPanel({ summary }: Props) {
   return (
     <section className="space-y-6">
       <div>
-        <h2 className="text-lg font-bold text-navy">Refer a Friend</h2>
+        <h2 className="text-lg font-bold text-navy">Refer a Friend &amp; Save!</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Earn a 20% discount voucher for every family you refer who joins and completes their first payment.
+          Successfully refer a new learner to Next Gen Padel Academy and receive 20% OFF your next month&apos;s package.
         </p>
+        <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
+          <li className="flex items-start gap-1.5">
+            <span className="text-lime font-bold">✓</span>
+            Valid for successful referrals only (the referred learner must enrol).
+          </li>
+          <li className="flex items-start gap-1.5">
+            <span className="text-lime font-bold">✓</span>
+            Applies to either the Beginner or Advanced Package.
+          </li>
+          <li className="flex items-start gap-1.5">
+            <span className="text-lime font-bold">✓</span>
+            20% discount is valid for one month&apos;s package fee only and may be redeemed once per successful referral.
+          </li>
+        </ul>
       </div>
 
       {/* Stats row */}
