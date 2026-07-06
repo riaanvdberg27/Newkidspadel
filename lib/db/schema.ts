@@ -145,6 +145,22 @@ export const clubSlots = pgTable(
   }),
 )
 
+/** One line in the enrollment cart (one child → one package at one club). */
+export type CartItem = {
+  childName: string
+  childDob: string
+  childAge: number
+  packageName: string
+  packageSlug: string
+  packagePrice: number
+  clubId: number
+  clubName: string
+  slotWeekday: number
+  slotHour: number
+  slotAgeGroup: string
+  discountPercent: number
+}
+
 export const enrollments = pgTable("enrollments", {
   id: serial("id").primaryKey(),
   userId: text("userId").notNull(),
@@ -211,6 +227,10 @@ export const enrollments = pgTable("enrollments", {
   // FK to vouchers(id) ON DELETE SET NULL — expressed in DB but not in Drizzle
   // schema to avoid a circular reference (vouchers is declared after enrollments).
   pendingVoucherId: integer("pending_voucher_id"),
+  // Multi-child cart checkout — shared reference across sibling enrollments
+  // and a snapshot of every child+package in the cart.
+  orderReference: text("orderReference"),
+  orderItems: jsonb("orderItems").$type<CartItem[]>(),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
   updatedAt: timestamp("updatedAt").notNull().defaultNow(),
 })
