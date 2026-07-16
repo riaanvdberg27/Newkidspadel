@@ -951,7 +951,7 @@ function EditModal({
             </select>
           </Field>
 
-          {/* Payment status — only for once-off (PayFast) packages */}
+          {/* Payment status — only for once-off packages */}
           {isOnceOff && (
             <Field label="Payment status">
               <div className="mt-1 flex gap-2">
