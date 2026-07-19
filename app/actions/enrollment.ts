@@ -23,8 +23,10 @@ async function getUserId() {
 
 function generateReference() {
   const year = new Date().getFullYear()
-  const rand = Math.random().toString(36).slice(2, 7).toUpperCase()
-  return `NGP-${year}-${rand}`
+  // Use two independent random segments for much lower collision probability
+  const rand1 = Math.random().toString(36).slice(2, 7).toUpperCase()
+  const rand2 = Math.random().toString(36).slice(2, 7).toUpperCase()
+  return `NGP-${year}-${rand1}${rand2}`
 }
 
 export type EnrollmentInput = {
@@ -304,24 +306,46 @@ export async function buildNetcashPaymentForEnrollment(input: {
   packagePrice: number
   paymentType: "once-off" | "monthly"
 }) {
-  // Create an order record so we can track payment state
+  // Resolve the userId from the enrollment
+  const enrollmentRows = await db
+    .select({ userId: enrollments.userId })
+    .from(enrollments)
+    .where(eq(enrollments.id, input.enrollmentId))
+    .limit(1)
+  const userId = enrollmentRows[0]?.userId ?? ""
+
+  // Create an order record first so we can use its auto-increment ID as part
+  // of the Netcash p3 reference — this guarantees every payment attempt sends
+  // a unique reference to Netcash and avoids the "transaction cannot be processed"
+  // duplicate-reference error.
   const [orderRow] = await db
     .insert(orders)
     .values({
       enrollmentId: input.enrollmentId,
-      userId: (await (async () => {
-        const rows = await db.select({ userId: enrollments.userId }).from(enrollments).where(eq(enrollments.id, input.enrollmentId)).limit(1)
-        return rows[0]?.userId ?? ""
-      })()),
+      userId,
       packageType: input.paymentType,
       amount: Math.round(input.packagePrice * 100), // store cents
       status: "awaiting_payment",
+      // Temporarily use the enrollment reference; updated below once we have the order ID
       netcashOrderId: input.referenceNumber,
     })
     .returning({ id: orders.id })
 
+  const orderId = orderRow?.id ?? 0
+
+  // Build a payment-attempt-unique reference by appending the order ID.
+  // Format: NGP-2026-RAND10-ORDER123
+  // This is what we send as p3 to Netcash and store on the order row.
+  const paymentReference = `${input.referenceNumber}-O${orderId}`
+
+  // Update the order row with the final unique payment reference
+  await db
+    .update(orders)
+    .set({ netcashOrderId: paymentReference })
+    .where(eq(orders.id, orderId))
+
   const { netcashUrl, formFields } = await buildNetcashPayment({
-    referenceNumber: input.referenceNumber,
+    referenceNumber: paymentReference,
     enrollmentId: input.enrollmentId,
     parentName: input.parentName,
     parentEmail: input.parentEmail,
@@ -330,5 +354,5 @@ export async function buildNetcashPaymentForEnrollment(input: {
     paymentType: input.paymentType,
   })
 
-  return { netcashUrl, formFields, orderId: orderRow?.id }
+  return { netcashUrl, formFields, orderId }
 }
