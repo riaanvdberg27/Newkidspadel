@@ -15,6 +15,14 @@
 
 export const NETCASH_PAY_NOW_URL = "https://paynow.netcash.co.za/site/paynow.aspx"
 
+/**
+ * Default Netcash Software Vendor Key (SVK).
+ * Netcash requires the `m2` field on every Pay Now request. Registered ISVs
+ * have their own key; everyone else uses this documented default value.
+ * Can be overridden with the NETCASH_SOFTWARE_VENDOR_KEY env var.
+ */
+export const NETCASH_DEFAULT_SOFTWARE_VENDOR_KEY = "24ade73c-98cf-47b3-99be-cc7b867b3080"
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -22,37 +30,34 @@ export const NETCASH_PAY_NOW_URL = "https://paynow.netcash.co.za/site/paynow.asp
 export type NetcashPaymentType = "once-off" | "monthly"
 
 export interface NetcashPayNowInput {
-  /** Netcash Pay Now service key (p1) */
+  /** Netcash Pay Now service key → sent as m1 */
   serviceKey: string
-  /** Unique order / reference in your system (p3) */
+  /** Netcash Software Vendor Key → sent as m2 */
+  softwareVendorKey: string
+  /** Unique, single-use transaction reference → sent as p2 */
   orderReference: string
-  /** Amount in Rands, e.g. "300.00" (p4) */
+  /** Amount in Rands, e.g. "300.00" → sent as p4 */
   amount: string
-  /** Short item name shown on the Netcash page (p5) */
-  itemName: string
-  /** Optional extra description (p6) */
-  itemDescription?: string
-  /** URL the customer is sent to after payment — all outcomes use this (p7) */
-  returnUrl: string
-  /** URL the customer is sent to if they cancel (p8) */
-  cancelUrl: string
-  /** URL Netcash POSTs the ITN to — must be your notify endpoint (m1) */
-  notifyUrl: string
-  /** Customer email (m4) */
+  /** Description of the goods/service shown on the Netcash page → sent as p3 */
+  itemDescription: string
+  /** Customer email → sent as m9 */
   customerEmail: string
-  /** Customer first name (m5) */
-  customerFirstName?: string
-  /** Customer last name (m6) */
-  customerLastName?: string
+  /** Customer mobile number → sent as m11 */
+  customerMobile?: string
   /** 'once-off' or 'monthly' subscription */
   paymentType: NetcashPaymentType
+  /** For monthly: number of billing cycles → sent as m17 */
+  subscriptionCycles?: number
   /**
    * Extra echo-back fields — Netcash returns these in Extra1/Extra2/Extra3
-   * in the ITN POST so you can look up your own records without a DB query.
+   * in the ITN POST so you can look up your own records.
+   *   extra1 → m4 → Extra1
+   *   extra2 → m5 → Extra2
+   *   extra3 → m6 → Extra3
    */
-  extra1?: string // returned as Extra1
-  extra2?: string // returned as Extra2
-  extra3?: string // returned as Extra3
+  extra1?: string
+  extra2?: string
+  extra3?: string
 }
 
 export interface NetcashFormFields {
@@ -66,48 +71,59 @@ export interface NetcashFormFields {
 /**
  * Build the hidden form fields for a Netcash Pay Now redirect.
  *
- * Field map per official Netcash documentation:
- *   p1  = Service Key
- *   p2  = (unused / legacy merchant key — omit for Pay Now)
- *   p3  = Order Reference  ← used as "Reference" in ITN echo-back
- *   p4  = Amount (Rands, 2 decimals)
- *   p5  = Item Name (≤ 100 chars)
- *   p6  = Item Description (≤ 200 chars)
- *   p7  = Return URL (after payment)
- *   p8  = Cancel URL
- *   m1  = Notify URL (server-side ITN endpoint)
- *   m4  = Customer Email   → returned as Extra1 in ITN
- *   m5  = Customer First Name → returned as Extra2
- *   m6  = Customer Last Name  → returned as Extra3
- *   m9  = 1 = enable subscription / recurring token
- *   m10 = Subscription frequency (2 = monthly)
+ * Field map per the OFFICIAL Netcash Pay Now specification
+ * (https://api.netcash.co.za/inbound-payments/pay-now/):
+ *
+ *   MANDATORY on every request:
+ *     m1     = Service Key                       (authentication)
+ *     m2     = Software Vendor Key               (default SVK for non-ISVs)
+ *     p2     = Unique, single-use reference      ← returned as "Reference" in ITN
+ *     p3     = Description of goods/service
+ *     p4     = Amount (Rands, 2 decimals)
+ *     Budget = "Y" or "N"                        (budget/instalment indicator)
+ *
+ *   OPTIONAL:
+ *     m4     = Extra1  → echoed back as Extra1 in the ITN
+ *     m5     = Extra2  → echoed back as Extra2
+ *     m6     = Extra3  → echoed back as Extra3
+ *     m9     = Customer email
+ *     m11    = Customer mobile number
+ *
+ *   RECURRING / TOKENISATION (monthly subscriptions):
+ *     m14    = "True"  (tokenise card)
+ *     m15    = "Y"     (return the card token in the ITN postback)
+ *     m17    = Number of subscription cycles
+ *     m18    = Frequency (1 = Monthly)
+ *
+ * NOTE: The Accept / Decline / Notify / Redirect URLs are NOT posted here —
+ * Netcash reads them from your NetConnector portal profile. The merchant must
+ * configure the Notify URL to `<domain>/api/netcash/notify` in the portal.
  */
 export function buildNetcashPayNowFields(input: NetcashPayNowInput): NetcashFormFields {
   const fields: NetcashFormFields = {
-    p1: input.serviceKey,
-    p3: input.orderReference,
+    // --- Mandatory ---
+    m1: input.serviceKey,
+    m2: input.softwareVendorKey,
+    p2: input.orderReference,
+    p3: input.itemDescription.slice(0, 200),
     p4: input.amount,
-    p5: input.itemName.slice(0, 100),
-    p6: (input.itemDescription ?? "").slice(0, 200),
-    p7: input.returnUrl,
-    p8: input.cancelUrl,
-    m1: input.notifyUrl,
-    m4: input.customerEmail,
+    Budget: "N",
   }
 
-  if (input.customerFirstName) fields.m5 = input.customerFirstName
-  if (input.customerLastName) fields.m6 = input.customerLastName
+  // --- Optional customer + echo-back fields ---
+  if (input.customerEmail) fields.m9 = input.customerEmail
+  if (input.customerMobile) fields.m11 = input.customerMobile
+  if (input.extra1) fields.m4 = input.extra1
+  if (input.extra2) fields.m5 = input.extra2
+  if (input.extra3) fields.m6 = input.extra3
 
-  // Recurring subscription — instruct Netcash to tokenise and create a subscription
+  // --- Recurring subscription: tokenise + create a Netcash-managed schedule ---
   if (input.paymentType === "monthly") {
-    fields.m9 = "1"   // Enable subscription/recurring
-    fields.m10 = "2"  // Frequency: 2 = monthly
+    fields.m14 = "True"                                  // Tokenise card
+    fields.m15 = "Y"                                     // Return token in ITN
+    fields.m17 = String(input.subscriptionCycles ?? 12) // Billing cycles
+    fields.m18 = "1"                                     // 1 = Monthly
   }
-
-  // Echo-back fields — returned as Extra1/Extra2/Extra3 in the ITN POST
-  if (input.extra1) fields.m2 = input.extra1
-  if (input.extra2) fields.m3 = input.extra2
-  if (input.extra3) fields.m7 = input.extra3
 
   return fields
 }
@@ -255,6 +271,7 @@ export interface BuildNetcashPaymentInput {
   enrollmentId: number
   parentName: string
   parentEmail: string
+  parentMobile?: string
   packageName: string
   packagePrice: number   // in Rands
   paymentType: NetcashPaymentType
@@ -264,38 +281,23 @@ export async function buildNetcashPayment(input: BuildNetcashPaymentInput): Prom
   netcashUrl: string
   formFields: NetcashFormFields
 }> {
-  const baseUrl =
-    process.env.NEXT_PUBLIC_BASE_URL ??
-    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null) ??
-    (process.env.VERCEL_PROJECT_PRODUCTION_URL
-      ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
-      : null) ??
-    "https://localhost:3000"
-
   const serviceKey = process.env.NETCASH_SERVICE_KEY ?? ""
-
-  const nameParts = input.parentName.trim().split(" ")
-  const firstName = nameParts[0] ?? input.parentName
-  const lastName  = nameParts.slice(1).join(" ") || undefined
+  const softwareVendorKey =
+    process.env.NETCASH_SOFTWARE_VENDOR_KEY ?? NETCASH_DEFAULT_SOFTWARE_VENDOR_KEY
 
   const formFields = buildNetcashPayNowFields({
     serviceKey,
+    softwareVendorKey,
     orderReference: input.referenceNumber,
     amount: input.packagePrice.toFixed(2),
-    itemName: `Next Gen Padel — ${input.packageName}`,
     itemDescription:
       input.paymentType === "once-off"
-        ? `Once-off enrollment fee for ${input.packageName}`
-        : `Monthly subscription for ${input.packageName}`,
-    notifyUrl:  `${baseUrl}/api/netcash/notify`,
-    returnUrl:  `${baseUrl}/enrollment/success?ref=${encodeURIComponent(input.referenceNumber)}&name=${encodeURIComponent(input.parentName)}`,
-    cancelUrl:  `${baseUrl}/enrollment?cancelled=1`,
+        ? `Next Gen Padel — Once-off enrollment: ${input.packageName}`
+        : `Next Gen Padel — Monthly subscription: ${input.packageName}`,
     customerEmail: input.parentEmail,
-    customerFirstName: firstName,
-    customerLastName:  lastName,
+    customerMobile: input.parentMobile,
     paymentType: input.paymentType,
-    // Echo enrollment ID back in Extra1 so webhook can find the record
-    // without a full-table scan on the referenceNumber index.
+    // Echo enrollment ID back in Extra1 so the webhook can find the record.
     extra1: String(input.enrollmentId),
   })
 
