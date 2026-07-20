@@ -21,8 +21,10 @@ import { AdminMomentsManager } from "@/components/admin/admin-moments-manager"
 import type { PublicMoment } from "@/app/actions/moments"
 import { AdminSiteImagesManager } from "@/components/admin/admin-site-images-manager"
 import type { SiteImageRow } from "@/app/actions/site-images"
+import { AdminEnrollmentReports } from "@/components/admin/admin-enrollment-reports"
+import type { EnrollmentReportSummary } from "@/app/actions/enrollment-reports"
 
-type Tab = "clubs" | "schools" | "packages" | "signups" | "contact" | "coaches" | "referrals" | "payments" | "impersonate" | "moments" | "site-images"
+type Tab = "clubs" | "schools" | "packages" | "signups" | "contact" | "coaches" | "referrals" | "payments" | "impersonate" | "moments" | "site-images" | "reports"
 
 export function AdminTabs({
   clubs,
@@ -40,6 +42,7 @@ export function AdminTabs({
   webhookLogs,
   moments,
   siteImages,
+  enrollmentReport,
 }: {
   clubs: Club[]
   schools: School[]
@@ -56,6 +59,7 @@ export function AdminTabs({
   webhookLogs: WebhookLog[]
   moments: PublicMoment[]
   siteImages: SiteImageRow[]
+  enrollmentReport: EnrollmentReportSummary
 }) {
   const [tab, setTab] = useState<Tab>("clubs")
 
@@ -64,6 +68,7 @@ export function AdminTabs({
     { id: "schools", label: "Schools" },
     { id: "packages", label: "Packages" },
     { id: "signups", label: "Sign-ups" },
+    { id: "reports", label: "Reports" },
     { id: "coaches", label: "Coaches" },
     { id: "payments", label: "Payments" },
     { id: "referrals", label: "Referrals & Vouchers" },
@@ -96,6 +101,7 @@ export function AdminTabs({
         {tab === "schools" && <AdminSchoolsManager initialSchools={schools} />}
         {tab === "packages" && <AdminPackageManager initialPackages={packages} allClubs={clubs} allSchools={schools} />}
         {tab === "signups" && <AdminSignupsManager initialSignups={signups} allCoaches={coaches} allPackages={packages} allClubs={clubs} />}
+        {tab === "reports" && <AdminEnrollmentReports initialSummary={enrollmentReport} />}
         {tab === "coaches" && <AdminCoachesManager initialCoaches={coaches} allClubs={clubs} />}
         {tab === "payments" && (
           <AdminPaymentsManager
