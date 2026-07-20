@@ -137,13 +137,22 @@ export function OnboardingWizard({ clubs, packages, schools }: { clubs: Club[]; 
     setError(null)
     setSubmitting(true)
     try {
+      // Sanitise and validate the email before touching Better Auth — Better Auth
+      // returns the opaque '[body.email] Invalid input' error for any malformed address.
+      const cleanEmail = parent.email.trim().toLowerCase()
+      if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+        setError("Please enter a valid email address (e.g. you@example.com) in the Parent Account step.")
+        setSubmitting(false)
+        return
+      }
+
       // 1. Create the parent account (Better Auth, auto sign-in).
       //    If the account already exists (e.g. a previous attempt created the
       //    account but the enrollment failed before saving), sign them in with
       //    the provided password and continue — their enrollment will be saved
       //    as a new record either way.
       const { error: signUpError } = await authClient.signUp.email({
-        email: parent.email,
+        email: cleanEmail,
         password: parent.password,
         name: `${parent.firstName} ${parent.lastName}`.trim(),
       })
@@ -155,7 +164,7 @@ export function OnboardingWizard({ clubs, packages, schools }: { clubs: Club[]; 
           // Account exists — try signing in with the given password so we can
           // proceed to create the enrollment record.
           const { error: signInError } = await authClient.signIn.email({
-            email: parent.email,
+            email: cleanEmail,
             password: parent.password,
           })
           if (signInError) {
@@ -179,7 +188,7 @@ export function OnboardingWizard({ clubs, packages, schools }: { clubs: Club[]; 
         const childFullName = `${child.firstName} ${child.lastName}`.trim()
         const { referenceNumber, enrollmentId } = await createEnrollment({
           parentName: `${parent.firstName} ${parent.lastName}`.trim(),
-          parentEmail: parent.email,
+          parentEmail: cleanEmail,
           parentMobile: parent.mobile,
           childName: childFullName,
           childDob: child.dob,
