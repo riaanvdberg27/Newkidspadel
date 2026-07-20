@@ -76,6 +76,7 @@ export function AdminTabs({
     { id: "signups", label: "Sign-ups" },
     { id: "reports", label: "Reports" },
     { id: "coaches", label: "Coaches" },
+    { id: "coach-portal", label: "Coach Portal" },
     { id: "payments", label: "Payments" },
     { id: "referrals", label: "Referrals & Vouchers" },
     { id: "contact", label: "Contact Details" },
@@ -109,6 +110,7 @@ export function AdminTabs({
         {tab === "signups" && <AdminSignupsManager initialSignups={signups} allCoaches={coaches} allPackages={packages} allClubs={clubs} />}
         {tab === "reports" && <AdminEnrollmentReports initialSummary={enrollmentReport} />}
         {tab === "coaches" && <AdminCoachesManager initialCoaches={coaches} allClubs={clubs} />}
+        {tab === "coach-portal" && <AdminCoachAccountsManager coaches={coachAccounts} allSchools={accountSchools} />}
         {tab === "payments" && (
           <AdminPaymentsManager
             initialPayments={allPayments}
