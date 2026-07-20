@@ -6,6 +6,7 @@ import { asc, eq } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { requireAdmin } from "@/lib/admin-auth"
 import type { School } from "@/lib/db/schema"
+import { put } from "@vercel/blob"
 
 export type SchoolInput = {
   name: string
@@ -18,6 +19,34 @@ export type SchoolInput = {
   logoUrl?: string | null
   contactPerson: string
   published: boolean
+}
+
+/** Upload a school logo to Vercel Blob (admin only). Accepts FormData so the
+ *  file bytes travel via the server action — no separate HTTP route needed,
+ *  so cookies/auth work correctly in all environments. */
+export async function uploadSchoolLogo(
+  formData: FormData,
+): Promise<{ url: string } | { error: string }> {
+  await requireAdmin()
+
+  const file = formData.get("file") as File | null
+  if (!file || file.size === 0) return { error: "No file provided" }
+
+  const allowed = ["image/jpeg", "image/png", "image/webp", "image/gif", "image/svg+xml"]
+  if (!allowed.includes(file.type)) return { error: "Only JPEG, PNG, WebP, GIF and SVG are supported" }
+  if (file.size > 4 * 1024 * 1024) return { error: "Image must be under 4 MB" }
+
+  try {
+    const ext = file.name.split(".").pop() ?? "png"
+    const suffix = Math.random().toString(36).slice(2, 7)
+    const filename = `schools/${Date.now()}-${suffix}.${ext}`
+    const blob = await put(filename, file, { access: "public", contentType: file.type })
+    return { url: blob.url }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    console.error("[v0] uploadSchoolLogo failed:", message)
+    return { error: `Upload failed: ${message}` }
+  }
 }
 
 /** All published schools for the public site. */

@@ -4,7 +4,7 @@ import { useState, useTransition, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { Plus, Pencil, Trash2, X, Upload, Globe, Phone, Mail, MapPin, User, ExternalLink } from "lucide-react"
 import type { School } from "@/lib/db/schema"
-import { createSchool, updateSchool, deleteSchool, type SchoolInput } from "@/app/actions/schools"
+import { createSchool, updateSchool, deleteSchool, uploadSchoolLogo, type SchoolInput } from "@/app/actions/schools"
 
 
 const EMPTY: SchoolInput = {
@@ -63,14 +63,10 @@ function SchoolForm({
     try {
       const fd = new FormData()
       fd.append("file", file)
-      const res = await fetch("/api/admin/upload-school-logo", { method: "POST", body: fd })
-      const text = await res.text()
-      let json: Record<string, string> = {}
-      try { json = text ? JSON.parse(text) : {} } catch { /* empty body */ }
-      if (!res.ok) throw new Error(json.error ?? `Server error ${res.status}`)
-      if (!json.url) throw new Error("Upload succeeded but no URL was returned")
-      // Store the full public CDN URL directly — no proxy needed for public blobs
-      setLogoUrl(json.url)
+      // Use the server action directly — avoids cookie/auth issues with fetch in iframe envs
+      const result = await uploadSchoolLogo(fd)
+      if ("error" in result) throw new Error(result.error)
+      setLogoUrl(result.url)
     } catch (err) {
       setUploadError(err instanceof Error ? err.message : "Upload failed")
     } finally {
