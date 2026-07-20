@@ -23,8 +23,10 @@ import { AdminSiteImagesManager } from "@/components/admin/admin-site-images-man
 import type { SiteImageRow } from "@/app/actions/site-images"
 import { AdminEnrollmentReports } from "@/components/admin/admin-enrollment-reports"
 import type { EnrollmentReportSummary } from "@/app/actions/enrollment-reports"
+import { AdminCoachAccountsManager } from "@/components/admin/admin-coach-accounts-manager"
+import type { CoachAccountRow } from "@/app/actions/admin-coach-accounts"
 
-type Tab = "clubs" | "schools" | "packages" | "signups" | "contact" | "coaches" | "referrals" | "payments" | "impersonate" | "moments" | "site-images" | "reports"
+type Tab = "clubs" | "schools" | "packages" | "signups" | "contact" | "coaches" | "coach-portal" | "referrals" | "payments" | "impersonate" | "moments" | "site-images" | "reports"
 
 export function AdminTabs({
   clubs,
@@ -43,6 +45,8 @@ export function AdminTabs({
   moments,
   siteImages,
   enrollmentReport,
+  coachAccounts,
+  accountSchools,
 }: {
   clubs: Club[]
   schools: School[]
@@ -60,6 +64,8 @@ export function AdminTabs({
   moments: PublicMoment[]
   siteImages: SiteImageRow[]
   enrollmentReport: EnrollmentReportSummary
+  coachAccounts: CoachAccountRow[]
+  accountSchools: { id: number; name: string }[]
 }) {
   const [tab, setTab] = useState<Tab>("clubs")
 

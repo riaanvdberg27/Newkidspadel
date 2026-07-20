@@ -13,6 +13,7 @@ import { getAllPayments, getAllOrders, getAllSubscriptions, getAllWebhookLogs } 
 import { getAllMoments } from "@/app/actions/moments"
 import { getAllSiteImages } from "@/app/actions/site-images"
 import { getEnrollmentReport } from "@/app/actions/enrollment-reports"
+import { getCoachAccounts, getSchoolsForAccounts } from "@/app/actions/admin-coach-accounts"
 import { AdminTabs } from "@/components/admin/admin-tabs"
 
 export const metadata = {
@@ -24,7 +25,7 @@ export default async function AdminPage() {
     redirect("/admin/login")
   }
 
-  const [clubs, schools, packages, signups, contacts, coaches, referrals, vouchers, campaigns, allPayments, allOrders, allSubscriptions, webhookLogs, moments, siteImages, enrollmentReport] =
+  const [clubs, schools, packages, signups, contacts, coaches, referrals, vouchers, campaigns, allPayments, allOrders, allSubscriptions, webhookLogs, moments, siteImages, enrollmentReport, coachAccounts, accountSchools] =
     await Promise.all([
       getAllClubsAdmin(),
       getAllSchoolsAdmin(),
@@ -42,6 +43,8 @@ export default async function AdminPage() {
       getAllMoments().catch(() => []),
       getAllSiteImages().catch(() => []),
       getEnrollmentReport({ type: "", club: "", school: "" }),
+      getCoachAccounts().catch(() => []),
+      getSchoolsForAccounts().catch(() => []),
     ])
 
   return (
@@ -81,6 +84,8 @@ export default async function AdminPage() {
           moments={moments}
           siteImages={siteImages}
           enrollmentReport={enrollmentReport}
+          coachAccounts={coachAccounts}
+          accountSchools={accountSchools}
         />
       </section>
     </main>
