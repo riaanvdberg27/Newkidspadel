@@ -543,7 +543,15 @@ export function OnboardingWizard({ clubs, packages, schools }: { clubs: Club[]; 
                   <p className="text-xs font-semibold text-lime-600">Looks good</p>
                 )}
               </div>
-              <Field label="Email" type="email" value={parent.email} onChange={(v) => setParent({ ...parent, email: v })} />
+              <div className="flex flex-col gap-1">
+                <Field label="Email" type="email" value={parent.email} onChange={(v) => setParent({ ...parent, email: v.trim() })} placeholder="you@example.com" />
+                {parent.email.length > 0 && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(parent.email) && (
+                  <p className="text-xs font-semibold text-destructive">Please enter a valid email address — e.g. you@example.com</p>
+                )}
+                {parent.email.length > 0 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(parent.email) && (
+                  <p className="text-xs font-semibold text-lime-600">Looks good</p>
+                )}
+              </div>
               <div className="space-y-1">
                 <Field label="Password" type="password" value={parent.password} onChange={(v) => setParent({ ...parent, password: v })} placeholder="At least 8 characters" />
                 {parent.password.length > 0 && parent.password.length < 8 && (
@@ -568,7 +576,16 @@ export function OnboardingWizard({ clubs, packages, schools }: { clubs: Club[]; 
             <StepNav
               onBack={() => setStep(2)}
               onNext={() => setStep(4)}
-              nextDisabled={!parent.firstName || !parent.lastName || !parent.email || !/^0\d{9}$/.test(parent.mobile) || parent.password.length < 8 || !emergency.name || !emergency.phone}
+              nextDisabled={
+                !parent.firstName ||
+                !parent.lastName ||
+                !parent.email ||
+                !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(parent.email) ||
+                !/^0\d{9}$/.test(parent.mobile) ||
+                parent.password.length < 8 ||
+                !emergency.name ||
+                !emergency.phone
+              }
             />
           </div>
     )
