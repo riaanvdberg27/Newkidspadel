@@ -64,10 +64,13 @@ function SchoolForm({
       const fd = new FormData()
       fd.append("file", file)
       const res = await fetch("/api/admin/upload-school-logo", { method: "POST", body: fd })
-      const json = await res.json()
-      if (!res.ok) throw new Error(json.error ?? "Upload failed")
+      const text = await res.text()
+      let json: Record<string, string> = {}
+      try { json = text ? JSON.parse(text) : {} } catch { /* empty body */ }
+      if (!res.ok) throw new Error(json.error ?? `Server error ${res.status}`)
+      if (!json.url) throw new Error("Upload succeeded but no URL was returned")
       // Store the full public CDN URL directly — no proxy needed for public blobs
-      setLogoUrl(json.url as string)
+      setLogoUrl(json.url)
     } catch (err) {
       setUploadError(err instanceof Error ? err.message : "Upload failed")
     } finally {
