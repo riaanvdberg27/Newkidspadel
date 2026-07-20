@@ -121,6 +121,91 @@ export async function sendWelcomeEmail(data: WelcomeEmailData): Promise<{ ok: bo
 }
 
 // ---------------------------------------------------------------------------
+// Coach welcome — sent when an admin sets a coach's initial portal password
+// ---------------------------------------------------------------------------
+
+export type CoachWelcomeEmailData = {
+  to: string
+  coachName: string
+  password: string
+  portalUrl: string
+}
+
+export async function sendCoachWelcomeEmail(
+  data: CoachWelcomeEmailData,
+): Promise<{ ok: boolean; error?: string }> {
+  const resend = getResend()
+  if (!resend) {
+    console.log("[email] RESEND_API_KEY not set — skipping coach welcome email")
+    return { ok: false, error: "RESEND_API_KEY not configured" }
+  }
+  const FROM = getFrom()
+
+  const name = escapeHtml(data.coachName)
+  const email = escapeHtml(data.to)
+  const pw = escapeHtml(data.password)
+  const url = escapeHtml(data.portalUrl)
+
+  const html = `
+  <div style="font-family: Arial, Helvetica, sans-serif; max-width: 560px; margin: 0 auto; color: #0d1c3d;">
+    <div style="background:#0d1c3d; padding: 24px; border-radius: 12px 12px 0 0;">
+      <h1 style="color:#c8e600; margin:0; font-size: 22px;">NextGen Padel Academy</h1>
+      <p style="color:#ffffff; margin:6px 0 0; font-size:15px;">Your Coach Portal is ready</p>
+    </div>
+    <div style="border:1px solid #e5e7eb; border-top:none; padding: 28px; border-radius: 0 0 12px 12px;">
+      <p style="margin-top:0;">Hi ${name},</p>
+      <p>Your NextGen Padel Academy coach account has been created. You can now log in to the Coach Portal to view your sessions, mark attendance, and submit player evaluations.</p>
+
+      <div style="background:#f3f4f6; border-left:4px solid #c8e600; border-radius:8px; padding: 18px 20px; margin: 24px 0;">
+        <p style="margin:0 0 10px; font-size:13px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:#6b7280;">Your login details</p>
+        <table style="width:100%; border-collapse:collapse; font-size:14px;">
+          <tr>
+            <td style="padding:5px 0; color:#6b7280; width:90px;">Portal URL</td>
+            <td style="padding:5px 0;"><a href="${url}" style="color:#0d1c3d; font-weight:700;">${url}</a></td>
+          </tr>
+          <tr>
+            <td style="padding:5px 0; color:#6b7280;">Username</td>
+            <td style="padding:5px 0; font-weight:700;">${email}</td>
+          </tr>
+          <tr>
+            <td style="padding:5px 0; color:#6b7280;">Password</td>
+            <td style="padding:5px 0; font-weight:700; font-family:monospace;">${pw}</td>
+          </tr>
+        </table>
+      </div>
+
+      <p>For security, please change your password after your first login via the Profile page in the portal.</p>
+
+      <div style="text-align:center; margin: 28px 0 8px;">
+        <a href="${url}" style="display:inline-block; background:#c8e600; color:#0d1c3d; font-weight:800; font-size:15px; padding: 14px 32px; border-radius:8px; text-decoration:none;">
+          Go to Coach Portal
+        </a>
+      </div>
+
+      <p style="margin-top: 28px; color:#6b7280; font-size:13px;">If you have any questions, contact the academy administrator.<br/><strong style="color:#0d1c3d;">The NextGen Padel Academy Team</strong></p>
+    </div>
+  </div>`
+
+  try {
+    const { error } = await resend.emails.send({
+      from: FROM,
+      to: data.to,
+      subject: "Welcome to the NextGen Padel Coach Portal — your login details",
+      html,
+    })
+    if (error) {
+      console.log("[email] Coach welcome Resend error:", JSON.stringify(error))
+      return { ok: false, error: resendErrorMessage(error) }
+    }
+    console.log("[email] Coach welcome email sent to", data.to)
+    return { ok: true }
+  } catch (err) {
+    console.log("[email] sendCoachWelcomeEmail threw:", err)
+    return { ok: false, error: err instanceof Error ? err.message : "Unknown error" }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Admin notification — sent to the academy inbox on every new signup
 // ---------------------------------------------------------------------------
 

@@ -5,6 +5,10 @@ import { coaches, coachSchools, enrollments, schools } from "@/lib/db/schema"
 import { eq, asc, inArray, sql, and } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { hashPassword } from "@/lib/coach-auth"
+import { sendCoachWelcomeEmail } from "@/lib/email"
+
+const PORTAL_URL =
+  process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ?? "https://nextgenpadelacademy.co.za"
 
 export type CoachAccountRow = {
   id: number
@@ -73,7 +77,7 @@ export async function saveCoachAccount(input: {
   emergencyContactPhone: string
   accountStatus: string
   schoolIds: number[]
-}): Promise<{ ok: boolean; error?: string }> {
+}): Promise<{ ok: boolean; error?: string; welcomeEmailSent?: boolean }> {
   const cleanEmail = input.email.trim().toLowerCase()
 
   if (cleanEmail) {
@@ -86,6 +90,15 @@ export async function saveCoachAccount(input: {
       return { ok: false, error: "That email is already used by another coach." }
     }
   }
+
+  // Fetch current record so we can detect first-time password set
+  const [current] = await db
+    .select({ name: coaches.name, passwordHash: coaches.passwordHash })
+    .from(coaches)
+    .where(eq(coaches.id, input.id))
+
+  const isFirstPassword =
+    !current?.passwordHash && Boolean(input.password && input.password.length >= 6)
 
   const setFields: Record<string, unknown> = {
     email: cleanEmail || null,
@@ -110,7 +123,20 @@ export async function saveCoachAccount(input: {
   }
 
   revalidatePath("/admin")
-  return { ok: true }
+
+  // Send welcome email on first-time password creation (coach has an email set)
+  let welcomeEmailSent = false
+  if (isFirstPassword && cleanEmail) {
+    const emailResult = await sendCoachWelcomeEmail({
+      to: cleanEmail,
+      coachName: current?.name ?? "Coach",
+      password: input.password!,
+      portalUrl: `${PORTAL_URL}/coach/login`,
+    })
+    welcomeEmailSent = emailResult.ok
+  }
+
+  return { ok: true, welcomeEmailSent }
 }
 
 export async function getSchoolsForAccounts() {

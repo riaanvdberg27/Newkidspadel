@@ -1,8 +1,11 @@
 "use client"
 
 import { useState, useTransition } from "react"
-import { Save, Check, ChevronDown, KeyRound, Users } from "lucide-react"
+import { Save, Check, ChevronDown, KeyRound, Users, Mail, ExternalLink } from "lucide-react"
 import { saveCoachAccount, type CoachAccountRow } from "@/app/actions/admin-coach-accounts"
+
+const PORTAL_URL =
+  (typeof window !== "undefined" ? window.location.origin : "https://nextgenpadelacademy.co.za") + "/coach/login"
 
 type SchoolOption = { id: number; name: string }
 
@@ -76,11 +79,13 @@ function AccountCard({ coach, allSchools }: { coach: CoachAccountRow; allSchools
 
   const [saving, startSave] = useTransition()
   const [saved, setSaved] = useState(false)
+  const [welcomeSent, setWelcomeSent] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   function handleSave() {
     setError(null)
     setSaved(false)
+    setWelcomeSent(false)
     startSave(async () => {
       const res = await saveCoachAccount({
         id: coach.id,
@@ -98,7 +103,8 @@ function AccountCard({ coach, allSchools }: { coach: CoachAccountRow; allSchools
         if (password) setHasPassword(true)
         setPassword("")
         setSaved(true)
-        setTimeout(() => setSaved(false), 3000)
+        if (res.welcomeEmailSent) setWelcomeSent(true)
+        setTimeout(() => { setSaved(false); setWelcomeSent(false) }, 5000)
       } else {
         setError(res.error ?? "Save failed.")
       }
@@ -182,7 +188,7 @@ function AccountCard({ coach, allSchools }: { coach: CoachAccountRow; allSchools
         </Field>
       </div>
 
-      <div className="mt-4 flex items-center gap-3">
+      <div className="mt-4 flex flex-wrap items-center gap-3">
         <button
           type="button"
           onClick={handleSave}
@@ -201,6 +207,14 @@ function AccountCard({ coach, allSchools }: { coach: CoachAccountRow; allSchools
             </>
           )}
         </button>
+
+        {welcomeSent && (
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
+            <Mail className="h-3.5 w-3.5" />
+            Welcome email sent to {email}
+          </span>
+        )}
+
         {error && <p className="text-xs text-destructive">{error}</p>}
       </div>
     </fieldset>
@@ -216,12 +230,25 @@ export function AdminCoachAccountsManager({
 }) {
   return (
     <div>
-      <h2 className="text-xl font-bold text-navy">Coach Portal Accounts</h2>
-      <p className="mt-1 text-sm text-muted-foreground">
-        Give coaches secure login access to the Coach Portal, manage their employment details, and assign schools. Add or
-        remove the coach profile itself in the <span className="font-semibold">Coaches</span> tab. Players are assigned to
-        coaches from the <span className="font-semibold">Sign-ups</span> tab.
-      </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-bold text-navy">Coach Portal Accounts</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Give coaches secure login access to the Coach Portal, manage their employment details, and assign schools.
+            Add or remove the coach profile itself in the <span className="font-semibold">Coaches</span> tab. Players are
+            assigned to coaches from the <span className="font-semibold">Sign-ups</span> tab.
+          </p>
+        </div>
+        <a
+          href="/coach/login"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-border bg-card px-3 py-2 text-xs font-semibold text-navy hover:bg-muted"
+        >
+          <ExternalLink className="h-3.5 w-3.5" />
+          Coach Portal login page
+        </a>
+      </div>
 
       {coaches.length === 0 ? (
         <div className="mt-6 rounded-card border border-dashed border-border bg-card p-10 text-center">
