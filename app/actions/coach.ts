@@ -3,8 +3,8 @@
 import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
 import { db } from "@/lib/db"
-import { enrollments, sessionAttendance, playerEvaluations, coaches } from "@/lib/db/schema"
-import { and, eq, sql, desc } from "drizzle-orm"
+import { enrollments, sessionAttendance, playerEvaluations, coaches, packages } from "@/lib/db/schema"
+import { and, eq, sql, desc, or, isNull } from "drizzle-orm"
 import {
   validateCoachCredentials,
   setCoachSession,
@@ -73,7 +73,16 @@ export async function getCoachRoster(): Promise<CoachPlayer[]> {
       consentMedia: enrollments.consentMedia,
     })
     .from(enrollments)
-    .where(and(eq(enrollments.coachId, coach.id), sql`${enrollments.status} != 'cancelled'`))
+    .leftJoin(packages, eq(enrollments.packageName, packages.name))
+    .where(
+      and(
+        eq(enrollments.coachId, coach.id),
+        sql`${enrollments.status} != 'cancelled'`,
+        // Only show enrollments for active (published) packages, or legacy
+        // enrollments where the package name no longer exists in the table
+        or(eq(packages.published, true), isNull(packages.id)),
+      ),
+    )
     .orderBy(enrollments.slotWeekday, enrollments.slotHour, enrollments.childName)
   return rows.map((r) => ({ ...r, slotHour: r.slotHour ? String(r.slotHour) : null }))
 }

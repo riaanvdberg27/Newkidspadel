@@ -47,6 +47,7 @@ export function AdminTabs({
   enrollmentReport,
   coachAccounts,
   accountSchools,
+  accountClubs,
 }: {
   clubs: Club[]
   schools: School[]
@@ -66,6 +67,7 @@ export function AdminTabs({
   enrollmentReport: EnrollmentReportSummary
   coachAccounts: CoachAccountRow[]
   accountSchools: { id: number; name: string }[]
+  accountClubs: { id: number; name: string }[]
 }) {
   const [tab, setTab] = useState<Tab>("clubs")
 
@@ -110,7 +112,7 @@ export function AdminTabs({
         {tab === "signups" && <AdminSignupsManager initialSignups={signups} allCoaches={coaches} allPackages={packages} allClubs={clubs} />}
         {tab === "reports" && <AdminEnrollmentReports initialSummary={enrollmentReport} />}
         {tab === "coaches" && <AdminCoachesManager initialCoaches={coaches} allClubs={clubs} />}
-        {tab === "coach-portal" && <AdminCoachAccountsManager coaches={coachAccounts} allSchools={accountSchools} />}
+        {tab === "coach-portal" && <AdminCoachAccountsManager coaches={coachAccounts} allSchools={accountSchools} allClubs={accountClubs} />}
         {tab === "payments" && (
           <AdminPaymentsManager
             initialPayments={allPayments}

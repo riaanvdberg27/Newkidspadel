@@ -1,7 +1,7 @@
 "use server"
 
 import { db } from "@/lib/db"
-import { coaches, coachSchools, enrollments, schools } from "@/lib/db/schema"
+import { coaches, coachSchools, coachClubs, enrollments, schools, clubs } from "@/lib/db/schema"
 import { eq, asc, inArray, sql, and } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { hashPassword } from "@/lib/coach-auth"
@@ -23,6 +23,7 @@ export type CoachAccountRow = {
   accountStatus: string
   hasPassword: boolean
   schoolIds: number[]
+  clubIds: number[]
   playerCount: number
 }
 
@@ -39,6 +40,16 @@ export async function getCoachAccounts(): Promise<CoachAccountRow[]> {
   for (const l of schoolLinks) {
     if (!schoolMap.has(l.coachId)) schoolMap.set(l.coachId, [])
     schoolMap.get(l.coachId)!.push(l.schoolId)
+  }
+
+  const clubLinks = await db
+    .select({ coachId: coachClubs.coachId, clubId: coachClubs.clubId })
+    .from(coachClubs)
+    .where(inArray(coachClubs.coachId, ids))
+  const clubMap = new Map<number, number[]>()
+  for (const l of clubLinks) {
+    if (!clubMap.has(l.coachId)) clubMap.set(l.coachId, [])
+    clubMap.get(l.coachId)!.push(l.clubId)
   }
 
   const counts = await db
@@ -62,6 +73,7 @@ export async function getCoachAccounts(): Promise<CoachAccountRow[]> {
     accountStatus: r.accountStatus,
     hasPassword: Boolean(r.passwordHash),
     schoolIds: schoolMap.get(r.id) ?? [],
+    clubIds: clubMap.get(r.id) ?? [],
     playerCount: countMap.get(r.id) ?? 0,
   }))
 }
@@ -77,6 +89,7 @@ export async function saveCoachAccount(input: {
   emergencyContactPhone: string
   accountStatus: string
   schoolIds: number[]
+  clubIds: number[]
 }): Promise<{ ok: boolean; error?: string; welcomeEmailSent?: boolean }> {
   const cleanEmail = input.email.trim().toLowerCase()
 
@@ -122,6 +135,12 @@ export async function saveCoachAccount(input: {
     await db.insert(coachSchools).values(input.schoolIds.map((schoolId) => ({ coachId: input.id, schoolId })))
   }
 
+  // Sync club assignments
+  await db.delete(coachClubs).where(eq(coachClubs.coachId, input.id))
+  if (input.clubIds.length > 0) {
+    await db.insert(coachClubs).values(input.clubIds.map((clubId) => ({ coachId: input.id, clubId })))
+  }
+
   revalidatePath("/admin")
 
   // Send welcome email on first-time password creation (coach has an email set)
@@ -141,4 +160,8 @@ export async function saveCoachAccount(input: {
 
 export async function getSchoolsForAccounts() {
   return db.select({ id: schools.id, name: schools.name }).from(schools).orderBy(asc(schools.name))
+}
+
+export async function getClubsForAccounts() {
+  return db.select({ id: clubs.id, name: clubs.name }).from(clubs).orderBy(asc(clubs.name))
 }

@@ -7,16 +7,18 @@ import { saveCoachAccount, type CoachAccountRow } from "@/app/actions/admin-coac
 const PORTAL_URL =
   (typeof window !== "undefined" ? window.location.origin : "https://nextgenpadelacademy.co.za") + "/coach/login"
 
-type SchoolOption = { id: number; name: string }
+type Option = { id: number; name: string }
 
-function SchoolMultiSelect({
-  allSchools,
+function MultiSelect({
+  options,
   selected,
   onChange,
+  placeholder,
 }: {
-  allSchools: SchoolOption[]
+  options: Option[]
   selected: number[]
   onChange: (ids: number[]) => void
+  placeholder: string
 }) {
   const [open, setOpen] = useState(false)
   function toggle(id: number) {
@@ -24,8 +26,8 @@ function SchoolMultiSelect({
   }
   const label =
     selected.length === 0
-      ? "No schools assigned"
-      : allSchools.filter((s) => selected.includes(s.id)).map((s) => s.name).join(", ")
+      ? placeholder
+      : options.filter((s) => selected.includes(s.id)).map((s) => s.name).join(", ")
   return (
     <div className="relative">
       <button
@@ -38,10 +40,10 @@ function SchoolMultiSelect({
       </button>
       {open && (
         <div className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-md border border-border bg-card shadow-lg">
-          {allSchools.length === 0 ? (
-            <p className="px-3 py-2 text-xs text-muted-foreground">No schools found.</p>
+          {options.length === 0 ? (
+            <p className="px-3 py-2 text-xs text-muted-foreground">None found.</p>
           ) : (
-            allSchools.map((s) => (
+            options.map((s) => (
               <label key={s.id} className="flex cursor-pointer items-center gap-2.5 px-3 py-2 hover:bg-muted">
                 <input type="checkbox" checked={selected.includes(s.id)} onChange={() => toggle(s.id)} className="h-4 w-4 accent-lime" />
                 <span className="text-sm text-navy">{s.name}</span>
@@ -65,7 +67,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 const inputCls = "mt-1.5 w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-lime"
 
-function AccountCard({ coach, allSchools }: { coach: CoachAccountRow; allSchools: SchoolOption[] }) {
+function AccountCard({ coach, allSchools, allClubs }: { coach: CoachAccountRow; allSchools: Option[]; allClubs: Option[] }) {
   const [email, setEmail] = useState(coach.email ?? "")
   const [password, setPassword] = useState("")
   const [mobile, setMobile] = useState(coach.mobile)
@@ -75,6 +77,7 @@ function AccountCard({ coach, allSchools }: { coach: CoachAccountRow; allSchools
   const [ecPhone, setEcPhone] = useState(coach.emergencyContactPhone)
   const [accountStatus, setAccountStatus] = useState(coach.accountStatus)
   const [schoolIds, setSchoolIds] = useState<number[]>(coach.schoolIds)
+  const [clubIds, setClubIds] = useState<number[]>(coach.clubIds)
   const [hasPassword, setHasPassword] = useState(coach.hasPassword)
 
   const [saving, startSave] = useTransition()
@@ -98,6 +101,7 @@ function AccountCard({ coach, allSchools }: { coach: CoachAccountRow; allSchools
         emergencyContactPhone: ecPhone,
         accountStatus,
         schoolIds,
+        clubIds,
       })
       if (res.ok) {
         if (password) setHasPassword(true)
@@ -167,8 +171,11 @@ function AccountCard({ coach, allSchools }: { coach: CoachAccountRow; allSchools
           <input value={ecPhone} onChange={(e) => setEcPhone(e.target.value)} className={inputCls} />
         </Field>
 
+        <Field label="Assigned clubs">
+          <MultiSelect options={allClubs} selected={clubIds} onChange={setClubIds} placeholder="No clubs assigned" />
+        </Field>
         <Field label="Assigned schools">
-          <SchoolMultiSelect allSchools={allSchools} selected={schoolIds} onChange={setSchoolIds} />
+          <MultiSelect options={allSchools} selected={schoolIds} onChange={setSchoolIds} placeholder="No schools assigned" />
         </Field>
         <Field label="Account status">
           <select value={accountStatus} onChange={(e) => setAccountStatus(e.target.value)} className={inputCls}>
@@ -224,9 +231,11 @@ function AccountCard({ coach, allSchools }: { coach: CoachAccountRow; allSchools
 export function AdminCoachAccountsManager({
   coaches,
   allSchools,
+  allClubs,
 }: {
   coaches: CoachAccountRow[]
-  allSchools: SchoolOption[]
+  allSchools: Option[]
+  allClubs: Option[]
 }) {
   return (
     <div>
@@ -257,7 +266,7 @@ export function AdminCoachAccountsManager({
       ) : (
         <div className="mt-6 space-y-5">
           {coaches.map((c) => (
-            <AccountCard key={c.id} coach={c} allSchools={allSchools} />
+            <AccountCard key={c.id} coach={c} allSchools={allSchools} allClubs={allClubs} />
           ))}
         </div>
       )}
