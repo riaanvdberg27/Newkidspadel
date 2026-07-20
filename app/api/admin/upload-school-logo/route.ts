@@ -28,11 +28,11 @@ export async function POST(request: NextRequest) {
   const filename = `schools/${Date.now()}-${randomSuffix}.${ext}`
 
   const blob = await put(filename, file, {
-    access: "private",
+    access: "public",
     contentType: file.type,
   })
 
-  // Return the pathname (not the full URL) so the DB stores a portable key
-  // that goes through the /api/blob proxy — consistent with club images.
-  return NextResponse.json({ url: blob.url, pathname: blob.pathname })
+  // Return the full public URL — school logos are public assets (no auth needed
+  // to view them) so we store the direct CDN URL, no proxy required.
+  return NextResponse.json({ url: blob.url })
 }
