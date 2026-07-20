@@ -17,7 +17,7 @@ import { SignaturePad } from "@/components/signature-pad"
 import { CONSENT_TERMS_LABEL, CONSENT_MEDIA_LABEL, TERMS_TITLE, TERMS_SECTIONS } from "@/lib/terms"
 import { authClient } from "@/lib/auth-client"
 import { createEnrollment } from "@/app/actions/enrollment"
-import { blobUrl } from "@/lib/blob"
+
 
 import { buildNetcashPaymentForEnrollment } from "@/app/actions/enrollment"
 import { validateVoucherCode } from "@/app/actions/referrals"
@@ -137,13 +137,22 @@ export function OnboardingWizard({ clubs, packages, schools }: { clubs: Club[]; 
     setError(null)
     setSubmitting(true)
     try {
+      // Sanitise and validate the email before touching Better Auth — Better Auth
+      // returns the opaque '[body.email] Invalid input' error for any malformed address.
+      const cleanEmail = parent.email.trim().toLowerCase()
+      if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+        setError("Please enter a valid email address (e.g. you@example.com) in the Parent Account step.")
+        setSubmitting(false)
+        return
+      }
+
       // 1. Create the parent account (Better Auth, auto sign-in).
       //    If the account already exists (e.g. a previous attempt created the
       //    account but the enrollment failed before saving), sign them in with
       //    the provided password and continue — their enrollment will be saved
       //    as a new record either way.
       const { error: signUpError } = await authClient.signUp.email({
-        email: parent.email,
+        email: cleanEmail,
         password: parent.password,
         name: `${parent.firstName} ${parent.lastName}`.trim(),
       })
@@ -155,7 +164,7 @@ export function OnboardingWizard({ clubs, packages, schools }: { clubs: Club[]; 
           // Account exists — try signing in with the given password so we can
           // proceed to create the enrollment record.
           const { error: signInError } = await authClient.signIn.email({
-            email: parent.email,
+            email: cleanEmail,
             password: parent.password,
           })
           if (signInError) {
@@ -179,7 +188,7 @@ export function OnboardingWizard({ clubs, packages, schools }: { clubs: Club[]; 
         const childFullName = `${child.firstName} ${child.lastName}`.trim()
         const { referenceNumber, enrollmentId } = await createEnrollment({
           parentName: `${parent.firstName} ${parent.lastName}`.trim(),
-          parentEmail: parent.email,
+          parentEmail: cleanEmail,
           parentMobile: parent.mobile,
           childName: childFullName,
           childDob: child.dob,
@@ -456,7 +465,7 @@ export function OnboardingWizard({ clubs, packages, schools }: { clubs: Club[]; 
                       <div className="mt-4 flex items-center gap-3 rounded-2xl border-2 border-lime bg-lime/10 px-4 py-3">
                         {s.logoUrl ? (
                           // eslint-disable-next-line @next/next/no-img-element
-                          <img src={blobUrl(s.logoUrl) ?? s.logoUrl} alt={s.name} className="h-10 w-10 rounded-full object-contain border border-border bg-white p-0.5 shrink-0" />
+                          <img src={s.logoUrl} alt={s.name} className="h-10 w-10 rounded-full object-contain border border-border bg-white p-0.5 shrink-0" />
                         ) : (
                           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-navy/10 text-sm font-black text-navy">
                             {s.name[0]?.toUpperCase()}
@@ -543,7 +552,15 @@ export function OnboardingWizard({ clubs, packages, schools }: { clubs: Club[]; 
                   <p className="text-xs font-semibold text-lime-600">Looks good</p>
                 )}
               </div>
-              <Field label="Email" type="email" value={parent.email} onChange={(v) => setParent({ ...parent, email: v })} />
+              <div className="flex flex-col gap-1">
+                <Field label="Email" type="email" value={parent.email} onChange={(v) => setParent({ ...parent, email: v.trim() })} placeholder="you@example.com" />
+                {parent.email.length > 0 && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(parent.email) && (
+                  <p className="text-xs font-semibold text-destructive">Please enter a valid email address — e.g. you@example.com</p>
+                )}
+                {parent.email.length > 0 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(parent.email) && (
+                  <p className="text-xs font-semibold text-lime-600">Looks good</p>
+                )}
+              </div>
               <div className="space-y-1">
                 <Field label="Password" type="password" value={parent.password} onChange={(v) => setParent({ ...parent, password: v })} placeholder="At least 8 characters" />
                 {parent.password.length > 0 && parent.password.length < 8 && (
@@ -568,7 +585,16 @@ export function OnboardingWizard({ clubs, packages, schools }: { clubs: Club[]; 
             <StepNav
               onBack={() => setStep(2)}
               onNext={() => setStep(4)}
-              nextDisabled={!parent.firstName || !parent.lastName || !parent.email || !/^0\d{9}$/.test(parent.mobile) || parent.password.length < 8 || !emergency.name || !emergency.phone}
+              nextDisabled={
+                !parent.firstName ||
+                !parent.lastName ||
+                !parent.email ||
+                !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(parent.email) ||
+                !/^0\d{9}$/.test(parent.mobile) ||
+                parent.password.length < 8 ||
+                !emergency.name ||
+                !emergency.phone
+              }
             />
           </div>
     )
