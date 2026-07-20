@@ -56,6 +56,7 @@ export async function createSchool(input: SchoolInput): Promise<School> {
     .returning()
   revalidatePath("/schools")
   revalidatePath("/admin")
+  revalidatePath("/enrollment")
   return row
 }
 
@@ -81,6 +82,7 @@ export async function updateSchool(id: number, input: SchoolInput): Promise<Scho
     .returning()
   revalidatePath("/schools")
   revalidatePath("/admin")
+  revalidatePath("/enrollment")
   return row
 }
 
@@ -90,4 +92,5 @@ export async function deleteSchool(id: number): Promise<void> {
   await db.delete(schools).where(eq(schools.id, id))
   revalidatePath("/schools")
   revalidatePath("/admin")
+  revalidatePath("/enrollment")
 }
