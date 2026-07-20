@@ -1,5 +1,9 @@
 import type { Metadata } from "next"
 import { Suspense } from "react"
+
+// Always fetch fresh data — schools, clubs and packages are managed in the
+// admin portal and must reflect immediately without waiting for a cache purge.
+export const dynamic = "force-dynamic"
 import { OnboardingWizard } from "@/components/onboarding-wizard"
 import { getPublishedClubs } from "@/app/actions/clubs"
 import { getPublishedPackages } from "@/app/actions/packages"

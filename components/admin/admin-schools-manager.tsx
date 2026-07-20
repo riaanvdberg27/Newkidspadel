@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { Plus, Pencil, Trash2, X, Upload, Globe, Phone, Mail, MapPin, User, ExternalLink } from "lucide-react"
 import type { School } from "@/lib/db/schema"
 import { createSchool, updateSchool, deleteSchool, type SchoolInput } from "@/app/actions/schools"
+import { blobUrl } from "@/lib/blob"
 
 const EMPTY: SchoolInput = {
   name: "",
@@ -43,7 +44,10 @@ function SchoolForm({
 
   // Logo
   const [logoUrl, setLogoUrl] = useState<string | null>(school?.logoUrl ?? null)
-  const [logoPreview, setLogoPreview] = useState<string | null>(school?.logoUrl ?? null)
+  // For existing schools, preview via blob proxy; for new uploads, use the data URL
+  const [logoPreview, setLogoPreview] = useState<string | null>(
+    school?.logoUrl ? (blobUrl(school.logoUrl) ?? school.logoUrl) : null
+  )
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -64,7 +68,8 @@ function SchoolForm({
       const res = await fetch("/api/admin/upload-school-logo", { method: "POST", body: fd })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? "Upload failed")
-      setLogoUrl(json.url as string)
+      // Store the pathname (portable key for the /api/blob proxy), not the full URL
+      setLogoUrl((json.pathname ?? json.url) as string)
     } catch (err) {
       setUploadError(err instanceof Error ? err.message : "Upload failed")
     } finally {
@@ -235,9 +240,11 @@ export function AdminSchoolsManager({ initialSchools }: { initialSchools: School
   function handleSave(input: SchoolInput, id?: number) {
     startTransition(async () => {
       if (id) {
-        await updateSchool(id, input)
+        const updated = await updateSchool(id, input)
+        setSchools((prev) => prev.map((s) => s.id === id ? updated : s))
       } else {
-        await createSchool(input)
+        const created = await createSchool(input)
+        setSchools((prev) => [...prev, created])
       }
       setEditing(null)
       setCreating(false)
@@ -248,6 +255,7 @@ export function AdminSchoolsManager({ initialSchools }: { initialSchools: School
   function handleDelete(id: number) {
     startTransition(async () => {
       await deleteSchool(id)
+      setSchools((prev) => prev.filter((s) => s.id !== id))
       setDeletingId(null)
       router.refresh()
     })
@@ -300,7 +308,7 @@ export function AdminSchoolsManager({ initialSchools }: { initialSchools: School
                     <div className="h-14 w-14 shrink-0 overflow-hidden rounded-xl border border-border bg-muted flex items-center justify-center">
                       {logo ? (
                         // eslint-disable-next-line @next/next/no-img-element
-                        <img src={logo} alt={school.name} className="h-full w-full object-contain p-1" />
+                        <img src={blobUrl(logo) ?? logo} alt={school.name} className="h-full w-full object-contain p-1" />
                       ) : (
                         <span className="text-xl font-black text-muted-foreground">{school.name[0]?.toUpperCase()}</span>
                       )}

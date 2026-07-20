@@ -28,9 +28,11 @@ export async function POST(request: NextRequest) {
   const filename = `schools/${Date.now()}-${randomSuffix}.${ext}`
 
   const blob = await put(filename, file, {
-    access: "public",
+    access: "private",
     contentType: file.type,
   })
 
-  return NextResponse.json({ pathname: blob.pathname, url: blob.url })
+  // Return the pathname (not the full URL) so the DB stores a portable key
+  // that goes through the /api/blob proxy — consistent with club images.
+  return NextResponse.json({ url: blob.url, pathname: blob.pathname })
 }
