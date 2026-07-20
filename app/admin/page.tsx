@@ -1,6 +1,8 @@
 import { redirect } from "next/navigation"
 import { isAdminAuthenticated } from "@/lib/admin-auth"
 import { getAllClubsAdmin, adminLogout } from "@/app/actions/admin"
+
+export const dynamic = "force-dynamic"
 import { getAllPackagesAdmin } from "@/app/actions/packages"
 import { getAllSchoolsAdmin } from "@/app/actions/schools"
 import { getAllSignups } from "@/app/actions/admin-signups"

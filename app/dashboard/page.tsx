@@ -2,6 +2,8 @@ import { redirect } from "next/navigation"
 import { headers } from "next/headers"
 import { auth } from "@/lib/auth"
 import { getActiveImpersonation } from "@/app/actions/impersonation"
+
+export const dynamic = "force-dynamic"
 import { db } from "@/lib/db"
 import { enrollments, payments, subscriptions } from "@/lib/db/schema"
 import { eq, desc } from "drizzle-orm"

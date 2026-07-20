@@ -4,6 +4,8 @@ import Link from "next/link"
 import { Phone, Mail, Clock, MessageCircle } from "lucide-react"
 import { getContacts } from "@/app/actions/contact-settings"
 import { getPublishedPackages } from "@/app/actions/packages"
+
+export const dynamic = "force-dynamic"
 import { PackagesSection } from "@/components/packages-section"
 import { BreadcrumbSchema } from "@/components/breadcrumb-schema"
 
