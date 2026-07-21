@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
 import { db } from "@/lib/db"
 import { enrollments, sessionAttendance, playerEvaluations, coaches, packages } from "@/lib/db/schema"
-import { and, eq, sql, desc, or, isNull } from "drizzle-orm"
+import { and, eq, sql, desc } from "drizzle-orm"
 import {
   validateCoachCredentials,
   setCoachSession,
@@ -78,9 +78,10 @@ export async function getCoachRoster(): Promise<CoachPlayer[]> {
       and(
         eq(enrollments.coachId, coach.id),
         sql`${enrollments.status} != 'cancelled'`,
-        // Only show enrollments for active (published) packages, or legacy
-        // enrollments where the package name no longer exists in the table
-        or(eq(packages.published, true), isNull(packages.id)),
+        // Only show enrollments whose package exists and is currently published.
+        // Bootcamp has no row in the packages table (left join gives NULL) so it
+        // is excluded here. Beginner / Advanced are published = true so they pass.
+        eq(packages.published, true),
       ),
     )
     .orderBy(enrollments.slotWeekday, enrollments.slotHour, enrollments.childName)
