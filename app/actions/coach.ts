@@ -77,6 +77,7 @@ export async function getCoachRoster(): Promise<CoachPlayer[]> {
       and(
         eq(enrollments.coachId, coach.id),
         sql`${enrollments.status} != 'cancelled'`,
+        sql`${enrollments.packageName} != 'Bootcamp'`,
       ),
     )
     .orderBy(enrollments.slotWeekday, enrollments.slotHour, enrollments.childName)
