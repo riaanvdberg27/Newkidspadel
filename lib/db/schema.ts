@@ -8,6 +8,7 @@ import {
   jsonb,
   unique,
   numeric,
+  date,
 } from "drizzle-orm/pg-core"
 
 // ---- Better Auth tables (camelCase columns to match Better Auth defaults) ----
@@ -261,11 +262,107 @@ export const coaches = pgTable("coaches", {
   imageUrl: text("imageUrl"),
   sortOrder: integer("sortOrder").notNull().default(0),
   published: boolean("published").notNull().default(true),
+  // ---- Coach Portal fields ----
+  email: text("email"),
+  mobile: text("mobile").notNull().default(""),
+  qualifications: text("qualifications").notNull().default(""),
+  employmentStatus: text("employmentStatus").notNull().default("active"),
+  emergencyContactName: text("emergencyContactName").notNull().default(""),
+  emergencyContactPhone: text("emergencyContactPhone").notNull().default(""),
+  passwordHash: text("passwordHash"),
+  accountStatus: text("accountStatus").notNull().default("active"),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
   updatedAt: timestamp("updatedAt").notNull().defaultNow(),
 })
 
 export type Coach = typeof coaches.$inferSelect
+
+// ---- Coach ↔ School assignments ----
+
+export const coachSchools = pgTable(
+  "coach_schools",
+  {
+    id: serial("id").primaryKey(),
+    coachId: integer("coachId")
+      .notNull()
+      .references(() => coaches.id, { onDelete: "cascade" }),
+    schoolId: integer("schoolId")
+      .notNull()
+      .references(() => schools.id, { onDelete: "cascade" }),
+  },
+  (t) => ({
+    uniqueAssignment: unique("coach_schools_unique").on(t.coachId, t.schoolId),
+  }),
+)
+
+export type CoachSchool = typeof coachSchools.$inferSelect
+
+// ---- Coach recurring session assignments (weekly timetable) ----
+
+export const coachAssignments = pgTable("coach_assignments", {
+  id: serial("id").primaryKey(),
+  coachId: integer("coachId")
+    .notNull()
+    .references(() => coaches.id, { onDelete: "cascade" }),
+  type: text("type").notNull().default("club"), // "club" | "school"
+  clubId: integer("clubId").references(() => clubs.id, { onDelete: "cascade" }),
+  schoolId: integer("schoolId").references(() => schools.id, { onDelete: "cascade" }),
+  weekday: integer("weekday").notNull().default(1), // 0=Sun ... 6=Sat
+  startTime: text("startTime").notNull().default("14:00"),
+  endTime: text("endTime").notNull().default("15:00"),
+  packageName: text("packageName").notNull().default(""),
+  venue: text("venue").notNull().default(""),
+  capacity: integer("capacity").notNull().default(0),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+  updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+})
+
+export type CoachAssignment = typeof coachAssignments.$inferSelect
+
+// ---- Session attendance (per child, per date) ----
+
+export const sessionAttendance = pgTable(
+  "session_attendance",
+  {
+    id: serial("id").primaryKey(),
+    coachId: integer("coachId")
+      .notNull()
+      .references(() => coaches.id, { onDelete: "cascade" }),
+    enrollmentId: integer("enrollmentId")
+      .notNull()
+      .references(() => enrollments.id, { onDelete: "cascade" }),
+    sessionDate: date("sessionDate").notNull(),
+    status: text("status").notNull().default("present"), // present | absent | late | excused
+    note: text("note").notNull().default(""),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+  },
+  (t) => ({
+    uniqueAttendance: unique("session_attendance_unique").on(t.enrollmentId, t.sessionDate),
+  }),
+)
+
+export type SessionAttendance = typeof sessionAttendance.$inferSelect
+
+// ---- Player evaluations / progress reports ----
+
+export const playerEvaluations = pgTable("player_evaluations", {
+  id: serial("id").primaryKey(),
+  coachId: integer("coachId")
+    .notNull()
+    .references(() => coaches.id, { onDelete: "cascade" }),
+  enrollmentId: integer("enrollmentId")
+    .notNull()
+    .references(() => enrollments.id, { onDelete: "cascade" }),
+  evalDate: date("evalDate").notNull().defaultNow(),
+  skills: jsonb("skills").notNull().default({}), // { forehand: 3, backhand: 4, ... }
+  comments: text("comments").notNull().default(""),
+  overallRating: integer("overallRating").notNull().default(0), // 1-5
+  recommendations: text("recommendations").notNull().default(""),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+})
+
+export type PlayerEvaluation = typeof playerEvaluations.$inferSelect
 
 // ---- Coach ↔ Club assignments ----
 

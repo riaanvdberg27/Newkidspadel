@@ -21,8 +21,12 @@ import { AdminMomentsManager } from "@/components/admin/admin-moments-manager"
 import type { PublicMoment } from "@/app/actions/moments"
 import { AdminSiteImagesManager } from "@/components/admin/admin-site-images-manager"
 import type { SiteImageRow } from "@/app/actions/site-images"
+import { AdminEnrollmentReports } from "@/components/admin/admin-enrollment-reports"
+import type { EnrollmentReportSummary } from "@/app/actions/enrollment-reports"
+import { AdminCoachAccountsManager } from "@/components/admin/admin-coach-accounts-manager"
+import type { CoachAccountRow } from "@/app/actions/admin-coach-accounts"
 
-type Tab = "clubs" | "schools" | "packages" | "signups" | "contact" | "coaches" | "referrals" | "payments" | "impersonate" | "moments" | "site-images"
+type Tab = "clubs" | "schools" | "packages" | "signups" | "contact" | "coaches" | "coach-portal" | "referrals" | "payments" | "impersonate" | "moments" | "site-images" | "reports"
 
 export function AdminTabs({
   clubs,
@@ -40,6 +44,10 @@ export function AdminTabs({
   webhookLogs,
   moments,
   siteImages,
+  enrollmentReport,
+  coachAccounts,
+  accountSchools,
+  accountClubs,
 }: {
   clubs: Club[]
   schools: School[]
@@ -56,6 +64,10 @@ export function AdminTabs({
   webhookLogs: WebhookLog[]
   moments: PublicMoment[]
   siteImages: SiteImageRow[]
+  enrollmentReport: EnrollmentReportSummary
+  coachAccounts: CoachAccountRow[]
+  accountSchools: { id: number; name: string }[]
+  accountClubs: { id: number; name: string }[]
 }) {
   const [tab, setTab] = useState<Tab>("clubs")
 
@@ -64,7 +76,9 @@ export function AdminTabs({
     { id: "schools", label: "Schools" },
     { id: "packages", label: "Packages" },
     { id: "signups", label: "Sign-ups" },
+    { id: "reports", label: "Reports" },
     { id: "coaches", label: "Coaches" },
+    { id: "coach-portal", label: "Coach Portal" },
     { id: "payments", label: "Payments" },
     { id: "referrals", label: "Referrals & Vouchers" },
     { id: "contact", label: "Contact Details" },
@@ -96,7 +110,9 @@ export function AdminTabs({
         {tab === "schools" && <AdminSchoolsManager initialSchools={schools} />}
         {tab === "packages" && <AdminPackageManager initialPackages={packages} allClubs={clubs} allSchools={schools} />}
         {tab === "signups" && <AdminSignupsManager initialSignups={signups} allCoaches={coaches} allPackages={packages} allClubs={clubs} />}
+        {tab === "reports" && <AdminEnrollmentReports initialSummary={enrollmentReport} />}
         {tab === "coaches" && <AdminCoachesManager initialCoaches={coaches} allClubs={clubs} />}
+        {tab === "coach-portal" && <AdminCoachAccountsManager coaches={coachAccounts} allSchools={accountSchools} allClubs={accountClubs} />}
         {tab === "payments" && (
           <AdminPaymentsManager
             initialPayments={allPayments}

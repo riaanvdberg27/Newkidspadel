@@ -1,5 +1,6 @@
 import "server-only"
 import { cookies } from "next/headers"
+import { redirect } from "next/navigation"
 
 // Hardcoded admin credentials (as requested, for now)
 export const ADMIN_USERNAME = "admin"
@@ -36,6 +37,6 @@ export function credentialsValid(username: string, password: string) {
 
 export async function requireAdmin() {
   if (!(await isAdminAuthenticated())) {
-    throw new Error("Not authorized")
+    redirect("/admin/login")
   }
 }

@@ -15,6 +15,8 @@ import { ChangeSlot } from "@/components/change-slot"
 import { EditProfile } from "@/components/edit-profile"
 import { ReferralPanel } from "@/components/referral-panel"
 import { ImpersonationBanner } from "@/components/impersonation-banner"
+import { getChildProgress, type ChildProgress } from "@/app/actions/child-progress"
+import { ChildProgressPanel } from "@/components/child-progress-panel"
 import {
   CalendarDays, Mail, Phone, ShieldCheck, User,
   CreditCard, RefreshCw, CheckCircle2, XCircle, Clock,
@@ -92,6 +94,12 @@ export default async function DashboardPage() {
   const mobile = userEnrollments[0]?.parentMobile ?? ""
   // View-only mode disables mutations on sub-components
   const viewOnly = isImpersonating && impersonation?.mode === "view-only"
+
+  // Fetch attendance + evaluation progress for each enrollment (scoped to userId)
+  const progressEntries = await Promise.all(
+    userEnrollments.map(async (e) => [e.id, await getChildProgress(e.id, userId).catch(() => null)] as const),
+  )
+  const progressByEnrollment = new Map<number, ChildProgress | null>(progressEntries)
 
   return (
     <main className="min-h-[70vh] bg-background">
@@ -272,6 +280,11 @@ export default async function DashboardPage() {
                           </div>
                         )}
                       </div>
+
+                      {/* Attendance & evaluations */}
+                      {progressByEnrollment.get(e.id) && (
+                        <ChildProgressPanel progress={progressByEnrollment.get(e.id)!} />
+                      )}
 
                       {/* Payment history */}
                       {enrollmentPayments.length > 0 && (

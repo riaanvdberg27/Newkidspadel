@@ -352,6 +352,7 @@ export function AdminSignupsManager({
             <col style={{ width: "8%" }} />{/* Coach */}
             <col style={{ width: "8%" }} />{/* Status */}
             <col style={{ width: "10%" }} />{/* Payment */}
+            <col style={{ width: "6%" }} />{/* Photo */}
             <col style={{ width: "8%" }} />{/* Actions */}
           </colgroup>
           <thead className="border-b border-border bg-muted/40">
@@ -365,6 +366,7 @@ export function AdminSignupsManager({
               <th className="px-2 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Coach</th>
               <th className="px-2 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Status</th>
               <th className="px-2 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Payment</th>
+              <th className="px-2 py-2.5 text-center text-[10px] font-semibold uppercase tracking-wider text-muted-foreground" title="Parent consented to photos/videos for promotional use">Photo</th>
               <th className="px-2 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Actions</th>
             </tr>
           </thead>
@@ -454,6 +456,20 @@ export function AdminSignupsManager({
                       >
                         <Tag className="h-2.5 w-2.5" />
                         {s.pendingDiscountPercent}% off next month
+                      </span>
+                    )}
+                  </td>
+                  {/* Photo consent */}
+                  <td className="px-2 py-2 text-center" title={s.consentMedia ? "Parent consented to photos & videos for promotional use" : "No photo/video consent given"}>
+                    {s.consentMedia ? (
+                      <span className="inline-flex items-center gap-0.5 rounded-full bg-lime-100 px-1.5 py-0.5 text-[10px] font-semibold text-lime-700">
+                        <svg className="h-2.5 w-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
+                        Yes
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-0.5 rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-600">
+                        <svg className="h-2.5 w-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" /></svg>
+                        No
                       </span>
                     )}
                   </td>

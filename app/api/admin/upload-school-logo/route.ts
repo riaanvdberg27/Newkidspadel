@@ -27,12 +27,17 @@ export async function POST(request: NextRequest) {
   const randomSuffix = Math.random().toString(36).slice(2, 7)
   const filename = `schools/${Date.now()}-${randomSuffix}.${ext}`
 
-  const blob = await put(filename, file, {
-    access: "public",
-    contentType: file.type,
-  })
-
-  // Return the full public URL — school logos are public assets (no auth needed
-  // to view them) so we store the direct CDN URL, no proxy required.
-  return NextResponse.json({ url: blob.url })
+  try {
+    const blob = await put(filename, file, {
+      access: "public",
+      contentType: file.type,
+    })
+    // Return the full public URL — school logos are public assets (no auth needed
+    // to view them) so we store the direct CDN URL, no proxy required.
+    return NextResponse.json({ url: blob.url })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    console.error("[v0] upload-school-logo failed:", message)
+    return NextResponse.json({ error: `Upload failed: ${message}` }, { status: 500 })
+  }
 }
