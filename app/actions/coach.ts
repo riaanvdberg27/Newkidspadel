@@ -3,8 +3,8 @@
 import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
 import { db } from "@/lib/db"
-import { enrollments, sessionAttendance, playerEvaluations, coaches, coachClubs, coachSchools } from "@/lib/db/schema"
-import { and, eq, sql, desc } from "drizzle-orm"
+import { enrollments, sessionAttendance, playerEvaluations, coaches, coachClubs, coachSchools, packages, clubs, schools } from "@/lib/db/schema"
+import { and, eq, sql, desc, ne } from "drizzle-orm"
 import {
   validateCoachCredentials,
   setCoachSession,
@@ -53,7 +53,13 @@ export type CoachPlayer = {
   consentMedia: boolean
 }
 
-/** All active players assigned to the current coach. */
+/** All active players assigned to the current coach.
+ *  Only shows enrollments where:
+ *  - enrollment is not cancelled
+ *  - the package is published (active) and not Bootcamp
+ *  - the club (if a club enrollment) is published
+ *  - the school (if a school enrollment) is published
+ */
 export async function getCoachRoster(): Promise<CoachPlayer[]> {
   const coach = await requireCoach()
   const rows = await db
@@ -73,11 +79,22 @@ export async function getCoachRoster(): Promise<CoachPlayer[]> {
       consentMedia: enrollments.consentMedia,
     })
     .from(enrollments)
+    // Join packages to check published status
+    .innerJoin(packages, and(eq(enrollments.packageName, packages.name), eq(packages.published, true)))
+    // Left-join clubs — only filter by published if the enrollment has a club name that matches
+    .leftJoin(clubs, eq(enrollments.club, clubs.name))
+    // Left-join schools — only filter by published if the enrollment has a school name
+    .leftJoin(schools, eq(enrollments.schoolName, schools.name))
     .where(
       and(
         eq(enrollments.coachId, coach.id),
-        sql`${enrollments.status} != 'cancelled'`,
-        sql`${enrollments.packageName} != 'Bootcamp'`,
+        ne(enrollments.status, "cancelled"),
+        // Exclude Bootcamp (retired once-off package)
+        ne(enrollments.packageName, "Bootcamp"),
+        // If a club row was found, it must be published; if no club row, allow through
+        sql`(${clubs.id} IS NULL OR ${clubs.published} = true)`,
+        // If a school row was found, it must be published; if no school row, allow through
+        sql`(${schools.id} IS NULL OR ${schools.published} = true)`,
       ),
     )
     .orderBy(enrollments.slotWeekday, enrollments.slotHour, enrollments.childName)
@@ -129,7 +146,7 @@ export type CoachDashboard = {
   schoolCount: number
   todaySessions: CoachSession[]
   weekSessionCount: number
-  pendingEvaluations: number
+  evalEnabled: boolean
 }
 
 export async function getCoachDashboard(): Promise<CoachDashboard> {
@@ -138,20 +155,13 @@ export async function getCoachDashboard(): Promise<CoachDashboard> {
   const roster = sessions.flatMap((s) => s.players)
   const today = new Date().getDay()
 
-  // Use junction tables for accurate club/school counts (not derived from enrollments)
-  const [clubRows, schoolRows] = await Promise.all([
+  // Use junction tables for accurate club/school counts
+  const [clubRows, schoolRows, coachRow] = await Promise.all([
     db.select({ id: coachClubs.clubId }).from(coachClubs).where(eq(coachClubs.coachId, coach.id)),
     db.select({ id: coachSchools.schoolId }).from(coachSchools).where(eq(coachSchools.coachId, coach.id)),
+    db.select({ evalEnabled: coaches.evalEnabled }).from(coaches).where(eq(coaches.id, coach.id)),
   ])
   const todaySessions = sessions.filter((s) => s.weekday === today)
-
-  // Count players with no evaluation yet
-  const evaluated = await db
-    .select({ enrollmentId: playerEvaluations.enrollmentId })
-    .from(playerEvaluations)
-    .where(eq(playerEvaluations.coachId, coach.id))
-  const evaluatedSet = new Set(evaluated.map((e) => e.enrollmentId))
-  const pendingEvaluations = roster.filter((p) => !evaluatedSet.has(p.enrollmentId)).length
 
   return {
     coachName: coach.name,
@@ -160,7 +170,7 @@ export async function getCoachDashboard(): Promise<CoachDashboard> {
     schoolCount: schoolRows.length,
     todaySessions,
     weekSessionCount: sessions.length,
-    pendingEvaluations,
+    evalEnabled: coachRow[0]?.evalEnabled ?? false,
   }
 }
 

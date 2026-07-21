@@ -271,6 +271,7 @@ export const coaches = pgTable("coaches", {
   emergencyContactPhone: text("emergencyContactPhone").notNull().default(""),
   passwordHash: text("passwordHash"),
   accountStatus: text("accountStatus").notNull().default("active"),
+  evalEnabled: boolean("evalEnabled").notNull().default(false),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
   updatedAt: timestamp("updatedAt").notNull().defaultNow(),
 })

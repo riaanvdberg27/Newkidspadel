@@ -10,11 +10,13 @@ export function AttendanceRow({
   sessionDate,
   initialStatus,
   onEvaluate,
+  evalEnabled,
 }: {
   player: CoachPlayer
   sessionDate: string
   initialStatus?: string
   onEvaluate: (p: CoachPlayer) => void
+  evalEnabled?: boolean
 }) {
   const [status, setStatus] = useState(initialStatus ?? "")
   const [pending, startTransition] = useTransition()
@@ -54,12 +56,14 @@ export function AttendanceRow({
             {s.label}
           </button>
         ))}
-        <button
-          onClick={() => onEvaluate(player)}
-          className="ml-1 rounded-full border border-lime bg-lime/10 px-2.5 py-1 text-xs font-semibold text-lime-700 hover:bg-lime/20"
-        >
-          Evaluate
-        </button>
+        {evalEnabled && (
+          <button
+            onClick={() => onEvaluate(player)}
+            className="ml-1 rounded-full border border-lime bg-lime/10 px-2.5 py-1 text-xs font-semibold text-lime-700 hover:bg-lime/20"
+          >
+            Evaluate
+          </button>
+        )}
       </div>
     </div>
   )
