@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
 import { db } from "@/lib/db"
-import { enrollments, sessionAttendance, playerEvaluations, coaches, packages } from "@/lib/db/schema"
+import { enrollments, sessionAttendance, playerEvaluations, coaches, coachClubs, coachSchools } from "@/lib/db/schema"
 import { and, eq, sql, desc } from "drizzle-orm"
 import {
   validateCoachCredentials,
@@ -73,15 +73,10 @@ export async function getCoachRoster(): Promise<CoachPlayer[]> {
       consentMedia: enrollments.consentMedia,
     })
     .from(enrollments)
-    .leftJoin(packages, eq(enrollments.packageName, packages.name))
     .where(
       and(
         eq(enrollments.coachId, coach.id),
         sql`${enrollments.status} != 'cancelled'`,
-        // Only show enrollments whose package exists and is currently published.
-        // Bootcamp has no row in the packages table (left join gives NULL) so it
-        // is excluded here. Beginner / Advanced are published = true so they pass.
-        eq(packages.published, true),
       ),
     )
     .orderBy(enrollments.slotWeekday, enrollments.slotHour, enrollments.childName)
@@ -140,9 +135,13 @@ export async function getCoachDashboard(): Promise<CoachDashboard> {
   const coach = await requireCoach()
   const sessions = await getCoachSessions()
   const roster = sessions.flatMap((s) => s.players)
-  const clubs = new Set(roster.filter((p) => !p.schoolName).map((p) => p.club))
-  const schools = new Set(roster.filter((p) => p.schoolName).map((p) => p.schoolName))
   const today = new Date().getDay()
+
+  // Use junction tables for accurate club/school counts (not derived from enrollments)
+  const [clubRows, schoolRows] = await Promise.all([
+    db.select({ id: coachClubs.clubId }).from(coachClubs).where(eq(coachClubs.coachId, coach.id)),
+    db.select({ id: coachSchools.schoolId }).from(coachSchools).where(eq(coachSchools.coachId, coach.id)),
+  ])
   const todaySessions = sessions.filter((s) => s.weekday === today)
 
   // Count players with no evaluation yet
@@ -156,8 +155,8 @@ export async function getCoachDashboard(): Promise<CoachDashboard> {
   return {
     coachName: coach.name,
     totalPlayers: roster.length,
-    clubCount: clubs.size,
-    schoolCount: schools.size,
+    clubCount: clubRows.length,
+    schoolCount: schoolRows.length,
     todaySessions,
     weekSessionCount: sessions.length,
     pendingEvaluations,
