@@ -41,12 +41,26 @@ export function PackageSlotPicker({
   // For Advanced Package, render the 2-slot picker
   const isAdvanced = packageName === "Advanced Development Package"
   if (isAdvanced) {
+    if (loading) {
+      return (
+        <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" /> Loading available times…
+        </div>
+      )
+    }
+
+    const offered = (slots ?? []).filter((s) => s.capacity > 0)
+    if (offered.length === 0) {
+      return (
+        <p className="rounded-md border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
+          No time slots have been set up for this package yet. Please contact us.
+        </p>
+      )
+    }
+
     return (
       <AdvancedSlotPicker
-        packageId={packageId}
-        packageName={packageName}
-        ageGroup={ageGroup}
-        clubId={clubId}
+        slots={offered}
         selected={
           (selected && "slot1" in selected)
             ? (selected as SelectedAdvancedSlots)

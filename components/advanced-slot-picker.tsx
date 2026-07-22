@@ -1,8 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { Loader2, AlertCircle } from "lucide-react"
-import { getPublicPackageSlotAvailability } from "@/app/actions/packages"
+import { AlertCircle } from "lucide-react"
 import { formatHour, formatEndHour, WEEKDAYS } from "@/lib/slots"
 import type { CustomSlotWithAvailability } from "@/app/actions/packages"
 
@@ -12,38 +10,14 @@ export type SelectedAdvancedSlots = {
 }
 
 export function AdvancedSlotPicker({
-  packageId,
-  packageName,
-  ageGroup,
-  clubId,
+  slots,
   selected,
   onSelect,
 }: {
-  packageId: number
-  packageName: string
-  ageGroup: string
-  clubId?: number
+  slots: CustomSlotWithAvailability[]
   selected: SelectedAdvancedSlots
   onSelect: (slots: SelectedAdvancedSlots) => void
 }) {
-  const [slots, setSlots] = useState<CustomSlotWithAvailability[] | null>(null)
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    let active = true
-    setLoading(true)
-    getPublicPackageSlotAvailability(packageId, packageName, ageGroup, clubId)
-      .then((data) => {
-        if (active) setSlots(data)
-      })
-      .finally(() => {
-        if (active) setLoading(false)
-      })
-    return () => {
-      active = false
-    }
-  }, [packageId, packageName, ageGroup, clubId])
-
   const handleSlot1Click = (weekday: number, hour: number) => {
     // If slot2 is on the same weekday, clear it
     if (selected.slot2?.weekday === weekday) {
@@ -61,26 +35,8 @@ export function AdvancedSlotPicker({
     onSelect({ ...selected, slot2: { weekday, hour } })
   }
 
-  if (loading) {
-    return (
-      <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
-        <Loader2 className="h-4 w-4 animate-spin" /> Loading available times…
-      </div>
-    )
-  }
-
-  const offered = (slots ?? []).filter((s) => s.capacity > 0)
-
-  if (offered.length === 0) {
-    return (
-      <p className="rounded-md border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
-        No time slots have been set up for this package yet. Please contact us.
-      </p>
-    )
-  }
-
   const byWeekday = new Map<number, CustomSlotWithAvailability[]>()
-  for (const s of offered) {
+  for (const s of slots) {
     if (!byWeekday.has(s.weekday)) byWeekday.set(s.weekday, [])
     byWeekday.get(s.weekday)!.push(s)
   }
