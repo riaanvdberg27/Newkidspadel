@@ -510,7 +510,12 @@ export function OnboardingWizard({ clubs, packages, schools }: { clubs: Club[]; 
                     <button
                       key={c.id}
                       type="button"
-                      onClick={() => { setClubId(c.id); setSlot(null); }}
+                      onClick={() => {
+                        setClubId(c.id)
+                        // Reset slot based on package type
+                        const isAdvanced = selectedPackage?.name === "Advanced Development Package"
+                        setSlot(isAdvanced ? { slot1: null, slot2: null } : null)
+                      }}
                       className={`w-full rounded-card border p-4 text-left transition-colors ${
                         clubId === c.id ? "border-lime bg-lime/10" : "border-border bg-card hover:border-lime/50"
                       }`}
@@ -520,10 +525,14 @@ export function OnboardingWizard({ clubs, packages, schools }: { clubs: Club[]; 
                     </button>
                   ))}
                 </div>
-                {clubId && selectedPackage?.slotType === "custom" ? (
+                {clubId && (selectedPackage?.slotType === "custom" || selectedPackage?.name === "Advanced Development Package") ? (
                   <div className="mt-6">
                     <p className="block text-sm font-semibold text-navy">Available Time Slots</p>
-                    <p className="mb-3 text-xs text-muted-foreground">This package runs at fixed times. Pick a slot below.</p>
+                    <p className="mb-3 text-xs text-muted-foreground">
+                      {selectedPackage?.name === "Advanced Development Package"
+                        ? "Select two coaching sessions on different days (2 sessions per week, 8 sessions per month)."
+                        : "This package runs at fixed times. Pick a slot below."}
+                    </p>
                     <PackageSlotPicker packageId={selectedPackage.id} packageName={selectedPackage.name} ageGroup={ageGroup ?? "4-8"} clubId={clubId ?? undefined} selected={slot} onSelect={setSlot} />
                   </div>
                 ) : clubId && ageGroup ? (
