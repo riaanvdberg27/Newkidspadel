@@ -24,6 +24,7 @@ import type { CoachRow } from "@/app/actions/coaches"
 import type { PublicPackage } from "@/app/actions/packages"
 import type { Club } from "@/lib/db/schema"
 import { formatSlot } from "@/lib/slots"
+import { formatBothSlots, formatBothSlotsCompact } from "@/lib/slot-formatter"
 import { PackageSlotPicker } from "@/components/package-slot-picker"
 import type { SelectedSlot } from "@/components/slot-picker"
 

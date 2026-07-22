@@ -43,6 +43,10 @@ export type EnrollmentInput = {
   slotWeekday: number | null
   slotHour: number | null
   slotAgeGroup: string | null
+  // Second time slot for Advanced Package
+  slotWeekday2?: number | null
+  slotHour2?: number | null
+  slotAgeGroup2?: string | null
   // Debit order — only required for monthly packages
   debitAccountHolder?: string
   debitBankName?: string
@@ -101,6 +105,9 @@ export async function createEnrollment(input: EnrollmentInput) {
       slotWeekday: input.slotWeekday ?? undefined,
       slotHour: input.slotHour != null ? String(input.slotHour) : undefined,
       slotAgeGroup: input.slotAgeGroup ?? undefined,
+      slotWeekday2: input.slotWeekday2 ?? undefined,
+      slotHour2: input.slotHour2 != null ? String(input.slotHour2) : undefined,
+      slotAgeGroup2: input.slotAgeGroup2 ?? undefined,
       // Debit order fields intentionally omitted — Netcash handles payment collection
       emergencyContactName: input.emergencyContactName,
       emergencyContactPhone: input.emergencyContactPhone,
@@ -148,8 +155,17 @@ export async function createEnrollment(input: EnrollmentInput) {
     } catch {}
   }
 
-  const slotLabel =
-    input.slotWeekday != null && input.slotHour != null ? formatSlot(input.slotWeekday, input.slotHour) : "To be confirmed"
+  // For Advanced Package, include both slots in label
+  let slotLabel = "To be confirmed"
+  if (input.slotWeekday != null && input.slotHour != null) {
+    const slot1 = formatSlot(input.slotWeekday, input.slotHour)
+    if (input.slotWeekday2 != null && input.slotHour2 != null) {
+      const slot2 = formatSlot(input.slotWeekday2, input.slotHour2)
+      slotLabel = `${slot1} & ${slot2}`
+    } else {
+      slotLabel = slot1
+    }
+  }
 
   // Generate the signed contract PDF and store it in Blob.
   let contractPdf: Uint8Array | null = null
