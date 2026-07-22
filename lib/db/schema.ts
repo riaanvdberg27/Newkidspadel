@@ -168,6 +168,10 @@ export const enrollments = pgTable("enrollments", {
   slotWeekday: integer("slotWeekday"),
   slotHour: numeric("slotHour", { precision: 4, scale: 1 }),
   slotAgeGroup: text("slotAgeGroup"),
+  // Second time slot for Advanced Package (allows 2 sessions per week)
+  slotWeekday2: integer("slotWeekday2"),
+  slotHour2: numeric("slotHour2", { precision: 4, scale: 1 }),
+  slotAgeGroup2: text("slotAgeGroup2"),
   // Debit order
   debitAccountHolder: text("debitAccountHolder"),
   debitBankName: text("debitBankName"),

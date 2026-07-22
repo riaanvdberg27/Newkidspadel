@@ -10,7 +10,8 @@ import { formatSlot } from "@/lib/slots"
 import type { Club, School } from "@/lib/db/schema"
 import type { PublicPackage } from "@/app/actions/packages"
 import { SlotPicker, type SelectedSlot } from "@/components/slot-picker"
-import { PackageSlotPicker } from "@/components/package-slot-picker"
+import { PackageSlotPicker, type SingleOrAdvancedSlots } from "@/components/package-slot-picker"
+import { type SelectedAdvancedSlots } from "@/components/advanced-slot-picker"
 import { DobPicker } from "@/components/dob-picker"
 import type { AgeGroup } from "@/lib/db/schema"
 import { SignaturePad } from "@/components/signature-pad"
@@ -72,7 +73,7 @@ export function OnboardingWizard({ clubs, packages, schools }: { clubs: Club[]; 
   )
   const [clubId, setClubId] = useState<number | null>(null)
   const [schoolId, setSchoolId] = useState<number | null>(null)
-  const [slot, setSlot] = useState<SelectedSlot | null>(null)
+  const [slot, setSlot] = useState<SingleOrAdvancedSlots>(null)
   const [ageGroup, setAgeGroup] = useState<AgeGroup | null>(null)
   const [parent, setParent] = useState({ firstName: "", lastName: "", email: "", mobile: "", password: "" })
   const [emergency, setEmergency] = useState({ name: "", phone: "" })
@@ -186,6 +187,12 @@ export function OnboardingWizard({ clubs, packages, schools }: { clubs: Club[]; 
       const enrollmentIds: number[] = []
       for (const child of children) {
         const childFullName = `${child.firstName} ${child.lastName}`.trim()
+        
+        // Extract single vs. advanced slots
+        const isAdvancedSlots = slot && "slot1" in slot
+        const slot1 = isAdvancedSlots ? (slot as SelectedAdvancedSlots).slot1 : (slot as SelectedSlot | null)
+        const slot2 = isAdvancedSlots ? (slot as SelectedAdvancedSlots).slot2 : null
+        
         const { referenceNumber, enrollmentId } = await createEnrollment({
           parentName: `${parent.firstName} ${parent.lastName}`.trim(),
           parentEmail: cleanEmail,
@@ -199,9 +206,12 @@ export function OnboardingWizard({ clubs, packages, schools }: { clubs: Club[]; 
           clubId: isSchoolPackage ? null : clubId,
           schoolId: isSchoolPackage ? schoolId : null,
           schoolName: isSchoolPackage ? (selectedSchool?.name ?? null) : null,
-          slotWeekday: isSchoolPackage ? null : (slot?.weekday ?? null),
-          slotHour: isSchoolPackage ? null : (slot?.hour ?? null),
+          slotWeekday: isSchoolPackage ? null : (slot1?.weekday ?? null),
+          slotHour: isSchoolPackage ? null : (slot1?.hour ?? null),
           slotAgeGroup: ageGroup,
+          slotWeekday2: isSchoolPackage ? null : (slot2?.weekday ?? null),
+          slotHour2: isSchoolPackage ? null : (slot2?.hour ?? null),
+          slotAgeGroup2: ageGroup,
 
           emergencyContactName: emergency.name,
           emergencyContactPhone: emergency.phone,
@@ -523,7 +533,14 @@ export function OnboardingWizard({ clubs, packages, schools }: { clubs: Club[]; 
                     <SlotPicker clubId={clubId} ageGroup={ageGroup} selected={slot} onSelect={setSlot} />
                   </div>
                 ) : null}
-                <StepNav onBack={() => setStep(1)} onNext={() => setStep(3)} nextDisabled={!clubId || !slot} />
+                {(() => {
+                  // Check if Advanced Package requires both slots
+                  const isAdvanced = selectedPackage?.name === "Advanced Development Package"
+                  const isSlotValid = isAdvanced
+                    ? slot && "slot1" in slot && slot.slot1 && slot.slot2 // Both slots required
+                    : !!(clubId && slot) // Single slot required
+                  return <StepNav onBack={() => setStep(1)} onNext={() => setStep(3)} nextDisabled={!isSlotValid} />
+                })()}
               </>
             )}
           </div>
