@@ -536,9 +536,28 @@ export function OnboardingWizard({ clubs, packages, schools }: { clubs: Club[]; 
                 {(() => {
                   // Check if Advanced Package requires both slots
                   const isAdvanced = selectedPackage?.name === "Advanced Development Package"
-                  const isSlotValid = isAdvanced
-                    ? slot && "slot1" in slot && slot.slot1 && slot.slot2 // Both slots required
-                    : !!(clubId && slot) // Single slot required
+                  let isSlotValid = false
+                  
+                  if (isAdvanced) {
+                    // For Advanced: need both slot1 and slot2 to be non-null objects with weekday and hour
+                    const advSlot = slot as SelectedAdvancedSlots | null
+                    isSlotValid = !!(
+                      advSlot &&
+                      "slot1" in advSlot &&
+                      advSlot.slot1 &&
+                      advSlot.slot1.weekday != null &&
+                      advSlot.slot1.hour != null &&
+                      advSlot.slot2 &&
+                      advSlot.slot2.weekday != null &&
+                      advSlot.slot2.hour != null &&
+                      advSlot.slot1.weekday !== advSlot.slot2.weekday // Different days
+                    )
+                  } else {
+                    // For other packages: need club and single slot
+                    const singleSlot = slot as SelectedSlot | null
+                    isSlotValid = !!(clubId && singleSlot && singleSlot.weekday != null && singleSlot.hour != null)
+                  }
+                  
                   return <StepNav onBack={() => setStep(1)} onNext={() => setStep(3)} nextDisabled={!isSlotValid} />
                 })()}
               </>
