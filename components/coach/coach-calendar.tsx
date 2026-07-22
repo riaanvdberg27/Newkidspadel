@@ -11,7 +11,7 @@ function todayISO() {
   return new Date().toISOString().slice(0, 10)
 }
 
-export function CoachCalendar({ sessions, initialSelectedKey }: { sessions: CoachSession[]; initialSelectedKey?: string }) {
+export function CoachCalendar({ sessions, initialSelectedKey, evalEnabled }: { sessions: CoachSession[]; initialSelectedKey?: string; evalEnabled?: boolean }) {
   const [date, setDate] = useState(todayISO())
   const [expanded, setExpanded] = useState<string | null>(initialSelectedKey ?? null)
   const [attendance, setAttendance] = useState<Record<number, { status: string; note: string }>>({})
@@ -121,6 +121,7 @@ export function CoachCalendar({ sessions, initialSelectedKey }: { sessions: Coac
                                 sessionDate={date}
                                 initialStatus={attendance[p.enrollmentId]?.status}
                                 onEvaluate={setEvaluating}
+                                evalEnabled={evalEnabled ?? false}
                               />
                             ))
                           )}

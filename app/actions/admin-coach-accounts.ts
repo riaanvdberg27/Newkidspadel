@@ -21,6 +21,7 @@ export type CoachAccountRow = {
   emergencyContactName: string
   emergencyContactPhone: string
   accountStatus: string
+  evalEnabled: boolean
   hasPassword: boolean
   schoolIds: number[]
   clubIds: number[]
@@ -72,6 +73,7 @@ export async function getCoachAccounts(): Promise<CoachAccountRow[]> {
     emergencyContactPhone: r.emergencyContactPhone,
     accountStatus: r.accountStatus,
     hasPassword: Boolean(r.passwordHash),
+    evalEnabled: r.evalEnabled,
     schoolIds: schoolMap.get(r.id) ?? [],
     clubIds: clubMap.get(r.id) ?? [],
     playerCount: countMap.get(r.id) ?? 0,
@@ -88,6 +90,7 @@ export async function saveCoachAccount(input: {
   emergencyContactName: string
   emergencyContactPhone: string
   accountStatus: string
+  evalEnabled: boolean
   schoolIds: number[]
   clubIds: number[]
 }): Promise<{ ok: boolean; error?: string; welcomeEmailSent?: boolean }> {

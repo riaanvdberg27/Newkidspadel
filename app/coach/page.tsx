@@ -32,17 +32,6 @@ export default async function CoachDashboardPage() {
         <StatCard label="Weekly Sessions" value={data.weekSessionCount} />
       </div>
 
-      {data.pendingEvaluations > 0 && (
-        <div className="mt-4 flex items-center justify-between rounded-card border border-amber-200 bg-amber-50 px-4 py-3">
-          <p className="text-sm font-semibold text-amber-800">
-            {data.pendingEvaluations} player{data.pendingEvaluations === 1 ? "" : "s"} still need a first evaluation.
-          </p>
-          <Link href="/coach/players" className="text-sm font-bold text-amber-900 underline">
-            Review
-          </Link>
-        </div>
-      )}
-
       <section className="mt-8">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-lg font-bold text-navy">Today&apos;s Sessions</h2>
