@@ -41,6 +41,18 @@ export async function GET(request: NextRequest) {
     })
 
     if (!upstream.ok) {
+      // If Blob fetch fails (403, 401, etc.), try without auth as fallback for public blobs
+      if (upstream.status === 403 || upstream.status === 401) {
+        console.warn("[blob proxy] auth failed for", blobUrl.substring(0, 60), "trying public fetch")
+        const publicFetch = await fetch(blobUrl)
+        if (publicFetch.ok) {
+          const contentType = publicFetch.headers.get("content-type") ?? "application/octet-stream"
+          const cacheControl = "public, max-age=31536000, immutable"
+          return new NextResponse(publicFetch.body, {
+            headers: { "Content-Type": contentType, "Cache-Control": cacheControl },
+          })
+        }
+      }
       return new NextResponse("Blob fetch failed", { status: upstream.status })
     }
 
