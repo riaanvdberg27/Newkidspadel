@@ -4,7 +4,7 @@ import { useState, useTransition, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { CalendarClock, Check } from "lucide-react"
 import { SlotPicker, type SelectedSlot } from "@/components/slot-picker"
-import { PackageSlotPicker } from "@/components/package-slot-picker"
+import { PackageSlotPicker, type SingleOrAdvancedSlots } from "@/components/package-slot-picker"
 import { formatSlot } from "@/lib/slots"
 import { updateEnrollmentSlot } from "@/app/actions/enrollment"
 import { getPackageByName } from "@/app/actions/packages"
@@ -42,6 +42,16 @@ export function ChangeSlot({
   >(null)
 
   const current = weekday != null && hour != null ? formatSlot(weekday, hour) : "Not set"
+
+  // Wrapper to handle both single and advanced slots - just use the first slot
+  const handleSlotChange = (slot: SingleOrAdvancedSlots) => {
+    if (slot === null) {
+      setSlot(null)
+      return
+    }
+    const singleSlot = ("slot1" in slot) ? slot.slot1 : slot
+    setSlot(singleSlot ?? null)
+  }
 
   useEffect(() => {
     if (!editing || pkgInfo !== null) return
@@ -116,11 +126,11 @@ export function ChangeSlot({
               ageGroup={ageGroup}
               clubId={clubId ?? undefined}
               selected={slot}
-              onSelect={setSlot}
+              onSelect={handleSlotChange}
             />
           ) : ageGroup ? (
             // Standard package — show live venue availability
-            <SlotPicker clubId={clubId} ageGroup={ageGroup} selected={slot} onSelect={setSlot} />
+            <SlotPicker clubId={clubId} ageGroup={ageGroup} selected={slot} onSelect={(s) => setSlot(s)} />
           ) : (
             <p className="text-sm text-muted-foreground">Age group not set — cannot filter slots.</p>
           )}

@@ -25,7 +25,7 @@ import type { PublicPackage } from "@/app/actions/packages"
 import type { Club } from "@/lib/db/schema"
 import { formatSlot } from "@/lib/slots"
 import { formatBothSlots, formatBothSlotsCompact } from "@/lib/slot-formatter"
-import { PackageSlotPicker } from "@/components/package-slot-picker"
+import { PackageSlotPicker, type SingleOrAdvancedSlots } from "@/components/package-slot-picker"
 import type { SelectedSlot } from "@/components/slot-picker"
 
 /** Compact slot label: "Monday at 13:30 – 14:30" → "Mon 13:30" */
@@ -1378,9 +1378,21 @@ function ProgrammeFields({
       ? { weekday: Number(slotWeekday), hour: Number(slotHour) }
       : null
 
-  function handleSlotSelect(slot: SelectedSlot) {
-    setSlotWeekday(String(slot.weekday))
-    setSlotHour(String(slot.hour))
+  function handleSlotSelect(slot: SingleOrAdvancedSlots) {
+    // Handle both single slot and advanced (dual) slots - use the first slot
+    if (slot === null) {
+      setSlotWeekday("")
+      setSlotHour("")
+      return
+    }
+    const singleSlot = ("slot1" in slot) ? slot.slot1 : slot
+    if (singleSlot) {
+      setSlotWeekday(String(singleSlot.weekday))
+      setSlotHour(String(singleSlot.hour))
+    } else {
+      setSlotWeekday("")
+      setSlotHour("")
+    }
   }
 
   return (
