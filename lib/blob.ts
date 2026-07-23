@@ -65,6 +65,8 @@ export function blobImage(
   quality: number = GRID_QUALITY,
 ): string | null {
   if (!pathname) return null
+  // Local/public paths don't need blob proxy
+  if (pathname.startsWith("/")) return pathname
   const w = snapWidth(width)
   // Sandbox (no Vercel optimizer): ask the proxy to resize with sharp — which
   // works locally — so preview downloads small images instead of the multi-MB
