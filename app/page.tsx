@@ -5,6 +5,7 @@ import { PackagesSection } from "@/components/packages-section"
 import { SkillsSection } from "@/components/skills-section"
 import { OfferingsSection } from "@/components/offerings-section"
 import { ClubsSection } from "@/components/clubs-section"
+import { CoachingServicesSection } from "@/components/coaching-services-section"
 import { HomeFaqSection } from "@/components/home-faq-section"
 import { getPublishedPackages } from "@/app/actions/packages"
 import { getPublishedCoaches } from "@/app/actions/coaches"
@@ -218,6 +219,7 @@ export default async function HomePage() {
       <SkillsSection />
       <OfferingsSection />
       <ClubsSection />
+      <CoachingServicesSection />
       <HomeFaqSection />
     </main>
   )
