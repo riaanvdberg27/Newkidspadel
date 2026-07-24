@@ -294,14 +294,28 @@ export async function updatePackage(id: number, input: PackageInput) {
   await requireAdmin()
   const values = clean(input)
   if (!values.slug || !values.name) throw new Error("Slug and name are required.")
+  
+  // Verify package exists before updating
+  const existing = await db.select().from(packages).where(eq(packages.id, id)).limit(1)
+  if (!existing[0]) throw new Error("Package not found")
+  
+  // Update ONLY the package fields, preserving unmodified data
   await db.update(packages).set({ ...values, updatedAt: new Date() }).where(eq(packages.id, id))
-  // Replace all custom slots for this package
-  await db.delete(packageSlots).where(eq(packageSlots.packageId, id))
-  if (values.slotType === "custom" && input.customSlots?.length) {
+  
+  // Handle custom slots: ONLY update if explicitly provided
+  // This preserves existing slots if none are provided in the update
+  if (values.slotType === "custom" && input.customSlots && input.customSlots.length > 0) {
+    // Delete slots only if new slots are being explicitly provided
+    await db.delete(packageSlots).where(eq(packageSlots.packageId, id))
     await db.insert(packageSlots).values(
       input.customSlots.map((s) => ({ packageId: id, clubId: s.clubId ?? 0, weekday: s.weekday, hour: String(s.hour), capacity: s.capacity, ageGroup: s.ageGroup })),
     )
   }
+  // If slotType changed FROM custom to non-custom, clean up slots
+  else if (values.slotType !== "custom" && existing[0].slotType === "custom") {
+    await db.delete(packageSlots).where(eq(packageSlots.packageId, id))
+  }
+  
   await syncPackageClubs(id, input.clubIds ?? [])
   revalidatePaths()
 }

@@ -109,27 +109,55 @@ export async function updateSignup(
 ): Promise<{ ok: boolean; error?: string }> {
   await requireAdmin()
   try {
+    // Validate ID
+    if (!Number.isInteger(id) || id <= 0) {
+      return { ok: false, error: "Invalid enrollment ID" }
+    }
+
+    // Load existing enrollment to preserve unmodified fields
+    const existing = await loadEnrollment(id)
+
+    // Build update object - ONLY include fields that are being explicitly changed
+    const updateObj: any = {
+      parentName: input.parentName.trim(),
+      parentEmail: input.parentEmail.trim(),
+      parentMobile: input.parentMobile.trim(),
+      childName: input.childName.trim(),
+      childDob: input.childDob,
+      childAge: input.childAge,
+      packageName: input.packageName.trim(),
+      club: input.club.trim(),
+      coachName: input.coachName.trim() || null,
+      status: input.status,
+      updatedAt: new Date(),
+    }
+
+    // Only update slot if explicitly provided (not null/undefined)
+    if (input.slotWeekday !== undefined && input.slotWeekday !== null) {
+      updateObj.slotWeekday = input.slotWeekday
+    }
+    if (input.slotHour !== undefined && input.slotHour !== null) {
+      updateObj.slotHour = String(input.slotHour)
+    }
+
+    // Only update emergency contact if provided
+    if (input.emergencyContactName !== undefined && input.emergencyContactName.trim()) {
+      updateObj.emergencyContactName = input.emergencyContactName.trim()
+    }
+    if (input.emergencyContactPhone !== undefined && input.emergencyContactPhone.trim()) {
+      updateObj.emergencyContactPhone = input.emergencyContactPhone.trim()
+    }
+
+    // Only update payment status if explicitly provided
+    if (input.paymentStatus !== undefined) {
+      updateObj.paymentStatus = input.paymentStatus
+    }
+
     await db
       .update(enrollments)
-      .set({
-        parentName: input.parentName.trim(),
-        parentEmail: input.parentEmail.trim(),
-        parentMobile: input.parentMobile.trim(),
-        childName: input.childName.trim(),
-        childDob: input.childDob,
-        childAge: input.childAge,
-        packageName: input.packageName.trim(),
-        club: input.club.trim(),
-        coachName: input.coachName.trim() || null,
-        slotWeekday: input.slotWeekday ?? undefined,
-        slotHour: input.slotHour != null ? String(input.slotHour) : undefined,
-        emergencyContactName: input.emergencyContactName.trim() || undefined,
-        emergencyContactPhone: input.emergencyContactPhone.trim() || undefined,
-        status: input.status,
-        ...(input.paymentStatus !== undefined && { paymentStatus: input.paymentStatus }),
-        updatedAt: new Date(),
-      })
+      .set(updateObj)
       .where(eq(enrollments.id, id))
+    
     revalidatePath("/admin")
     return { ok: true }
   } catch (err) {
