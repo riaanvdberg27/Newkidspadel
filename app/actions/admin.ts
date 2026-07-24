@@ -75,20 +75,33 @@ export async function createClub(input: ClubInput) {
 
 export async function updateClub(id: number, input: ClubInput) {
   await requireAdmin()
+  
+  // Validate ID
+  if (!Number.isInteger(id) || id <= 0) {
+    throw new Error("Invalid club ID")
+  }
+  
+  // Get existing club to preserve unmodified fields
+  const existing = await db.select().from(clubs).where(eq(clubs.id, id)).limit(1)
+  if (!existing[0]) {
+    throw new Error("Club not found")
+  }
+  
+  // Update ONLY the fields being changed, preserve everything else
   await db
     .update(clubs)
     .set({
       name: input.name,
       location: input.location,
-      description: input.description || null,
+      description: input.description || existing[0].description,
       address: input.address,
       phone: input.phone,
       hours: input.hours,
       features: input.features,
-      image: input.image || null,
-      imageUrl: input.imageUrl || null,
-      contactPerson: input.contactPerson || null,
-      contactEmail: input.contactEmail || null,
+      image: input.image !== null ? input.image : existing[0].image,
+      imageUrl: input.imageUrl !== null ? input.imageUrl : existing[0].imageUrl,
+      contactPerson: input.contactPerson || existing[0].contactPerson,
+      contactEmail: input.contactEmail || existing[0].contactEmail,
       published: input.published,
       updatedAt: new Date(),
     })
