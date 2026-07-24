@@ -539,7 +539,12 @@ export function OnboardingWizard({ clubs, packages, schools }: { clubs: Club[]; 
                   <div className="mt-6">
                     <p className="block text-sm font-semibold text-navy">Available Time Slots</p>
                     <p className="mb-3 text-xs text-muted-foreground">Only times with open places for ages {ageGroup} are shown.</p>
-                    <SlotPicker clubId={clubId} ageGroup={ageGroup} selected={slot} onSelect={setSlot} />
+                    <SlotPicker 
+                      clubId={clubId} 
+                      ageGroup={ageGroup} 
+                      selected={slot as SelectedSlot | null} 
+                      onSelect={(s) => setSlot(s)} 
+                    />
                   </div>
                 ) : null}
                 {(() => {
@@ -681,7 +686,18 @@ export function OnboardingWizard({ clubs, packages, schools }: { clubs: Club[]; 
               ) : (
                 <>
                   <Row label="Club" value={selectedClub?.name ?? ""} />
-                  <Row label="Time Slot" value={slot ? formatSlot(slot.weekday, slot.hour) : ""} />
+                  <Row 
+                    label="Time Slot" 
+                    value={
+                      slot 
+                        ? ("slot1" in slot && slot.slot1 && slot.slot2)
+                          ? `${formatSlot(slot.slot1.weekday, slot.slot1.hour)} & ${formatSlot(slot.slot2.weekday, slot.slot2.hour)}`
+                          : (slot as SelectedSlot)?.weekday != null
+                          ? formatSlot((slot as SelectedSlot).weekday, (slot as SelectedSlot).hour)
+                          : ""
+                        : ""
+                    } 
+                  />
                 </>
               )}
 

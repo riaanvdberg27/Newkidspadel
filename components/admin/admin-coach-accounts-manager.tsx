@@ -76,6 +76,7 @@ function AccountCard({ coach, allSchools, allClubs }: { coach: CoachAccountRow; 
   const [ecName, setEcName] = useState(coach.emergencyContactName)
   const [ecPhone, setEcPhone] = useState(coach.emergencyContactPhone)
   const [accountStatus, setAccountStatus] = useState(coach.accountStatus)
+  const [evalEnabled, setEvalEnabled] = useState(coach.evalEnabled)
   const [schoolIds, setSchoolIds] = useState<number[]>(coach.schoolIds)
   const [clubIds, setClubIds] = useState<number[]>(coach.clubIds)
   const [hasPassword, setHasPassword] = useState(coach.hasPassword)
@@ -100,6 +101,7 @@ function AccountCard({ coach, allSchools, allClubs }: { coach: CoachAccountRow; 
         emergencyContactName: ecName,
         emergencyContactPhone: ecPhone,
         accountStatus,
+        evalEnabled,
         schoolIds,
         clubIds,
       })
