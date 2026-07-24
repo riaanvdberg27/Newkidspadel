@@ -10,11 +10,11 @@ export function formatBothSlots(
   slot2Weekday?: number | null | undefined,
   slot2Hour?: number | null | undefined
 ): string {
-  if (!slot1Weekday || slot1Hour === null) {
+  if (!slot1Weekday || slot1Hour === null || slot1Hour === undefined) {
     return "To be confirmed"
   }
 
-  const slot1Label = formatSlot(slot1Weekday, slot1Hour)
+  const slot1Label = formatSlot(slot1Weekday, slot1Hour as number)
 
   if (slot2Weekday && slot2Hour !== null && slot2Hour !== undefined) {
     const slot2Label = formatSlot(slot2Weekday, slot2Hour)
