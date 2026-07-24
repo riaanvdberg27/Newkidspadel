@@ -46,7 +46,7 @@ export function validatePartialUpdate<T extends Record<string, any>>(
  * This prevents accidentally overwriting related data when updating a subset of fields
  */
 export function safePartialUpdate<T extends Record<string, any>>(existing: T, updates: Partial<T>): T {
-  const result = { ...existing }
+  const result = { ...existing } as Record<string, any>
 
   for (const [key, value] of Object.entries(updates)) {
     // Only update if the new value is explicitly provided (not undefined)
@@ -55,7 +55,7 @@ export function safePartialUpdate<T extends Record<string, any>>(existing: T, up
     }
   }
 
-  return result
+  return result as T
 }
 
 /**
