@@ -1,167 +1,122 @@
-import type { Metadata } from "next"
+import { Header } from "@/components/header"
+import { Footer } from "@/components/footer"
+import { SkillsSection } from "@/components/sections/skills-section"
+import { WhatWeOfferSection } from "@/components/sections/what-we-offer-section"
+import { PackagesSection } from "@/components/sections/packages-section"
 import Image from "next/image"
-import Link from "next/link"
-import { SkillsSection } from "@/components/skills-section"
-import { PackagesSection } from "@/components/packages-section"
-import { BreadcrumbSchema } from "@/components/breadcrumb-schema"
-import { getPublishedPackages } from "@/app/actions/packages"
-import { getPublishedCoaches } from "@/app/actions/coaches"
-import { getSiteImageMap } from "@/app/actions/site-images"
+import { Card, CardContent } from "@/components/ui/card"
+import { Eye, Zap, Target, Users, Star, Heart } from "lucide-react"
 
-// Always render at request time — data comes from a live database.
-export const dynamic = "force-dynamic"
-
-export const metadata: Metadata = {
-  title: "About NextGen Padel Academy | Junior Padel Coaching Pretoria",
-  description:
-    "Learn about NextGen Padel Academy — our mission, our qualified coaches, and why we are Pretoria's leading junior padel coaching programme for children aged 4–17.",
-  alternates: { canonical: "https://nextgenpadel.co.za/about" },
-  openGraph: {
-    title: "About NextGen Padel Academy | Junior Padel Coaching Pretoria",
-    description:
-      "Meet the team behind Pretoria's top kids padel academy. Qualified coaches. Structured programmes. A passion for junior sport in Brooklyn, Menlo Park, Moreleta Park and across Pretoria.",
-    url: "https://nextgenpadel.co.za/about",
-  },
-}
-
-export default async function AboutPage() {
-  const [packages, coaches, siteImageMap] = await Promise.all([
-    getPublishedPackages(),
-    getPublishedCoaches(),
-    getSiteImageMap(),
-  ])
-
-  function img(key: string): string {
-    const blobUrl = siteImageMap[key]
-    return blobUrl ? `/api/blob?p=${encodeURIComponent(blobUrl)}` : `/images/${key}.png`
-  }
+export default function AboutPage() {
   return (
-    <main>
-      <BreadcrumbSchema crumbs={[{ name: "About", href: "/about" }]} />
-      {/* Hero */}
-      <section className="bg-navy px-4 py-12 text-center text-navy-foreground sm:py-16">
-        <span className="inline-block rounded-full bg-lime/20 px-4 py-1.5 text-sm font-bold text-lime mb-4">
-          Our Story
-        </span>
-        <h1 className="text-balance text-3xl font-black sm:text-5xl">
-          About NextGen Padel Academy — Pretoria&apos;s Junior Padel Coaching Programme
-        </h1>
-        <p className="mt-2 text-xl font-black text-lime">Play. Learn. Grow.</p>
-        <p className="mx-auto mt-4 max-w-2xl text-pretty text-sm leading-relaxed text-navy-foreground/80 sm:text-base">
-          Introducing young athletes across Pretoria — Brooklyn, Menlo Park, Moreleta Park, Garsfontein and surrounding suburbs — to the exciting world of padel, in a fun, safe, and encouraging environment for children aged 4–17.
-        </p>
-      </section>
-
-      {/* Mission */}
-      <section className="mx-auto max-w-5xl px-4 py-10 sm:py-16">
-        <div className="flex flex-col gap-8 sm:grid sm:grid-cols-2 sm:items-center">
-          <div className="relative aspect-[4/3] w-full overflow-hidden rounded-2xl shadow-xl">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={img("kids-playing-padel")}
-              alt="Children playing padel at NextGen Padel Academy in Pretoria"
-              className="h-full w-full object-cover"
-            />
+    <div className="min-h-screen flex flex-col">
+      <Header />
+      <main className="flex-1">
+        {/* Hero Section */}
+        <section className="bg-primary py-16">
+          <div className="container mx-auto px-4">
+            <div className="flex flex-col lg:flex-row items-center gap-8">
+              <div className="flex-1 text-center lg:text-left">
+                <h1 className="text-3xl md:text-4xl font-black text-primary-foreground mb-4">
+                  About Next Gen Padel Academy
+                </h1>
+                <p className="text-4xl md:text-5xl font-black text-secondary mb-6">
+                  Play. Learn. Grow.
+                </p>
+                <p className="text-lg text-primary-foreground/90 max-w-xl">
+                  Next Gen Padel Academy is dedicated to introducing young athletes to the exciting 
+                  world of padel. Our experienced coaches provide personalized training in a fun, 
+                  safe, and encouraging environment where children can develop both their athletic 
+                  abilities and life skills.
+                </p>
+              </div>
+              <Image
+                src="/images/mascots.png"
+                alt="Next Gen Padel Academy Mascots"
+                width={350}
+                height={350}
+                className="drop-shadow-2xl"
+              />
+            </div>
           </div>
-          <div>
-            <span className="inline-block rounded-full bg-lime/20 px-4 py-1.5 text-sm font-bold text-lime-foreground mb-4">
+        </section>
+
+        {/* Our Mission */}
+        <section className="py-16 bg-background">
+          <div className="container mx-auto px-4">
+            <h2 className="text-3xl md:text-4xl font-black text-center text-primary mb-8">
               Our Mission
-            </span>
-            <h2 className="text-2xl font-black text-navy sm:text-3xl">
-              Every Child in Pretoria Deserves Quality Sport
             </h2>
-            <div className="mt-4 space-y-3 text-sm leading-relaxed text-foreground/80 sm:text-base">
-              <p>
-                We nurture young talent across Pretoria — in Brooklyn, Menlo Park, Moreleta Park, Garsfontein, Waterkloof, Menlyn, Lynnwood, Faerie Glen and Silver Lakes — building confidence and instilling values of teamwork, discipline, and respect through padel.
+            <div className="max-w-3xl mx-auto text-center">
+              <p className="text-lg text-muted-foreground mb-6">
+                We believe every child deserves the opportunity to experience the joy of sport. 
+                Our mission is to nurture young talent, build confidence, and instill values of 
+                teamwork, discipline, and respect through the beautiful game of padel.
               </p>
-              <p>
-                Whether your child is a complete beginner or looking to advance their skills, our programmes meet them where they are and help them grow at their own pace.
+              <p className="text-lg text-muted-foreground mb-6">
+                Whether your child is a complete beginner or looking to advance their skills, 
+                our programs are designed to meet them where they are and help them grow at their 
+                own pace.
               </p>
-              <p>
-                Structured junior padel coaching, affordable monthly subscriptions, and qualified coaches — designed to grow padel participation across Pretoria and South Africa.
+              <p className="text-lg text-muted-foreground">
+                By combining structured coaching, affordable subscriptions, qualified coaching staff, and exciting inter-club competition, this initiative has the potential to significantly grow junior padel participation across South Africa.
               </p>
             </div>
-            <Link
-              href="/enrollment"
-              className="mt-6 inline-flex items-center rounded-2xl bg-lime px-6 py-3 font-black text-lime-foreground shadow-lg transition-all hover:scale-105"
-            >
-              Enrol Now
-            </Link>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* Photo row */}
-      <section className="mx-auto max-w-6xl px-4 pb-4" aria-label="Academy photos">
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <div className="relative aspect-video overflow-hidden rounded-2xl">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={img("coach-kids")}
-              alt="NextGen Padel Academy coach working with junior players in Pretoria"
-              className="h-full w-full object-cover"
-            />
-          </div>
-          <div className="relative aspect-video overflow-hidden rounded-2xl">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={img("padel-action")}
-              alt="Junior padel action during a coaching session at NextGen Padel Academy Pretoria"
-              className="h-full w-full object-cover"
-            />
-          </div>
-        </div>
-      </section>
-
-      {/* Coaches */}
-      <section className="bg-muted py-10 px-4 sm:py-16">
-        <div className="mx-auto max-w-5xl">
-          <div className="text-center mb-8">
-            <span className="inline-block rounded-full bg-lime/20 px-4 py-1.5 text-sm font-bold text-lime-foreground mb-3">
-              The Team
-            </span>
-            <h2 className="text-3xl font-black text-navy">
-              Meet Our Qualified Padel Coaches in Pretoria
+        {/* Coaches */}
+        <section className="py-16 bg-secondary">
+          <div className="container mx-auto px-4">
+            <h2 className="text-3xl md:text-4xl font-black text-center text-primary mb-12">
+              Meet Our Coaches
             </h2>
+            <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+              <Card className="border-primary/20">
+                <CardContent className="pt-6 text-center">
+                  <Image
+                    src="/images/tennis-ball.png"
+                    alt="Tennis ball"
+                    width={96}
+                    height={72}
+                    className="w-24 h-auto mx-auto mb-4 object-contain"
+                  />
+                  <h3 className="text-xl font-bold text-primary">Riaan van den Berg</h3>
+                  <p className="text-secondary font-semibold mb-2">Co-Founder & Assistant Coach</p>
+                  <p className="text-muted-foreground">
+                    Riaan co-founded Next Gen Padel Academy and supports our coaching team with 
+                    years of experience in youth sports development. His patient approach helps 
+                    children of all skill levels thrive.
+                  </p>
+                </CardContent>
+              </Card>
+              <Card className="border-primary/20">
+                <CardContent className="pt-6 text-center">
+                  <Image
+                    src="/images/tennis-ball.png"
+                    alt="Tennis ball"
+                    width={96}
+                    height={72}
+                    className="w-24 h-auto mx-auto mb-4 object-contain"
+                  />
+                  <h3 className="text-xl font-bold text-primary">Gareth Nunes</h3>
+                  <p className="text-secondary font-semibold mb-2">Co-Founder & Head Coach</p>
+                  <p className="text-muted-foreground">
+                    Gareth co-founded Next Gen Padel Academy and leads our coaching programs. 
+                    His energy and enthusiasm are infectious, specializing in making learning 
+                    fun while ensuring every child develops solid fundamental skills.
+                  </p>
+                </CardContent>
+              </Card>
+            </div>
           </div>
-          <div className="grid gap-4 sm:grid-cols-2">
-            {coaches.map((coach) => (
-              <article
-                key={coach.id}
-                className="rounded-2xl border border-border bg-card p-5 shadow-sm sm:p-6"
-                itemScope
-                itemType="https://schema.org/Person"
-              >
-                <div className="flex items-center gap-4">
-                  <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-full bg-lime shadow-md">
-                    {coach.imageUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={`/api/blob?p=${encodeURIComponent(coach.imageUrl)}`}
-                        alt={`${coach.name} — padel coach at NextGen Padel Academy Pretoria`}
-                        className="h-full w-full object-cover"
-                        itemProp="image"
-                      />
-                    ) : (
-                      <div className="flex h-full w-full items-center justify-center">
-                        <Image src="/images/tennis-ball.png" alt="" width={28} height={28} className="h-7 w-7" />
-                      </div>
-                    )}
-                  </div>
-                  <div>
-                    <h3 className="font-black text-navy" itemProp="name">{coach.name}</h3>
-                    <p className="text-sm font-bold text-lime" itemProp="jobTitle">{coach.role}</p>
-                  </div>
-                </div>
-                <p className="mt-4 text-sm leading-relaxed text-muted-foreground" itemProp="description">{coach.bio}</p>
-              </article>
-            ))}
-          </div>
-        </div>
-      </section>
+        </section>
 
-      <SkillsSection />
-      <PackagesSection packages={packages} />
-    </main>
+        <SkillsSection />
+        <WhatWeOfferSection />
+        <PackagesSection />
+      </main>
+      <Footer />
+    </div>
   )
 }

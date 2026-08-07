@@ -1,47 +1,41 @@
-import type { Metadata } from "next"
 import { Suspense } from "react"
-import { OnboardingWizard } from "@/components/onboarding-wizard"
-import { getPublishedClubs } from "@/app/actions/clubs"
-import { getPublishedPackages } from "@/app/actions/packages"
-import { getPublishedSchools } from "@/app/actions/schools"
+import { Header } from "@/components/header"
+import { Footer } from "@/components/footer"
+import { EnrollmentForm } from "@/components/enrollment-form"
+import Image from "next/image"
 
-export const metadata: Metadata = {
-  title: "Enroll Your Child | Junior Padel Lessons Pretoria — Brooklyn, Menlo Park, Moreleta Park",
-  description:
-    "Enrol your child in NextGen Padel Academy today. Choose a package, select your nearest club or school in Pretoria — Brooklyn, Menlo Park, Moreleta Park, Garsfontein and more — and start your padel journey.",
-  alternates: { canonical: "https://nextgenpadel.co.za/enrollment" },
-  openGraph: {
-    title: "Enrol in Padel Lessons | NextGen Padel Academy Pretoria",
-    description:
-      "Simple online enrolment for kids padel coaching in Pretoria — Brooklyn, Menlo Park, Moreleta Park, Garsfontein and surrounding suburbs. Ages 4–17. Qualified coaches. Sign up today.",
-    url: "https://nextgenpadel.co.za/enrollment",
-  },
-  robots: { index: true, follow: true },
-}
-
-export default async function EnrollmentPage() {
-  const [clubs, packages, schools] = await Promise.all([
-    getPublishedClubs(),
-    getPublishedPackages(),
-    getPublishedSchools(),
-  ])
+export default function EnrollmentPage() {
   return (
-    <main>
-      <section className="bg-navy px-4 py-12 text-center text-navy-foreground sm:py-14">
-        <span className="inline-block rounded-full bg-lime/20 px-4 py-1.5 text-sm font-bold text-lime mb-4">
-          Pretoria
-        </span>
-        <h1 className="text-balance text-3xl font-black sm:text-5xl">
-          Enrol in Junior Padel Lessons in Pretoria
-        </h1>
-        <p className="mx-auto mt-3 max-w-xl text-sm leading-relaxed text-navy-foreground/80 sm:text-base">
-          Choose your package, select your nearest club or school in Pretoria — Brooklyn, Menlo Park, Moreleta Park, Garsfontein, Waterkloof, Menlyn, Lynnwood, Faerie Glen or Silver Lakes — and give your child the opportunity to learn padel in a fun, safe environment. Ages 4–17.
-        </p>
-      </section>
-
-      <Suspense fallback={<div className="py-20 text-center text-muted-foreground">Loading…</div>}>
-        <OnboardingWizard clubs={clubs} packages={packages} schools={schools} />
-      </Suspense>
-    </main>
+    <div className="min-h-screen flex flex-col">
+      <Header />
+      <main className="flex-1 py-12 bg-background">
+        <div className="container mx-auto px-4">
+          <div className="text-center mb-8">
+            <h1 className="text-3xl md:text-4xl font-black text-primary mb-2">
+              Enroll Your Child Today
+            </h1>
+            <p className="text-muted-foreground max-w-2xl mx-auto">
+              Join Next Gen Padel Academy and give your child the opportunity to learn, 
+              grow, and have fun while developing valuable skills.
+            </p>
+          </div>
+          
+          <Suspense fallback={<div className="text-center py-12">Loading enrollment form...</div>}>
+            <EnrollmentForm />
+          </Suspense>
+          
+          <div className="flex justify-center mt-12">
+            <Image
+              src="/images/mascots.png"
+              alt="Next Gen Padel Academy Mascots"
+              width={200}
+              height={200}
+              className="opacity-50"
+            />
+          </div>
+        </div>
+      </main>
+      <Footer />
+    </div>
   )
 }
