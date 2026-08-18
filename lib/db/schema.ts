@@ -8,6 +8,7 @@ import {
   jsonb,
   unique,
   numeric,
+  date,
 } from "drizzle-orm/pg-core"
 
 // ---- Better Auth tables (camelCase columns to match Better Auth defaults) ----
@@ -231,6 +232,10 @@ export const enrollments = pgTable("enrollments", {
   // and a snapshot of every child+package in the cart.
   orderReference: text("orderReference"),
   orderItems: jsonb("orderItems").$type<CartItem[]>(),
+  // Optional second weekly session (twice-a-week packages)
+  slotWeekday2: integer("slotWeekday2"),
+  slotHour2: numeric("slotHour2", { precision: 4, scale: 1 }),
+  slotAgeGroup2: text("slotAgeGroup2"),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
   updatedAt: timestamp("updatedAt").notNull().defaultNow(),
 })
@@ -283,9 +288,48 @@ export const coaches = pgTable("coaches", {
   published: boolean("published").notNull().default(true),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
   updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+  // ---- Coach portal profile & login ----
+  email: text("email"),
+  mobile: text("mobile"),
+  qualifications: text("qualifications"),
+  employmentStatus: text("employmentStatus"),
+  emergencyContactName: text("emergencyContactName"),
+  emergencyContactPhone: text("emergencyContactPhone"),
+  // Coach portal login credentials — set by admin. Null username = portal access not yet enabled.
+  username: text("username").unique(),
+  passwordHash: text("passwordHash"),
+  // 'active' | 'inactive' — inactive coaches cannot log in to the portal
+  accountStatus: text("accountStatus").notNull().default("active"),
+  evalEnabled: boolean("evalEnabled").notNull().default(false),
 })
 
 export type Coach = typeof coaches.$inferSelect
+
+// ---- Coach portal: session attendance ----
+// One row per enrolled child per session date. Marked by the assigned coach.
+export const sessionAttendance = pgTable(
+  "session_attendance",
+  {
+    id: serial("id").primaryKey(),
+    coachId: integer("coachId")
+      .notNull()
+      .references(() => coaches.id, { onDelete: "cascade" }),
+    enrollmentId: integer("enrollmentId")
+      .notNull()
+      .references(() => enrollments.id, { onDelete: "cascade" }),
+    sessionDate: date("sessionDate", { mode: "string" }).notNull(),
+    // 'present' | 'absent'
+    status: text("status").notNull().default("present"),
+    note: text("note").notNull().default(""),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+  },
+  (t) => ({
+    uniqueSession: unique("session_attendance_unique").on(t.enrollmentId, t.sessionDate),
+  }),
+)
+
+export type SessionAttendance = typeof sessionAttendance.$inferSelect
 
 // ---- Coach ↔ Club assignments ----
 

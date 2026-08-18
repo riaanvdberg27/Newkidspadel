@@ -47,6 +47,32 @@ export function formatSlot(weekday: number, hour: number | string): string {
   return `${WEEKDAYS[weekday]} at ${formatHour(hour)} – ${formatEndHour(hour)}`
 }
 
+/** Today's date as "YYYY-MM-DD" in South African time (SAST, UTC+2). */
+export function todayDateString(): string {
+  return new Date().toLocaleDateString("en-CA", { timeZone: "Africa/Johannesburg" })
+}
+
+/** 0 = Sunday ... 6 = Saturday, computed without server-timezone drift. */
+export function weekdayFromDateString(dateStr: string): number {
+  const [y, m, d] = dateStr.split("-").map(Number)
+  return new Date(Date.UTC(y, m - 1, d)).getUTCDay()
+}
+
+/** Shift a "YYYY-MM-DD" date string by a number of days (can be negative). */
+export function addDaysToDateString(dateStr: string, days: number): string {
+  const [y, m, d] = dateStr.split("-").map(Number)
+  const dt = new Date(Date.UTC(y, m - 1, d))
+  dt.setUTCDate(dt.getUTCDate() + days)
+  return dt.toISOString().slice(0, 10)
+}
+
+/** Format a "YYYY-MM-DD" date string for display, e.g. "Mon, 18 Aug 2026". */
+export function formatDateString(dateStr: string): string {
+  const [y, m, d] = dateStr.split("-").map(Number)
+  const dt = new Date(Date.UTC(y, m - 1, d))
+  return dt.toLocaleDateString("en-ZA", { weekday: "short", day: "numeric", month: "short", year: "numeric", timeZone: "UTC" })
+}
+
 export type SlotAvailability = {
   id: number
   clubId: number
