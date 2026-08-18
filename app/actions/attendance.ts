@@ -165,3 +165,37 @@ export async function getAttendanceStatsForEnrollments(
   }
   return stats
 }
+
+export type AttendanceRecord = {
+  sessionDate: string
+  status: "present" | "absent"
+  note: string
+}
+
+/**
+ * Full attendance history per enrollment, newest first — for the parent dashboard.
+ * Callers must only pass enrollment IDs already scoped to the requesting parent.
+ */
+export async function getAttendanceHistoryForEnrollments(
+  enrollmentIds: number[],
+): Promise<Record<number, AttendanceRecord[]>> {
+  if (enrollmentIds.length === 0) return {}
+  const rows = await db
+    .select()
+    .from(sessionAttendance)
+    .where(inArray(sessionAttendance.enrollmentId, enrollmentIds))
+
+  const history: Record<number, AttendanceRecord[]> = {}
+  for (const r of rows) {
+    const list = history[r.enrollmentId] ?? (history[r.enrollmentId] = [])
+    list.push({
+      sessionDate: r.sessionDate,
+      status: r.status as "present" | "absent",
+      note: r.note ?? "",
+    })
+  }
+  for (const list of Object.values(history)) {
+    list.sort((a, b) => (a.sessionDate < b.sessionDate ? 1 : a.sessionDate > b.sessionDate ? -1 : 0))
+  }
+  return history
+}

@@ -8,12 +8,13 @@ import { eq, desc } from "drizzle-orm"
 import { getMyEnrollments } from "@/app/actions/enrollment"
 import { getReferralSummary } from "@/app/actions/referrals"
 import { getMyPayments, getMySubscriptions } from "@/app/actions/payments"
-import { getAttendanceStatsForEnrollments } from "@/app/actions/attendance"
+import { getAttendanceStatsForEnrollments, getAttendanceHistoryForEnrollments } from "@/app/actions/attendance"
 import { SignOutButton } from "@/components/sign-out-button"
 import { ChangeSlot } from "@/components/change-slot"
 import { EditProfile } from "@/components/edit-profile"
 import { ReferralPanel } from "@/components/referral-panel"
 import { ImpersonationBanner } from "@/components/impersonation-banner"
+import { AttendanceHistory } from "@/components/attendance-history"
 import {
   CalendarDays, Mail, Phone, ShieldCheck, User,
   CreditCard, RefreshCw, CheckCircle2, XCircle, Clock,
@@ -88,9 +89,15 @@ export default async function DashboardPage() {
     isImpersonating ? Promise.resolve(null) : getReferralSummary().catch(() => null),
   ])
 
-  const attendanceStats = await getAttendanceStatsForEnrollments(userEnrollments.map((e) => e.id)).catch(
-    () => ({}) as Record<number, { present: number; absent: number; total: number }>,
-  )
+  const enrollmentIds = userEnrollments.map((e) => e.id)
+  const [attendanceStats, attendanceHistory] = await Promise.all([
+    getAttendanceStatsForEnrollments(enrollmentIds).catch(
+      () => ({}) as Record<number, { present: number; absent: number; total: number }>,
+    ),
+    getAttendanceHistoryForEnrollments(enrollmentIds).catch(
+      () => ({}) as Awaited<ReturnType<typeof getAttendanceHistoryForEnrollments>>,
+    ),
+  ])
 
   const mobile = userEnrollments[0]?.parentMobile ?? ""
   // View-only mode disables mutations on sub-components
@@ -241,6 +248,7 @@ export default async function DashboardPage() {
                                 {stats.absent} session{stats.absent === 1 ? "" : "s"} marked absent
                               </p>
                             )}
+                            <AttendanceHistory records={attendanceHistory[e.id] ?? []} />
                           </div>
                         )
                       })()}
