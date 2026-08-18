@@ -8,6 +8,7 @@ import { eq, desc } from "drizzle-orm"
 import { getMyEnrollments } from "@/app/actions/enrollment"
 import { getReferralSummary } from "@/app/actions/referrals"
 import { getMyPayments, getMySubscriptions } from "@/app/actions/payments"
+import { getAttendanceStatsForEnrollments } from "@/app/actions/attendance"
 import { SignOutButton } from "@/components/sign-out-button"
 import { ChangeSlot } from "@/components/change-slot"
 import { EditProfile } from "@/components/edit-profile"
@@ -16,7 +17,7 @@ import { ImpersonationBanner } from "@/components/impersonation-banner"
 import {
   CalendarDays, Mail, Phone, ShieldCheck, User,
   CreditCard, RefreshCw, CheckCircle2, XCircle, Clock,
-  AlertCircle, Receipt,
+  AlertCircle, Receipt, ClipboardCheck,
 } from "lucide-react"
 
 const MEMBERSHIP_STATUS_STYLES: Record<string, string> = {
@@ -86,6 +87,10 @@ export default async function DashboardPage() {
     // Referral summary — only available for real sessions (not during impersonation)
     isImpersonating ? Promise.resolve(null) : getReferralSummary().catch(() => null),
   ])
+
+  const attendanceStats = await getAttendanceStatsForEnrollments(userEnrollments.map((e) => e.id)).catch(
+    () => ({}) as Record<number, { present: number; absent: number; total: number }>,
+  )
 
   const mobile = userEnrollments[0]?.parentMobile ?? ""
   // View-only mode disables mutations on sub-components
@@ -205,6 +210,40 @@ export default async function DashboardPage() {
                           />
                         )}
                       </dl>
+
+                      {/* Attendance */}
+                      {(() => {
+                        const stats = attendanceStats[e.id]
+                        if (!stats || stats.total === 0) return null
+                        const rate = Math.round((stats.present / stats.total) * 100)
+                        return (
+                          <div className="rounded-lg border border-border bg-muted/30 p-3 space-y-2">
+                            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Attendance</p>
+                            <div className="flex items-center gap-2 text-sm">
+                              <ClipboardCheck className="h-4 w-4 text-lime" />
+                              <span className="text-navy font-medium">
+                                {stats.present} of {stats.total} sessions attended
+                              </span>
+                              <span
+                                className={`ml-auto rounded-full px-2 py-0.5 text-xs font-bold ${
+                                  rate >= 80
+                                    ? "bg-lime/20 text-navy"
+                                    : rate >= 50
+                                    ? "bg-amber-100 text-amber-800"
+                                    : "bg-red-100 text-red-700"
+                                }`}
+                              >
+                                {rate}%
+                              </span>
+                            </div>
+                            {stats.absent > 0 && (
+                              <p className="text-xs text-muted-foreground">
+                                {stats.absent} session{stats.absent === 1 ? "" : "s"} marked absent
+                              </p>
+                            )}
+                          </div>
+                        )
+                      })()}
 
                       {/* Payment status */}
                       <div className="rounded-lg border border-border bg-muted/30 p-3 space-y-2">

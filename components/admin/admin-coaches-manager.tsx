@@ -1,9 +1,9 @@
 "use client"
 
 import { useState, useTransition, useRef } from "react"
-import { Plus, Trash2, Save, Check, Upload, Eye, EyeOff, GripVertical, ChevronDown } from "lucide-react"
+import { Plus, Trash2, Save, Check, Upload, Eye, EyeOff, GripVertical, ChevronDown, KeyRound, Lock } from "lucide-react"
 import type { CoachRow } from "@/app/actions/coaches"
-import { saveCoach, deleteCoach } from "@/app/actions/coaches"
+import { saveCoach, deleteCoach, setCoachPortalAccess } from "@/app/actions/coaches"
 import type { Club } from "@/lib/db/schema"
 
 function makeTemp(): CoachRow {
@@ -16,6 +16,9 @@ function makeTemp(): CoachRow {
     sortOrder: 0,
     published: true,
     clubIds: [],
+    username: null,
+    accountStatus: "active",
+    hasPassword: false,
   }
 }
 
@@ -319,7 +322,105 @@ function CoachCard({
         </button>
         {saveError && <p className="text-xs text-destructive">{saveError}</p>}
       </div>
+
+      {coach.id !== 0 && <CoachPortalAccess coach={coach} onUpdate={onUpdate} />}
     </fieldset>
+  )
+}
+
+function CoachPortalAccess({
+  coach,
+  onUpdate,
+}: {
+  coach: CoachRow
+  onUpdate: (updated: CoachRow) => void
+}) {
+  const [username, setUsername] = useState(coach.username ?? "")
+  const [password, setPassword] = useState("")
+  const [saving, startSaving] = useTransition()
+  const [saved, setSaved] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  function handleSave() {
+    setError(null)
+    setSaved(false)
+    startSaving(async () => {
+      const res = await setCoachPortalAccess({
+        coachId: coach.id,
+        username,
+        password: password || undefined,
+        accountStatus: coach.accountStatus === "inactive" ? "inactive" : "active",
+      })
+      if (res.ok) {
+        onUpdate({ ...coach, username: username.trim().toLowerCase(), hasPassword: coach.hasPassword || !!password })
+        setPassword("")
+        setSaved(true)
+        setTimeout(() => setSaved(false), 3000)
+      } else {
+        setError(res.error ?? "Could not save portal access.")
+      }
+    })
+  }
+
+  return (
+    <div className="mt-5 rounded-xl border border-border bg-background p-4">
+      <div className="mb-3 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <KeyRound className="h-4 w-4 text-navy" />
+          <span className="text-sm font-bold text-navy">Coach Portal Access</span>
+        </div>
+        <button
+          type="button"
+          onClick={() => onUpdate({ ...coach, accountStatus: coach.accountStatus === "inactive" ? "active" : "inactive" })}
+          className={`rounded-full px-2.5 py-1 text-xs font-bold transition-colors ${
+            coach.accountStatus === "inactive" ? "bg-muted text-muted-foreground" : "bg-lime/20 text-lime-foreground"
+          }`}
+        >
+          {coach.accountStatus === "inactive" ? "Access disabled" : "Access enabled"}
+        </button>
+      </div>
+
+      <p className="mb-3 text-xs text-muted-foreground">
+        Coaches use this username and password to sign in at <span className="font-mono">/coach/login</span> and mark attendance for their assigned clubs.
+      </p>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label="Username">
+          <input
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            placeholder="e.g. gareth"
+            autoComplete="off"
+            className="mt-1.5 w-full rounded-md border border-border bg-card px-3 py-2 text-sm outline-none focus:border-lime"
+          />
+        </Field>
+        <Field label={coach.hasPassword ? "New password (leave blank to keep current)" : "Set password"}>
+          <div className="relative mt-1.5">
+            <Lock className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Min. 8 characters"
+              autoComplete="new-password"
+              className="w-full rounded-md border border-border bg-card px-3 py-2 pl-8 text-sm outline-none focus:border-lime"
+            />
+          </div>
+        </Field>
+      </div>
+
+      <div className="mt-3 flex items-center gap-3">
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={saving || !username}
+          className="inline-flex items-center gap-2 rounded-md border border-navy bg-navy px-3.5 py-2 text-xs font-bold text-white hover:bg-navy/90 disabled:opacity-40 transition-colors"
+        >
+          {saved ? <><Check className="h-3.5 w-3.5" />Saved</> : saving ? "Saving…" : "Save portal access"}
+        </button>
+        {error && <p className="text-xs text-destructive">{error}</p>}
+      </div>
+    </div>
   )
 }
 

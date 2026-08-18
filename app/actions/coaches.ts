@@ -5,6 +5,7 @@ import { coaches, coachClubs, clubs } from "@/lib/db/schema"
 import { eq, asc, inArray } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { del } from "@vercel/blob"
+import { hashPassword } from "@/lib/coach-auth"
 
 export type CoachRow = {
   id: number
@@ -15,6 +16,9 @@ export type CoachRow = {
   sortOrder: number
   published: boolean
   clubIds: number[]
+  username: string | null
+  accountStatus: string
+  hasPassword: boolean
 }
 
 
@@ -48,6 +52,9 @@ export async function getCoaches(): Promise<CoachRow[]> {
     imageUrl: r.imageUrl ?? null,
     sortOrder: r.sortOrder,
     published: r.published,
+    username: r.username ?? null,
+    accountStatus: r.accountStatus,
+    hasPassword: !!r.passwordHash,
   }))
   return attachClubIds(base)
 }
@@ -67,6 +74,9 @@ export async function getPublishedCoaches(): Promise<CoachRow[]> {
     imageUrl: r.imageUrl ?? null,
     sortOrder: r.sortOrder,
     published: r.published,
+    username: r.username ?? null,
+    accountStatus: r.accountStatus,
+    hasPassword: !!r.passwordHash,
   }))
   return attachClubIds(base)
 }
@@ -94,6 +104,9 @@ export async function getCoachesByClub(clubId: number): Promise<CoachRow[]> {
     sortOrder: r.sortOrder,
     published: r.published,
     clubIds: [clubId],
+    username: r.username ?? null,
+    accountStatus: r.accountStatus,
+    hasPassword: !!r.passwordHash,
   }))
   return base
 }
@@ -180,6 +193,43 @@ export async function saveCoach(input: {
   revalidatePath("/")
   revalidatePath("/enrollment")
   return { ok: true, id: coachId }
+}
+
+/**
+ * Set up or update a coach's portal login. Pass `password` only when
+ * setting/resetting it — leave undefined to keep the existing password.
+ */
+export async function setCoachPortalAccess(input: {
+  coachId: number
+  username: string
+  password?: string
+  accountStatus: "active" | "inactive"
+}): Promise<{ ok: boolean; error?: string }> {
+  const username = input.username.trim().toLowerCase()
+  if (!username) return { ok: false, error: "Username is required." }
+
+  const [existing] = await db
+    .select({ id: coaches.id })
+    .from(coaches)
+    .where(eq(coaches.username, username))
+    .limit(1)
+  if (existing && existing.id !== input.coachId) {
+    return { ok: false, error: "That username is already taken by another coach." }
+  }
+
+  const setFields: Record<string, unknown> = {
+    username,
+    accountStatus: input.accountStatus,
+    updatedAt: new Date(),
+  }
+  if (input.password) {
+    if (input.password.length < 8) return { ok: false, error: "Password must be at least 8 characters." }
+    setFields.passwordHash = hashPassword(input.password)
+  }
+
+  await db.update(coaches).set(setFields).where(eq(coaches.id, input.coachId))
+  revalidatePath("/admin")
+  return { ok: true }
 }
 
 export async function deleteCoach(id: number, imageUrl: string | null): Promise<{ ok: boolean }> {
