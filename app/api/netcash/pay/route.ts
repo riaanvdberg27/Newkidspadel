@@ -54,33 +54,23 @@ export async function POST(req: NextRequest) {
     }
 
     try {
-      const baseUrl =
-        process.env.NEXT_PUBLIC_BASE_URL ??
-        (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null) ??
-        "https://localhost:3000"
-
-      const nameParts  = parentName.trim().split(" ")
-      const firstName  = nameParts[0] ?? parentName
-      const lastName   = nameParts.slice(1).join(" ") || undefined
-
       const childLabel = childCount > 1 ? `${childCount} children` : "1 child"
+
+      // p3 — description of goods, max 50 chars.
+      const itemDescription = `${orderReference} Cart (${childLabel})`.slice(0, 50)
+
+      // m10 — appended by Netcash as a querystring to the configured Accept/
+      // Decline URL, so the success page can read ?ref=...&name=...
+      const returnQueryParams = `ref=${encodeURIComponent(orderReference)}&name=${encodeURIComponent(parentName)}`
 
       const formFields = buildNetcashPayNowFields({
         serviceKey,
         orderReference,
         amount: totalAmount.toFixed(2),
-        itemName: `Next Gen Padel — Cart (${childLabel})`.slice(0, 100),
-        itemDescription:
-          paymentType === "once-off"
-            ? `Once-off enrollment for ${childLabel}`
-            : `Monthly subscription for ${childLabel}`,
-        notifyUrl:  `${baseUrl}/api/netcash/notify`,
-        returnUrl:  `${baseUrl}/enrollment/success?ref=${encodeURIComponent(orderReference)}&name=${encodeURIComponent(parentName)}`,
-        cancelUrl:  `${baseUrl}/enrollment?cancelled=1`,
+        itemDescription,
         customerEmail: parentEmail,
-        customerFirstName: firstName,
-        customerLastName:  lastName,
         paymentType,
+        returnQueryParams,
       })
 
       return NextResponse.json({ netcashUrl: NETCASH_PAY_NOW_URL, formFields })
