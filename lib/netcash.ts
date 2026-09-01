@@ -119,7 +119,6 @@ export function buildNetcashPayNowFields(input: NetcashPayNowInput): NetcashForm
     p3: input.itemDescription.slice(0, 50),
     p4: input.amount,
     Budget: "Y",
-    submit: "PAY",
   }
 
   if (input.customerEmail) fields.m9 = input.customerEmail

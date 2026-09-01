@@ -313,7 +313,12 @@ export function OnboardingWizard({
         form.appendChild(inp)
       })
       document.body.appendChild(form)
-      form.submit()
+      // Use HTMLFormElement.prototype.submit.call(form) instead of form.submit()
+      // directly: if any hidden input happens to be named "submit" (or another
+      // native form property like "action"/"method"), the browser exposes it
+      // as form.submit, shadowing the real submit method and throwing
+      // "form.submit is not a function".
+      HTMLFormElement.prototype.submit.call(form)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong. Please try again.")
     } finally {
