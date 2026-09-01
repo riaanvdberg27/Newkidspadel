@@ -1,8 +1,8 @@
 "use server"
 
-import { desc, eq, ilike, or } from "drizzle-orm"
+import { asc, desc, eq, ilike, or } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { enrollments, user } from "@/lib/db/schema"
+import { enrollments, user, coachClubs, coaches } from "@/lib/db/schema"
 import { requireAdmin } from "@/lib/admin-auth"
 import { generateContractPdf } from "@/lib/contract-pdf"
 import { sendWelcomeEmail } from "@/lib/email"
@@ -22,11 +22,17 @@ export type AdminSignup = {
   childAge: number | null
   packageName: string
   club: string | null
+  clubId: number | null
+  coachId: number | null
   coachName: string | null
   slotWeekday: number | null
   // numeric column returns string from Drizzle; parse with parseFloat before display
   slotHour: string | null
   slotLabel: string | null
+  slotWeekday2: number | null
+  slotHour2: string | null
+  slotLabel2: string | null
+  scheduleCustomized: boolean
   emergencyContactName: string | null
   emergencyContactPhone: string | null
   debitAccountHolder: string | null
@@ -55,9 +61,13 @@ export type UpdateSignupInput = {
   childAge: number
   packageName: string
   club: string
+  clubId?: number | null
   coachName: string
+  coachId?: number | null
   slotWeekday: number | null
   slotHour: number | null
+  slotWeekday2: number | null
+  slotHour2: number | null
   emergencyContactName: string
   emergencyContactPhone: string
   status: string
@@ -78,10 +88,16 @@ export async function getAllSignups(): Promise<AdminSignup[]> {
     childAge: r.childAge ?? null,
     packageName: r.packageName,
     club: r.club ?? null,
+    clubId: r.clubId ?? null,
+    coachId: r.coachId ?? null,
     coachName: r.coachName ?? null,
     slotWeekday: r.slotWeekday ?? null,
     slotHour: r.slotHour ?? null,
     slotLabel: r.slotWeekday != null && r.slotHour != null ? formatSlot(r.slotWeekday, parseFloat(String(r.slotHour))) : null,
+    slotWeekday2: r.slotWeekday2 ?? null,
+    slotHour2: r.slotHour2 ?? null,
+    slotLabel2: r.slotWeekday2 != null && r.slotHour2 != null ? formatSlot(r.slotWeekday2, parseFloat(String(r.slotHour2))) : null,
+    scheduleCustomized: r.scheduleCustomized ?? false,
     emergencyContactName: r.emergencyContactName ?? null,
     emergencyContactPhone: r.emergencyContactPhone ?? null,
     debitAccountHolder: r.debitAccountHolder ?? null,
@@ -107,8 +123,8 @@ export async function updateSignup(
   id: number,
   input: UpdateSignupInput,
 ): Promise<{ ok: boolean; error?: string }> {
-  await requireAdmin()
   try {
+    await requireAdmin()
     await db
       .update(enrollments)
       .set({
@@ -120,9 +136,13 @@ export async function updateSignup(
         childAge: input.childAge,
         packageName: input.packageName.trim(),
         club: input.club.trim(),
+        clubId: input.clubId ?? undefined,
         coachName: input.coachName.trim() || null,
+        ...(input.coachId !== undefined && { coachId: input.coachId }),
         slotWeekday: input.slotWeekday ?? undefined,
         slotHour: input.slotHour != null ? String(input.slotHour) : undefined,
+        slotWeekday2: input.slotWeekday2 ?? null,
+        slotHour2: input.slotHour2 != null ? String(input.slotHour2) : null,
         emergencyContactName: input.emergencyContactName.trim() || undefined,
         emergencyContactPhone: input.emergencyContactPhone.trim() || undefined,
         status: input.status,
@@ -134,6 +154,69 @@ export async function updateSignup(
     return { ok: true }
   } catch (err) {
     console.log("[v0] updateSignup error:", err)
+    return { ok: false, error: err instanceof Error ? err.message : "Update failed" }
+  }
+}
+
+export type UpdateTimeSlotsInput = {
+  slotWeekday: number
+  slotHour: number
+  slotWeekday2?: number | null
+  slotHour2?: number | null
+}
+
+/**
+ * Focused, schedule-only update for a single client's weekly time slot(s).
+ * Advanced packages require two distinct slots; all other packages keep exactly one.
+ * Only touches slot fields + scheduleCustomized — no other enrollment data is modified.
+ */
+export async function updateClientTimeSlots(
+  id: number,
+  input: UpdateTimeSlotsInput,
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    await requireAdmin()
+
+    const rows = await db.select().from(enrollments).where(eq(enrollments.id, id)).limit(1)
+    const row = rows[0]
+    if (!row) return { ok: false, error: "Enrollment not found" }
+
+    const isAdvanced = /advanced/i.test(row.packageName)
+
+    if (input.slotWeekday == null || input.slotHour == null) {
+      return { ok: false, error: "A weekly time slot is required" }
+    }
+
+    let slotWeekday2: number | null = null
+    let slotHour2: number | null = null
+
+    if (isAdvanced) {
+      if (input.slotWeekday2 == null || input.slotHour2 == null) {
+        return { ok: false, error: "Advanced packages require two weekly time slots" }
+      }
+      if (input.slotWeekday === input.slotWeekday2 && input.slotHour === input.slotHour2) {
+        return { ok: false, error: "Time Slot 1 and Time Slot 2 cannot be the same" }
+      }
+      slotWeekday2 = input.slotWeekday2
+      slotHour2 = input.slotHour2
+    }
+
+    await db
+      .update(enrollments)
+      .set({
+        slotWeekday: input.slotWeekday,
+        slotHour: String(input.slotHour),
+        slotWeekday2,
+        slotHour2: slotHour2 != null ? String(slotHour2) : null,
+        scheduleCustomized: true,
+        updatedAt: new Date(),
+      })
+      .where(eq(enrollments.id, id))
+
+    revalidatePath("/admin")
+    return { ok: true }
+  } catch (err) {
+    console.log("[v0] updateClientTimeSlots error:", err)
     return { ok: false, error: err instanceof Error ? err.message : "Update failed" }
   }
 }
@@ -153,7 +236,7 @@ function priceFor(packageName: string): number {
 
 /** Regenerate the contract PDF for a signup and store it in Blob; returns the blob pathname. */
 export async function regenerateContract(id: number): Promise<{ pathname: string }> {
-  await requireAdmin()
+  await requireAdmin() // throws intentionally — not a { ok } return type
   const r = await loadEnrollment(id)
   const slotLabel =
     r.slotWeekday != null && r.slotHour != null ? formatSlot(r.slotWeekday, parseFloat(String(r.slotHour))) : "To be confirmed"
@@ -189,7 +272,12 @@ export async function regenerateContract(id: number): Promise<{ pathname: string
 }
 
 /** Resend the welcome email (with the contract) for an existing signup. */
-export async function resendWelcome(id: number): Promise<{ ok: boolean; error?: string }> {  await requireAdmin()
+export async function resendWelcome(id: number): Promise<{ ok: boolean; error?: string }> {
+  try {
+    await requireAdmin()
+  } catch {
+    return { ok: false, error: "Not authorized" }
+  }
   const r = await loadEnrollment(id)
   const slotLabel =
     r.slotWeekday != null && r.slotHour != null ? formatSlot(r.slotWeekday, parseFloat(String(r.slotHour))) : "To be confirmed"
@@ -232,10 +320,69 @@ export async function resendWelcome(id: number): Promise<{ ok: boolean; error?: 
   })
 }
 
-/** Permanently delete a sign-up record. */
-export async function deleteSignup(id: number): Promise<{ ok: boolean; error?: string }> {
-  await requireAdmin()
+/**
+ * Make an enrollment Inactive (status="inactive").
+ * All data — parent info, student info, package, club, attendance, payment history — is preserved.
+ * Only the status changes.
+ */
+export async function deactivateSignup(id: number): Promise<{ ok: boolean; error?: string }> {
   try {
+    await requireAdmin()
+    await db.update(enrollments).set({ status: "inactive", updatedAt: new Date() }).where(eq(enrollments.id, id))
+    revalidatePath("/admin")
+    return { ok: true }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Failed to deactivate" }
+  }
+}
+
+/**
+ * Reactivate an enrollment (status="active").
+ * Restores the enrollment to the coaching portal and all active views.
+ */
+export async function reactivateSignup(id: number): Promise<{ ok: boolean; error?: string }> {
+  try {
+    await requireAdmin()
+    await db.update(enrollments).set({ status: "active", updatedAt: new Date() }).where(eq(enrollments.id, id))
+    revalidatePath("/admin")
+    return { ok: true }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Failed to reactivate" }
+  }
+}
+
+/** @deprecated Use deactivateSignup instead — production records must never be permanently deleted. */
+export async function deleteSignup(id: number): Promise<{ ok: boolean; error?: string }> {
+  try {
+    await requireAdmin()
+    await db.delete(enrollments).where(eq(enrollments.id, id))
+    revalidatePath("/admin")
+    return { ok: true }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Delete failed" }
+  }
+}
+
+/**
+ * Permanently delete an inactive enrollment.
+ * Only allowed when the enrollment status is "inactive" — this is enforced
+ * server-side so the UI restriction cannot be bypassed.
+ * The deletion cascades to any associated orders rows.
+ */
+export async function permanentlyDeleteSignup(id: number): Promise<{ ok: boolean; error?: string }> {
+  try {
+    await requireAdmin()
+    // Safety guard: only inactive enrollments may be permanently deleted
+    const rows = await db
+      .select({ id: enrollments.id, status: enrollments.status })
+      .from(enrollments)
+      .where(eq(enrollments.id, id))
+      .limit(1)
+    const row = rows[0]
+    if (!row) return { ok: false, error: "Enrollment not found" }
+    if (row.status !== "inactive") {
+      return { ok: false, error: "Only inactive enrollments can be permanently deleted. Deactivate it first." }
+    }
     await db.delete(enrollments).where(eq(enrollments.id, id))
     revalidatePath("/admin")
     return { ok: true }
@@ -276,9 +423,13 @@ export type CreateSignupInput = {
   childAge: number
   packageName: string
   club: string
+  clubId?: number | null
   coachName: string
+  coachId?: number | null
   slotWeekday: number | null
   slotHour: number | null
+  slotWeekday2: number | null
+  slotHour2: number | null
   emergencyContactName: string
   emergencyContactPhone: string
   status: string
@@ -289,14 +440,43 @@ export type CreateSignupInput = {
   linkUserId?: string
 }
 
+/** Resolve the first coach assigned to a club (used by admin createSignup). */
+async function resolveCoachForClub(clubId: number | null | undefined): Promise<{ coachId: number; coachName: string } | null> {
+  if (!clubId) return null
+  try {
+    const rows = await db
+      .select({ coachId: coachClubs.coachId, coachName: coaches.name })
+      .from(coachClubs)
+      .innerJoin(coaches, eq(coaches.id, coachClubs.coachId))
+      .where(eq(coachClubs.clubId, clubId))
+      .orderBy(asc(coachClubs.coachId))
+      .limit(1)
+    return rows[0] ?? null
+  } catch {
+    return null
+  }
+}
+
 /** Manually create a sign-up from the admin dashboard. */
 export async function createSignup(input: CreateSignupInput): Promise<{ ok: boolean; id?: number; referenceNumber?: string; error?: string }> {
-  await requireAdmin()
   try {
+    await requireAdmin()
     const referenceNumber = `NGP-${nanoid(8).toUpperCase()}`
     // Use the linked user's ID so the parent sees this on their dashboard,
     // or fall back to "admin" for unlinked / new-account enrollments.
     const userId = input.linkUserId ?? "admin"
+
+    // Auto-assign coach from club if not explicitly provided
+    let resolvedCoachId = input.coachId ?? null
+    let resolvedCoachName = input.coachName.trim() || null
+    if (!resolvedCoachId && input.clubId) {
+      const autoCoach = await resolveCoachForClub(input.clubId)
+      if (autoCoach) {
+        resolvedCoachId = autoCoach.coachId
+        if (!resolvedCoachName) resolvedCoachName = autoCoach.coachName
+      }
+    }
+
     const [row] = await db
       .insert(enrollments)
       .values({
@@ -310,9 +490,13 @@ export async function createSignup(input: CreateSignupInput): Promise<{ ok: bool
         childAge: input.childAge,
         packageName: input.packageName.trim(),
         club: input.club.trim(),
-        coachName: input.coachName.trim() || null,
+        clubId: input.clubId ?? undefined,
+        coachId: resolvedCoachId ?? undefined,
+        coachName: resolvedCoachName,
         slotWeekday: input.slotWeekday ?? undefined,
         slotHour: input.slotHour != null ? String(input.slotHour) : undefined,
+        slotWeekday2: input.slotWeekday2 ?? null,
+        slotHour2: input.slotHour2 != null ? String(input.slotHour2) : null,
         emergencyContactName: input.emergencyContactName.trim() || undefined,
         emergencyContactPhone: input.emergencyContactPhone.trim() || undefined,
         status: input.status,

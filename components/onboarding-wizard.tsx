@@ -4,40 +4,27 @@ import Image from "next/image"
 import Link from "next/link"
 import { useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { Check, ChevronRight, Pencil, Tag, X } from "lucide-react"
+import { Check, ChevronRight, Tag, X } from "lucide-react"
 import { formatSlot } from "@/lib/slots"
-import type { Club, School, CartItem } from "@/lib/db/schema"
+import type { Club, School } from "@/lib/db/schema"
+import type { AgeGroup } from "@/lib/db/schema"
 import type { PublicPackage } from "@/app/actions/packages"
 import { SlotPicker, type SelectedSlot } from "@/components/slot-picker"
 import { PackageSlotPicker } from "@/components/package-slot-picker"
 import { DobPicker } from "@/components/dob-picker"
-import type { AgeGroup } from "@/lib/db/schema"
 import { SignaturePad } from "@/components/signature-pad"
 import { CONSENT_TERMS_LABEL, CONSENT_MEDIA_LABEL, TERMS_TITLE, TERMS_SECTIONS } from "@/lib/terms"
 import { authClient } from "@/lib/auth-client"
 import { createCartEnrollments } from "@/app/actions/enrollment"
+import type { CartItem } from "@/app/actions/enrollment"
 import { blobUrl } from "@/lib/blob"
 import { validateVoucherCode } from "@/app/actions/referrals"
 
 // ---------------------------------------------------------------------------
 // Step labels
 // ---------------------------------------------------------------------------
-const STEPS = ["Children", "Child Details", "Club & Schedule", "Parent Account", "Preferences", "Review"]
+const CLUB_STEPS   = ["Children", "Child Details", "Club & Schedule", "Parent Account", "Preferences", "Review"]
 const SCHOOL_STEPS = ["Children", "Child Details", "School", "Parent Account", "Preferences", "Review"]
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-type ChildBasic = { firstName: string; lastName: string; dob: string }
-
-/** Per-child club/slot/package configuration (step 2). */
-type ChildConfig = {
-  clubId: number | null
-  slot: SelectedSlot | null
-  ageGroup: AgeGroup | null
-  pkg: PublicPackage | null
-  schoolId: number | null
-}
 
 type Prefs = {
   prefEmail: boolean
@@ -48,13 +35,13 @@ type Prefs = {
   prefHolidayClinics: boolean
 }
 
-function emptyConfig(): ChildConfig {
-  return { clubId: null, slot: null, ageGroup: null, pkg: null, schoolId: null }
-}
-
-function calcAge(dob: string) {
-  if (!dob) return 0
-  return Math.floor((Date.now() - new Date(dob).getTime()) / (1000 * 60 * 60 * 24 * 365.25))
+// Per-child selection state held in the wizard before building CartItems
+type ChildSchedule = {
+  clubId: number | null
+  schoolId: number | null
+  ageGroup: AgeGroup | null
+  slot: SelectedSlot | null
+  slot2: SelectedSlot | null   // Advanced second session
 }
 
 // ---------------------------------------------------------------------------
@@ -69,27 +56,67 @@ export function OnboardingWizard({
   packages: PublicPackage[]
   schools: School[]
 }) {
+  useRouter()
   const searchParams = useSearchParams()
+  const initialPackage = packages.find((p) => p.slug === searchParams.get("package")) ?? null
   const initialRefCode = searchParams.get("ref") ?? null
 
+  const [selectedPackage, setSelectedPackage] = useState<PublicPackage | null>(initialPackage)
   const [step, setStep] = useState(0)
 
-  // Step 0 — how many children
-  const [childCount, setChildCount] = useState(1)
+  const isOnceOff     = selectedPackage?.period === "once-off"
+  const isAdvanced    = selectedPackage?.slug === "advanced"
+  const isSchoolPkg   =
+    selectedPackage?.isSchool === true ||
+    (selectedPackage?.slug?.toLowerCase().includes("school") ?? false)
+  const STEPS = isSchoolPkg ? SCHOOL_STEPS : CLUB_STEPS
 
-  // Step 1 — child names / DOBs
-  const [children, setChildren] = useState<ChildBasic[]>([{ firstName: "", lastName: "", dob: "" }])
+  const availableClubs =
+    selectedPackage && selectedPackage.clubIds.length > 0
+      ? clubs.filter((c) => selectedPackage.clubIds.includes(c.id))
+      : clubs
 
-  // Step 2 — per-child club + schedule + package config
-  const [configs, setConfigs] = useState<ChildConfig[]>([emptyConfig()])
-  // Which child's config are we currently editing in step 2?
-  const [configIdx, setConfigIdx] = useState(0)
+  // ── Step 0: How many children ───────────────────────────────────────────
+  const [childCount, setChildCount] = useState<number>(1)
 
-  // Step 3 — parent account
+  // ── Step 1: Child details ────────────────────────────────────────────────
+  const [children, setChildren] = useState<Array<{ firstName: string; lastName: string; dob: string }>>(
+    [{ firstName: "", lastName: "", dob: "" }],
+  )
+
+  // ── Step 2: Per-child club/school + schedule ─────────────────────────────
+  // One ChildSchedule per child — indexed by child position.
+  const [schedules, setSchedules] = useState<ChildSchedule[]>(
+    [{ clubId: null, schoolId: null, ageGroup: null, slot: null, slot2: null }],
+  )
+  // Which child is currently being configured in step 2
+  const [scheduleChildIdx, setScheduleChildIdx] = useState(0)
+
+  function currentSchedule(): ChildSchedule {
+    return schedules[scheduleChildIdx] ?? { clubId: null, schoolId: null, ageGroup: null, slot: null, slot2: null }
+  }
+
+  function updateSchedule(idx: number, patch: Partial<ChildSchedule>) {
+    setSchedules((prev) => {
+      const next = [...prev]
+      next[idx] = { ...(next[idx] ?? { clubId: null, schoolId: null, ageGroup: null, slot: null, slot2: null }), ...patch }
+      return next
+    })
+  }
+
+  // Whether all children have complete schedules
+  function schedulesComplete(): boolean {
+    return Array.from({ length: childCount }, (_, i) => i).every((i) => {
+      const s = schedules[i]
+      if (!s) return false
+      if (isSchoolPkg) return !!s.schoolId
+      return !!s.clubId && !!s.slot && !!s.ageGroup && (!isAdvanced || !!s.slot2)
+    })
+  }
+
+  // ── Steps 3-5 ────────────────────────────────────────────────────────────
   const [parent, setParent] = useState({ firstName: "", lastName: "", email: "", mobile: "", password: "" })
   const [emergency, setEmergency] = useState({ name: "", phone: "" })
-
-  // Step 4 — preferences
   const [prefs, setPrefs] = useState<Prefs>({
     prefEmail: true,
     prefWhatsapp: false,
@@ -99,73 +126,82 @@ export function OnboardingWizard({
     prefHolidayClinics: false,
   })
 
-  // Step 5 — review: voucher, terms, signature
+  // Voucher / referral
   const [voucherInput, setVoucherInput] = useState("")
   const [voucherValidating, setVoucherValidating] = useState(false)
   const [voucherError, setVoucherError] = useState<string | null>(null)
   const [appliedVoucher, setAppliedVoucher] = useState<{
-    id: number
-    code: string
-    discountPercent: number
-    campaignName: string
+    id: number; code: string; discountPercent: number; campaignName: string
   } | null>(null)
+
+  // Terms, consent & signature
   const [agreedTerms, setAgreedTerms] = useState(false)
   const [consentMedia, setConsentMedia] = useState(false)
   const [signatureData, setSignatureData] = useState<string | null>(null)
   const [showTerms, setShowTerms] = useState(false)
 
+  // Submit state
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [reference, setReference] = useState<string | null>(null)
+  const [netcashUnavailable, setNetcashUnavailable] = useState(false)
+  const [confirmedRef, setConfirmedRef] = useState<string | null>(null)
+
+  // ── Package not yet selected ─────────────────────────────────────────────
+  if (!selectedPackage) {
+    return (
+      <PackagePicker
+        packages={packages}
+        onSelect={(pkg) => {
+          setSelectedPackage(pkg)
+          if (pkg.clubIds.length > 0) {
+            setSchedules((prev) =>
+              prev.map((s) =>
+                s.clubId && !pkg.clubIds.includes(s.clubId)
+                  ? { ...s, clubId: null, slot: null, slot2: null }
+                  : s,
+              ),
+            )
+          }
+        }}
+      />
+    )
+  }
+
+  // ── Confirmation screen ───────────────────────────────────────────────────
+  if (confirmedRef) {
+    return (
+      <Confirmation
+        packageName={selectedPackage.name}
+        reference={confirmedRef}
+        isEft={false}
+        childNames={children.map((c) => `${c.firstName} ${c.lastName}`.trim())}
+        packagePrice={computeTotal()}
+      />
+    )
+  }
 
   // ---------------------------------------------------------------------------
-  // Derived helpers
+  // Cart total
   // ---------------------------------------------------------------------------
-  const activeConfig = configs[configIdx] ?? emptyConfig()
-  const activeChild = children[configIdx] ?? { firstName: "", lastName: "", dob: "" }
-
-  function setActiveConfig(patch: Partial<ChildConfig>) {
-    setConfigs((prev) => prev.map((c, i) => (i === configIdx ? { ...c, ...patch } : c)))
-  }
-
-  // Determine if we need to step through school or club flow
-  // (school flow: when the selected package for the active child is a school pkg)
-  function isSchoolPkg(pkg: PublicPackage | null) {
-    if (!pkg) return false
-    return pkg.isSchool === true || pkg.slug?.toLowerCase().includes("school")
-  }
-
-  // Clubs available for the selected package (or all clubs if no restriction)
-  function availableClubsFor(pkg: PublicPackage | null) {
-    if (!pkg || pkg.clubIds.length === 0) return clubs
-    return clubs.filter((c) => pkg.clubIds.includes(c.id))
-  }
-
-  // Overall isSchool flag — any child enrolled at a school
-  const anySchool = configs.some((cfg) => isSchoolPkg(cfg.pkg))
-  const activeSteps = anySchool ? SCHOOL_STEPS : STEPS
-
-  // Grand total with discount
-  const grandTotal = configs.reduce((sum, cfg) => {
-    const price = cfg.pkg?.price ?? 0
+  function computeTotal(): number {
     const disc = appliedVoucher?.discountPercent ?? 0
-    return sum + Math.round(price * (1 - disc / 100))
-  }, 0)
-
-  const allConfigsDone = configs.every((cfg) => {
-    if (!cfg.pkg) return false
-    if (isSchoolPkg(cfg.pkg)) return cfg.schoolId != null
-    return cfg.clubId != null && cfg.slot != null
-  })
+    const base = (selectedPackage?.price ?? 0) * childCount
+    return disc > 0 ? base * (1 - disc / 100) : base
+  }
 
   // ---------------------------------------------------------------------------
-  // Submit
+  // handleSubmit
   // ---------------------------------------------------------------------------
   async function handleSubmit() {
+    if (!selectedPackage) return
     setError(null)
+    setNetcashUnavailable(false)
     setSubmitting(true)
+
+    let redirectingToNetcash = false
+
     try {
-      // 1. Auth: sign up (or sign in if account already exists)
+      // 1. Auth — sign up or sign in
       const { error: signUpError } = await authClient.signUp.email({
         email: parent.email,
         password: parent.password,
@@ -181,92 +217,110 @@ export function OnboardingWizard({
             password: parent.password,
           })
           if (signInError) {
-            setError(
-              "An account with this email already exists. If you registered before, please sign in from the dashboard instead.",
-            )
-            setSubmitting(false)
+            setError("An account with this email already exists. Please sign in from the dashboard instead.")
             return
           }
         } else {
           setError(signUpError.message ?? "Could not create your account.")
-          setSubmitting(false)
           return
         }
       }
 
-      // 2. Build cart items
-      const cartItems: CartItem[] = configs.map((cfg, i) => {
-        const child = children[i]!
-        const club = clubs.find((c) => c.id === cfg.clubId)
-        const school = schools.find((s) => s.id === cfg.schoolId)
-        const price = cfg.pkg?.price ?? 0
-        const disc = appliedVoucher?.discountPercent ?? 0
+      // 2. Build CartItems — one per child
+      const cartItems: CartItem[] = children.map((child, idx) => {
+        const sched = schedules[idx] ?? { clubId: null, schoolId: null, ageGroup: null, slot: null, slot2: null }
+        const clubObj = clubs.find((c) => c.id === sched.clubId) ?? null
+        const schoolObj = schools.find((s) => s.id === sched.schoolId) ?? null
         return {
-          childName: `${child.firstName} ${child.lastName}`.trim(),
-          childDob: child.dob,
-          childAge: calcAge(child.dob),
-          packageName: cfg.pkg?.name ?? "",
-          packageSlug: cfg.pkg?.slug ?? "",
-          packagePrice: Math.round(price * (1 - disc / 100)),
-          clubId: cfg.clubId ?? cfg.schoolId ?? 0,
-          clubName: isSchoolPkg(cfg.pkg) ? (school?.name ?? "") : (club?.name ?? ""),
-          slotWeekday: cfg.slot?.weekday ?? 0,
-          slotHour: cfg.slot?.hour ?? 0,
-          slotAgeGroup: cfg.ageGroup ?? "4-8",
-          discountPercent: disc,
+          child: { firstName: child.firstName, lastName: child.lastName, dob: child.dob },
+          packageId: selectedPackage.id,
+          packageName: selectedPackage.name,
+          packagePrice: selectedPackage.price,
+          packagePeriod: selectedPackage.period,
+          clubId: isSchoolPkg ? null : (sched.clubId ?? null),
+          clubName: isSchoolPkg ? (schoolObj?.name ?? "") : (clubObj?.name ?? ""),
+          schoolId: isSchoolPkg ? (sched.schoolId ?? null) : null,
+          schoolName: isSchoolPkg ? (schoolObj?.name ?? null) : null,
+          slotWeekday: isSchoolPkg ? null : (sched.slot?.weekday ?? null),
+          slotHour: isSchoolPkg ? null : (sched.slot?.hour ?? null),
+          ageGroup: isSchoolPkg ? null : (sched.ageGroup ?? null),
         }
       })
 
-      const { netcashUrl, formFields } = await createCartEnrollments({
+      // 3. Create all enrollment records + order row in one server action
+      const { orderReference, totalAmount } = await createCartEnrollments({
+        parent: {
+          firstName: parent.firstName,
+          lastName: parent.lastName,
+          email: parent.email,
+          mobile: parent.mobile,
+        },
         cartItems,
-        parentName: `${parent.firstName} ${parent.lastName}`.trim(),
-        parentEmail: parent.email,
-        parentMobile: parent.mobile,
+        prefs,
         emergencyContactName: emergency.name,
         emergencyContactPhone: emergency.phone,
         agreedTerms,
         consentMedia,
         signatureData,
         signedName: `${parent.firstName} ${parent.lastName}`.trim(),
-        referralCode: initialRefCode,
+        referralCode: initialRefCode ?? null,
         voucherId: appliedVoucher?.id ?? null,
-        ...prefs,
+        discountPercent: appliedVoucher?.discountPercent ?? undefined,
       })
 
-      // Auto-POST to Netcash
+      // 4. Build Netcash cart payment via API route
+      const payResponse = await fetch("/api/netcash/pay", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          orderReference,
+          totalAmount,
+          childCount,
+          parentName: `${parent.firstName} ${parent.lastName}`.trim(),
+          parentEmail: parent.email,
+          paymentType: isOnceOff ? "once-off" : "monthly",
+        }),
+      })
+
+      if (!payResponse.ok) {
+        const body = await payResponse.json().catch(() => ({}))
+        const msg: string = (body as { error?: string })?.error ?? `Payment gateway error (${payResponse.status})`
+        setNetcashUnavailable(true)
+        return
+      }
+
+      const { netcashUrl, formFields } = (await payResponse.json()) as {
+        netcashUrl: string
+        formFields: Record<string, string>
+      }
+
+      if (!netcashUrl || !formFields) {
+        setNetcashUnavailable(true)
+        return
+      }
+
+      // 5. POST to Netcash via a hidden form
+      redirectingToNetcash = true
       const form = document.createElement("form")
       form.method = "POST"
       form.action = netcashUrl
+      form.style.display = "none"
       Object.entries(formFields).forEach(([key, value]) => {
         const inp = document.createElement("input")
         inp.type = "hidden"
         inp.name = key
-        inp.value = value
+        inp.value = String(value)
         form.appendChild(inp)
       })
       document.body.appendChild(form)
       form.submit()
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong. Please try again.")
-      setSubmitting(false)
+    } finally {
+      if (!redirectingToNetcash) {
+        setSubmitting(false)
+      }
     }
-  }
-
-  // ---------------------------------------------------------------------------
-  // Show confirmation (post-payment redirect back from Netcash)
-  // ---------------------------------------------------------------------------
-  if (reference) {
-    const childNames = children.map((c) => `${c.firstName} ${c.lastName}`.trim())
-    const totalAmt = configs.reduce((s, cfg) => s + (cfg.pkg?.price ?? 0), 0)
-    return (
-      <Confirmation
-        packageName={configs[0]?.pkg?.name ?? ""}
-        reference={reference}
-        isEft={false}
-        childNames={childNames}
-        packagePrice={totalAmt}
-      />
-    )
   }
 
   // ---------------------------------------------------------------------------
@@ -274,9 +328,32 @@ export function OnboardingWizard({
   // ---------------------------------------------------------------------------
   return (
     <section className="mx-auto max-w-3xl px-4 py-12">
+      {/* Package banner */}
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-border bg-card p-4 shadow-sm">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Selected Package</p>
+          <p className="font-bold text-navy">
+            {selectedPackage.name} — R{selectedPackage.price.toLocaleString()}
+            {isOnceOff ? " (once off)" : "/month"} per child
+            {childCount > 1 && (
+              <span className="ml-2 text-lime-foreground">
+                = R{computeTotal().toLocaleString()} total
+                {!isOnceOff ? "/month" : ""}
+              </span>
+            )}
+          </p>
+        </div>
+        <button
+          onClick={() => { setSelectedPackage(null); setStep(0) }}
+          className="rounded-2xl border border-border px-4 py-2 text-sm font-bold text-navy transition-colors hover:bg-muted"
+        >
+          Change Package
+        </button>
+      </div>
+
       {/* Stepper */}
-      <ol className="flex items-center justify-between gap-1">
-        {activeSteps.map((label, i) => (
+      <ol className="mt-8 flex items-center justify-between gap-1">
+        {STEPS.map((label, i) => (
           <li key={label} className="flex flex-1 flex-col items-center text-center">
             <span
               className={`flex h-9 w-9 items-center justify-center rounded-full text-sm font-bold ${
@@ -285,9 +362,7 @@ export function OnboardingWizard({
             >
               {i + 1}
             </span>
-            <span
-              className={`mt-2 hidden text-xs font-semibold sm:block ${i <= step ? "text-navy" : "text-muted-foreground"}`}
-            >
+            <span className={`mt-2 hidden text-xs font-semibold sm:block ${i <= step ? "text-navy" : "text-muted-foreground"}`}>
               {label}
             </span>
           </li>
@@ -302,17 +377,17 @@ export function OnboardingWizard({
     </section>
   )
 
-  // --------------------------------------------------------------------------
-  // Steps
-  // --------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
+  // renderStep
+  // ---------------------------------------------------------------------------
   function renderStep() {
-    // ── Step 0: How many children ──
+    // ── Step 0: How many children ──────────────────────────────���────────────
     if (step === 0)
       return (
         <div>
           <h2 className="text-xl font-bold text-navy">How many children are you enrolling?</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            You can enrol up to 5 children. Each child picks their own club, schedule, and package.
+            You can enroll up to 5 children in one go. Each child picks their own club and schedule.
           </p>
           <div className="mt-6 grid grid-cols-5 gap-3">
             {[1, 2, 3, 4, 5].map((n) => (
@@ -326,15 +401,16 @@ export function OnboardingWizard({
                     while (updated.length < n) updated.push({ firstName: "", lastName: "", dob: "" })
                     return updated.slice(0, n)
                   })
-                  setConfigs((prev) => {
+                  setSchedules((prev) => {
                     const updated = [...prev]
-                    while (updated.length < n) updated.push(emptyConfig())
+                    while (updated.length < n)
+                      updated.push({ clubId: null, schoolId: null, ageGroup: null, slot: null, slot2: null })
                     return updated.slice(0, n)
                   })
                 }}
                 className={`flex flex-col items-center justify-center rounded-2xl border-2 py-5 font-black text-3xl transition-all ${
                   childCount === n
-                    ? "border-lime bg-lime/10 scale-105 shadow-md text-navy"
+                    ? "scale-105 border-lime bg-lime/10 text-navy shadow-md"
                     : "border-border bg-card text-muted-foreground hover:border-lime/50"
                 }`}
               >
@@ -347,7 +423,7 @@ export function OnboardingWizard({
         </div>
       )
 
-    // ── Step 1: Child names + DOBs ──
+    // ── Step 1: Child details ────────────────────────────────────────────────
     if (step === 1)
       return (
         <div>
@@ -362,19 +438,25 @@ export function OnboardingWizard({
           <div className="mt-6 space-y-6">
             {children.map((child, idx) => (
               <div key={idx} className="rounded-card border border-border bg-card p-5 shadow-sm">
-                {childCount > 1 && <p className="mb-4 text-sm font-black text-navy">Child {idx + 1}</p>}
+                {childCount > 1 && (
+                  <p className="mb-4 text-sm font-black text-navy">Child {idx + 1}</p>
+                )}
                 <div className="space-y-4">
                   <div className="grid gap-4 sm:grid-cols-2">
                     <Field
                       label={childCount > 1 ? `Child ${idx + 1} First Name` : "Child's First Name"}
                       value={child.firstName}
-                      onChange={(v) => setChildren((prev) => prev.map((c, i) => (i === idx ? { ...c, firstName: v } : c)))}
+                      onChange={(v) =>
+                        setChildren((prev) => prev.map((c, i) => (i === idx ? { ...c, firstName: v } : c)))
+                      }
                       placeholder="First name"
                     />
                     <Field
                       label="Last Name / Surname"
                       value={child.lastName}
-                      onChange={(v) => setChildren((prev) => prev.map((c, i) => (i === idx ? { ...c, lastName: v } : c)))}
+                      onChange={(v) =>
+                        setChildren((prev) => prev.map((c, i) => (i === idx ? { ...c, lastName: v } : c)))
+                      }
                       placeholder="Last name"
                     />
                   </div>
@@ -382,7 +464,9 @@ export function OnboardingWizard({
                     <p className="mb-2 text-sm font-semibold text-navy">Date of Birth</p>
                     <DobPicker
                       value={child.dob}
-                      onChange={(v) => setChildren((prev) => prev.map((c, i) => (i === idx ? { ...c, dob: v } : c)))}
+                      onChange={(v) =>
+                        setChildren((prev) => prev.map((c, i) => (i === idx ? { ...c, dob: v } : c)))
+                      }
                     />
                   </div>
                 </div>
@@ -391,148 +475,160 @@ export function OnboardingWizard({
           </div>
           <StepNav
             onBack={() => setStep(0)}
-            onNext={() => { setConfigIdx(0); setStep(2) }}
+            onNext={() => { setScheduleChildIdx(0); setStep(2) }}
             nextDisabled={children.some((c) => !c.firstName || !c.lastName || !c.dob)}
           />
         </div>
       )
 
-    // ── Step 2: Per-child club + schedule + package ──
+    // ── Step 2: Per-child club / school + schedule ───────────────────────────
     if (step === 2) {
-      const cfg = configs[configIdx]!
-      const childName = `${children[configIdx]?.firstName ?? ""} ${children[configIdx]?.lastName ?? ""}`.trim()
-      const availClubs = availableClubsFor(cfg.pkg)
-      const schoolMode = isSchoolPkg(cfg.pkg)
+      const sched = currentSchedule()
+      const childName = `${children[scheduleChildIdx]?.firstName ?? "Child"}`.trim()
+      const selectedClubObj = availableClubs.find((c) => c.id === sched.clubId) ?? null
+      const selectedSchoolObj = schools.find((s) => s.id === sched.schoolId) ?? null
 
-      // Progress pills for multi-child
-      const ConfigProgress = () =>
-        childCount > 1 ? (
-          <div className="mb-6 flex items-center gap-2 overflow-x-auto pb-1">
-            {children.map((c, i) => {
-              const done = (() => {
-                const cc = configs[i]!
-                if (!cc.pkg) return false
-                return isSchoolPkg(cc.pkg) ? cc.schoolId != null : cc.clubId != null && cc.slot != null
-              })()
-              return (
-                <button
-                  key={i}
-                  type="button"
-                  onClick={() => setConfigIdx(i)}
-                  className={`flex shrink-0 items-center gap-1.5 rounded-full border-2 px-3 py-1.5 text-xs font-bold transition-all ${
-                    i === configIdx
-                      ? "border-lime bg-lime/10 text-navy"
-                      : done
-                        ? "border-lime/40 bg-lime/5 text-navy"
-                        : "border-border bg-card text-muted-foreground"
-                  }`}
-                >
-                  {done && <Check className="h-3 w-3 text-lime-foreground" />}
-                  {`${c.firstName || `Child ${i + 1}`}`}
-                </button>
-              )
-            })}
-          </div>
-        ) : null
+      // Can we advance to the next child / finish step 2?
+      const thisChildDone = isSchoolPkg
+        ? !!sched.schoolId
+        : !!sched.clubId && !!sched.slot && !!sched.ageGroup && (!isAdvanced || !!sched.slot2)
+
+      const isLastChild = scheduleChildIdx === childCount - 1
+
+      function advanceScheduleStep() {
+        if (!isLastChild) {
+          setScheduleChildIdx((i) => i + 1)
+        } else {
+          setStep(3)
+        }
+      }
 
       return (
         <div>
-          <ConfigProgress />
-
-          <h2 className="text-xl font-bold text-navy">
-            {childCount > 1 ? `${childName} — Package & Schedule` : "Choose Your Club & Schedule"}
-          </h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {childCount > 1
-              ? "Select a package, club, and time slot for this child."
-              : "Pick the package, venue, and time that works best."}
-          </p>
-
-          {/* Package picker for this child */}
-          <div className="mt-6">
-            <p className="text-sm font-semibold text-navy">Package</p>
-            <div className="mt-3 grid gap-3 sm:grid-cols-2">
-              {packages.map((pkg) => (
-                <button
-                  key={pkg.id}
-                  type="button"
-                  onClick={() => {
-                    setActiveConfig({
-                      pkg,
-                      clubId: null,
-                      slot: null,
-                      ageGroup: null,
-                      schoolId: null,
-                    })
-                  }}
-                  className={`rounded-card border-2 p-4 text-left transition-all ${
-                    cfg.pkg?.id === pkg.id
-                      ? "border-lime bg-lime/10"
-                      : "border-border bg-card hover:border-lime/50"
-                  }`}
-                >
-                  <p className="font-bold text-navy">{pkg.name}</p>
-                  <p className="text-sm text-muted-foreground">
-                    R{pkg.price.toLocaleString()}
-                    {pkg.period === "once-off" ? " once off" : "/month"}
-                  </p>
-                  {pkg.tagline && <p className="mt-1 text-xs text-muted-foreground">{pkg.tagline}</p>}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* School picker */}
-          {cfg.pkg && schoolMode && (
-            <div className="mt-6">
-              <label htmlFor={`school-select-${configIdx}`} className="block text-sm font-semibold text-navy mb-2">
-                School
-              </label>
-              {schools.length === 0 ? (
-                <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700">
-                  No schools are currently listed. Please{" "}
-                  <a href="/contact" className="underline">
-                    contact us
-                  </a>
-                  .
-                </p>
-              ) : (
-                <select
-                  id={`school-select-${configIdx}`}
-                  value={cfg.schoolId ?? ""}
-                  onChange={(e) => setActiveConfig({ schoolId: e.target.value ? Number(e.target.value) : null })}
-                  className="w-full rounded-2xl border-2 border-border bg-card px-4 py-3 text-sm font-semibold text-navy shadow-sm transition-colors focus:border-lime focus:outline-none"
-                >
-                  <option value="">— Select a school —</option>
-                  {schools.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                      {s.location ? ` — ${s.location}` : ""}
-                    </option>
-                  ))}
-                </select>
-              )}
+          {/* Child tabs — when multiple children */}
+          {childCount > 1 && (
+            <div className="mb-6 flex gap-2 overflow-x-auto pb-1">
+              {Array.from({ length: childCount }, (_, i) => {
+                const s = schedules[i]
+                const done = isSchoolPkg
+                  ? !!s?.schoolId
+                  : !!s?.clubId && !!s?.slot && !!s?.ageGroup && (!isAdvanced || !!s?.slot2)
+                return (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => setScheduleChildIdx(i)}
+                    className={`flex shrink-0 items-center gap-1.5 rounded-full border px-4 py-1.5 text-sm font-semibold transition-colors ${
+                      i === scheduleChildIdx
+                        ? "border-navy bg-navy text-white"
+                        : done
+                          ? "border-lime bg-lime/10 text-navy"
+                          : "border-border bg-card text-muted-foreground"
+                    }`}
+                  >
+                    {done && i !== scheduleChildIdx && <Check className="h-3 w-3" />}
+                    {children[i]?.firstName || `Child ${i + 1}`}
+                  </button>
+                )
+              })}
             </div>
           )}
 
-          {/* Age group + club + slot (non-school) */}
-          {cfg.pkg && !schoolMode && (
+          {isSchoolPkg ? (
             <>
-              {/* Age group */}
+              <h2 className="text-xl font-bold text-navy">
+                {childCount > 1 ? `${childName}'s School` : "Select Your School"}
+              </h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Choose the school where{" "}
+                {childCount > 1 ? childName : "your child"} will attend Next Gen Padel lessons.
+              </p>
               <div className="mt-6">
+                <label htmlFor="school-select" className="mb-2 block text-sm font-semibold text-navy">
+                  School
+                </label>
+                {schools.length === 0 ? (
+                  <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700">
+                    No schools are listed yet.{" "}
+                    <a href="/contact" className="underline">Contact us</a>.
+                  </p>
+                ) : (
+                  <select
+                    id="school-select"
+                    value={sched.schoolId ?? ""}
+                    onChange={(e) =>
+                      updateSchedule(scheduleChildIdx, {
+                        schoolId: e.target.value ? Number(e.target.value) : null,
+                      })
+                    }
+                    className="w-full rounded-2xl border-2 border-border bg-card px-4 py-3 text-sm font-semibold text-navy shadow-sm transition-colors focus:border-lime focus:outline-none"
+                  >
+                    <option value="">— Select a school —</option>
+                    {schools.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}{s.location ? ` — ${s.location}` : ""}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                {sched.schoolId && selectedSchoolObj && (
+                  <div className="mt-4 flex items-center gap-3 rounded-2xl border-2 border-lime bg-lime/10 px-4 py-3">
+                    {selectedSchoolObj.logoUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={blobUrl(selectedSchoolObj.logoUrl) ?? selectedSchoolObj.logoUrl}
+                        alt={selectedSchoolObj.name}
+                        className="h-10 w-10 shrink-0 rounded-full border border-border bg-white object-contain p-0.5"
+                      />
+                    ) : (
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-navy/10 text-sm font-black text-navy">
+                        {selectedSchoolObj.name[0]?.toUpperCase()}
+                      </div>
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <p className="font-black text-navy">{selectedSchoolObj.name}</p>
+                      {selectedSchoolObj.location && (
+                        <p className="text-xs text-muted-foreground">{selectedSchoolObj.location}</p>
+                      )}
+                    </div>
+                    <Check className="h-5 w-5 shrink-0 text-lime-foreground" />
+                  </div>
+                )}
+              </div>
+            </>
+          ) : (
+            <>
+              <h2 className="text-xl font-bold text-navy">
+                {childCount > 1 ? `${childName}'s Club & Schedule` : "Choose Your Club & Schedule"}
+              </h2>
+              {sched.ageGroup && (
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Showing slots for ages{" "}
+                  <span className="font-semibold text-navy">{sched.ageGroup}</span>
+                </p>
+              )}
+              {availableClubs.length < clubs.length && (
+                <p className="mt-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700">
+                  The <strong>{selectedPackage!.name}</strong> package is only available at{" "}
+                  {availableClubs.length === 1 ? "the venue below" : "the venues below"}.
+                </p>
+              )}
+
+              {/* Age category */}
+              <div className="mt-5">
                 <p className="text-sm font-semibold text-navy">Age Category</p>
                 <p className="mt-0.5 text-xs text-muted-foreground">
-                  This determines which time slots are shown.
+                  This determines which time slots are available.
                 </p>
                 <div className="mt-3 grid grid-cols-3 gap-3">
                   {(["4-8", "9-13", "14-17"] as const).map((ag) => (
                     <button
                       key={ag}
                       type="button"
-                      onClick={() => setActiveConfig({ ageGroup: ag, slot: null })}
+                      onClick={() => updateSchedule(scheduleChildIdx, { ageGroup: ag, slot: null, slot2: null })}
                       className={`rounded-2xl border-2 p-4 text-center transition-all ${
-                        cfg.ageGroup === ag
-                          ? "border-lime bg-lime/10 scale-105 shadow-md"
+                        sched.ageGroup === ag
+                          ? "scale-105 border-lime bg-lime/10 shadow-md"
                           : "border-border bg-card hover:border-lime/50"
                       }`}
                     >
@@ -544,91 +640,135 @@ export function OnboardingWizard({
               </div>
 
               {/* Club selection */}
-              {cfg.ageGroup && (
-                <div className="mt-6">
-                  <p className="text-sm font-semibold text-navy">Club / Venue</p>
-                  {availClubs.length < clubs.length && (
-                    <p className="mt-1 mb-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700">
-                      The <strong>{cfg.pkg.name}</strong> package is only available at{" "}
-                      {availClubs.length === 1 ? "the venue below" : "the venues below"}.
-                    </p>
-                  )}
-                  <div className="mt-3 space-y-3">
-                    {availClubs.map((c) => (
-                      <button
-                        key={c.id}
-                        type="button"
-                        onClick={() => setActiveConfig({ clubId: c.id, slot: null })}
-                        className={`w-full rounded-card border p-4 text-left transition-colors ${
-                          cfg.clubId === c.id ? "border-lime bg-lime/10" : "border-border bg-card hover:border-lime/50"
-                        }`}
-                      >
-                        <h3 className="font-bold text-navy">{c.name}</h3>
-                        <p className="text-sm text-muted-foreground">{c.location}</p>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
+              <div className="mt-5 space-y-3">
+                {availableClubs.map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() =>
+                      updateSchedule(scheduleChildIdx, { clubId: c.id, slot: null, slot2: null })
+                    }
+                    className={`w-full rounded-card border p-4 text-left transition-colors ${
+                      sched.clubId === c.id
+                        ? "border-lime bg-lime/10"
+                        : "border-border bg-card hover:border-lime/50"
+                    }`}
+                  >
+                    <h3 className="font-bold text-navy">{c.name}</h3>
+                    <p className="text-sm text-muted-foreground">{c.location}</p>
+                  </button>
+                ))}
+              </div>
 
-              {/* Slot picker */}
-              {cfg.clubId && cfg.ageGroup && (
+              {/* Time slots */}
+              {sched.clubId && sched.ageGroup && (
                 <div className="mt-6">
                   <p className="block text-sm font-semibold text-navy">Available Time Slots</p>
-                  <p className="mb-3 text-xs text-muted-foreground">
-                    Only times with open places for ages {cfg.ageGroup} are shown.
-                  </p>
-                  {cfg.pkg.slotType === "custom" ? (
-                    <PackageSlotPicker
-                      packageId={cfg.pkg.id}
-                      packageName={cfg.pkg.name}
-                      ageGroup={cfg.ageGroup}
-                      clubId={cfg.clubId}
-                      selected={cfg.slot}
-                      onSelect={(s) => setActiveConfig({ slot: s })}
-                    />
+                  {selectedPackage!.slotType === "custom" ? (
+                    <>
+                      {isAdvanced ? (
+                        <p className="mb-3 text-xs text-muted-foreground">
+                          Select two coaching sessions on <strong>different days</strong> (2 sessions per week).
+                        </p>
+                      ) : (
+                        <p className="mb-3 text-xs text-muted-foreground">
+                          This package runs at fixed times. Pick a slot below.
+                        </p>
+                      )}
+                      {isAdvanced && (
+                        <p className="mb-2 text-sm font-semibold text-navy">First Coaching Session</p>
+                      )}
+                      <PackageSlotPicker
+                        packageId={selectedPackage!.id}
+                        packageName={selectedPackage!.name}
+                        ageGroup={sched.ageGroup}
+                        clubId={sched.clubId}
+                        selected={sched.slot}
+                        onSelect={(s) =>
+                          updateSchedule(scheduleChildIdx, { slot: s, slot2: null })
+                        }
+                      />
+                      {isAdvanced && (
+                        <div className="mt-6">
+                          <div className="mb-2 flex items-center gap-2">
+                            <p className="text-sm font-semibold text-navy">Second Coaching Session</p>
+                            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700">
+                              Different day required
+                            </span>
+                          </div>
+                          <PackageSlotPicker
+                            packageId={selectedPackage!.id}
+                            packageName={selectedPackage!.name}
+                            ageGroup={sched.ageGroup}
+                            clubId={sched.clubId}
+                            selected={sched.slot2}
+                            disabledWeekday={sched.slot?.weekday}
+                            onSelect={(s) => updateSchedule(scheduleChildIdx, { slot2: s })}
+                          />
+                        </div>
+                      )}
+                    </>
                   ) : (
-                    <SlotPicker
-                      clubId={cfg.clubId}
-                      ageGroup={cfg.ageGroup}
-                      selected={cfg.slot}
-                      onSelect={(s) => setActiveConfig({ slot: s })}
-                    />
+                    <>
+                      <p className="mb-3 text-xs text-muted-foreground">
+                        Only times with open places for ages {sched.ageGroup} are shown.
+                      </p>
+                      <SlotPicker
+                        clubId={sched.clubId}
+                        ageGroup={sched.ageGroup}
+                        selected={sched.slot}
+                        onSelect={(s) => updateSchedule(scheduleChildIdx, { slot: s })}
+                      />
+                    </>
                   )}
                 </div>
               )}
             </>
           )}
 
-          {/* Navigation */}
-          {configIdx < childCount - 1 ? (
-            <StepNav
-              onBack={configIdx === 0 ? () => setStep(1) : () => setConfigIdx((i) => i - 1)}
-              onNext={() => setConfigIdx((i) => i + 1)}
-              nextLabel={`Next: ${children[configIdx + 1]?.firstName || `Child ${configIdx + 2}`}`}
-              nextDisabled={
-                !cfg.pkg ||
-                (schoolMode ? !cfg.schoolId : !cfg.clubId || !cfg.slot)
-              }
-            />
-          ) : (
-            <StepNav
-              onBack={configIdx === 0 ? () => setStep(1) : () => setConfigIdx((i) => i - 1)}
-              onNext={() => setStep(3)}
-              nextDisabled={!allConfigsDone}
-            />
+          <div className="mt-8 flex items-center justify-between gap-4">
+            <button
+              onClick={() => {
+                if (scheduleChildIdx > 0) {
+                  setScheduleChildIdx((i) => i - 1)
+                } else {
+                  setStep(1)
+                }
+              }}
+              className="rounded-2xl border-2 border-border px-5 py-3 font-bold text-navy transition-all hover:bg-muted active:scale-95"
+            >
+              Back
+            </button>
+            <button
+              disabled={!thisChildDone}
+              onClick={advanceScheduleStep}
+              className="rounded-2xl bg-lime px-6 py-3 font-black text-lime-foreground shadow-sm transition-all hover:scale-105 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-40 active:scale-95"
+            >
+              {isLastChild
+                ? schedulesComplete()
+                  ? "Continue"
+                  : "Continue"
+                : `Next: ${children[scheduleChildIdx + 1]?.firstName || `Child ${scheduleChildIdx + 2}`}`}
+            </button>
+          </div>
+
+          {/* Mini progress for multi-child */}
+          {childCount > 1 && (
+            <p className="mt-3 text-center text-xs text-muted-foreground">
+              {scheduleChildIdx + 1} of {childCount} children configured
+            </p>
           )}
         </div>
       )
     }
 
-    // ── Step 3: Parent account ──
+    // ── Step 3: Parent account ───────────────────────────────────────────────
     if (step === 3)
       return (
         <div>
           <h2 className="text-xl font-bold text-navy">Parent / Guardian Account</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            We&apos;ll create your account so you can track sessions and manage your enrolment.
+            We&apos;ll create your account so you can track sessions and manage your enrollment.
           </p>
           <div className="mt-6 grid gap-4 sm:grid-cols-2">
             <Field
@@ -651,7 +791,9 @@ export function OnboardingWizard({
                 onChange={(v) => setParent({ ...parent, mobile: v.replace(/[^\d]/g, "") })}
                 placeholder="0812345678"
               />
-              <p className="text-xs text-muted-foreground">South African number — start with 0, no spaces. e.g. 0812345678</p>
+              <p className="text-xs text-muted-foreground">
+                South African number — start with 0, no spaces or +27. e.g. 0812345678
+              </p>
               {parent.mobile.length > 0 && !/^0\d{9}$/.test(parent.mobile) && (
                 <p className="text-xs font-semibold text-destructive">
                   {!parent.mobile.startsWith("0")
@@ -719,7 +861,7 @@ export function OnboardingWizard({
         </div>
       )
 
-    // ── Step 4: Preferences ──
+    // ── Step 4: Communication preferences ───────────────────────────────────
     if (step === 4)
       return (
         <div>
@@ -737,85 +879,55 @@ export function OnboardingWizard({
         </div>
       )
 
-    // ── Step 5: Review (cart) ──
-    const isOnceOff = configs.every((cfg) => cfg.pkg?.period === "once-off")
+    // ── Step 5: Review & pay ─────────────────────────────────────────────────
     return (
       <div>
-        <h2 className="text-xl font-bold text-navy">Review Your Cart</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Check everything below, then confirm to proceed to secure payment.
-        </p>
+        <h2 className="text-xl font-bold text-navy">Review &amp; Confirm</h2>
+        <p className="mt-1 text-sm text-muted-foreground">Check your details, then complete payment.</p>
+        <dl className="mt-6 space-y-2 rounded-card border border-border bg-card p-5 text-sm shadow-sm">
+          <Row
+            label="Package"
+            value={`${selectedPackage!.name} — R${selectedPackage!.price.toLocaleString()} ${
+              isOnceOff ? "(once off)" : "/month"
+            } per child`}
+          />
+          {childCount > 1 && (
+            <Row
+              label={`Total (${childCount} children)`}
+              value={`R${computeTotal().toLocaleString()} ${isOnceOff ? "(once off)" : "/month"}`}
+              bold
+            />
+          )}
 
-        {/* Cart table */}
-        <div className="mt-6 overflow-hidden rounded-card border border-border bg-card shadow-sm">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border bg-muted/40">
-                <th className="px-4 py-3 text-left font-semibold text-navy">Child</th>
-                <th className="px-4 py-3 text-left font-semibold text-navy">Package</th>
-                <th className="px-4 py-3 text-left font-semibold text-navy hidden sm:table-cell">Venue / Slot</th>
-                <th className="px-4 py-3 text-right font-semibold text-navy">Price</th>
-                <th className="w-8 px-2"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {configs.map((cfg, i) => {
-                const child = children[i]!
-                const club = clubs.find((c) => c.id === cfg.clubId)
-                const school = schools.find((s) => s.id === cfg.schoolId)
-                const school_ = isSchoolPkg(cfg.pkg)
-                const price = cfg.pkg?.price ?? 0
-                const disc = appliedVoucher?.discountPercent ?? 0
-                const discounted = Math.round(price * (1 - disc / 100))
-                return (
-                  <tr key={i} className="border-b border-border last:border-0">
-                    <td className="px-4 py-3 font-semibold text-navy">
-                      {`${child.firstName} ${child.lastName}`.trim()}
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground">
-                      {cfg.pkg?.name ?? "—"}
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground hidden sm:table-cell">
-                      {school_ ? (school?.name ?? "—") : club ? `${club.name}${cfg.slot ? ` · ${formatSlot(cfg.slot.weekday, cfg.slot.hour)}` : ""}` : "—"}
-                    </td>
-                    <td className="px-4 py-3 text-right font-semibold text-navy whitespace-nowrap">
-                      {disc > 0 && (
-                        <span className="mr-1 text-xs text-muted-foreground line-through">
-                          R{price.toLocaleString()}
-                        </span>
-                      )}
-                      R{discounted.toLocaleString()}
-                    </td>
-                    <td className="px-2 py-3">
-                      <button
-                        type="button"
-                        onClick={() => { setConfigIdx(i); setStep(2) }}
-                        className="text-muted-foreground hover:text-navy"
-                        aria-label="Edit"
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </button>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-            <tfoot>
-              <tr className="border-t-2 border-border bg-muted/20">
-                <td colSpan={3} className="px-4 py-3 font-bold text-navy">
-                  Total {isOnceOff ? "(once off)" : "/month"}
-                </td>
-                <td className="px-4 py-3 text-right font-black text-navy">
-                  R{grandTotal.toLocaleString()}
-                </td>
-                <td />
-              </tr>
-            </tfoot>
-          </table>
-        </div>
+          {/* Per-child summary */}
+          {children.map((child, idx) => {
+            const sched = schedules[idx]
+            const clubObj = availableClubs.find((c) => c.id === sched?.clubId)
+            const schoolObj = schools.find((s) => s.id === sched?.schoolId)
+            return (
+              <div key={idx} className={`${idx > 0 ? "mt-3 border-t border-border pt-3" : ""}`}>
+                <Row
+                  label={childCount > 1 ? `Child ${idx + 1}` : "Child"}
+                  value={`${child.firstName} ${child.lastName}`.trim() + ` (born ${child.dob})`}
+                />
+                {isSchoolPkg ? (
+                  <Row label="School" value={schoolObj?.name ?? ""} />
+                ) : (
+                  <>
+                    <Row label="Club" value={clubObj?.name ?? ""} />
+                    <Row
+                      label={isAdvanced ? "First Session" : "Time Slot"}
+                      value={sched?.slot ? formatSlot(sched.slot.weekday, sched.slot.hour) : ""}
+                    />
+                    {isAdvanced && sched?.slot2 && (
+                      <Row label="Second Session" value={formatSlot(sched.slot2.weekday, sched.slot2.hour)} />
+                    )}
+                  </>
+                )}
+              </div>
+            )
+          })}
 
-        {/* Parent summary */}
-        <dl className="mt-4 space-y-2 rounded-card border border-border bg-card p-4 text-sm shadow-sm">
           <Row label="Parent" value={`${parent.firstName} ${parent.lastName}`.trim()} />
           <Row label="Email" value={parent.email} />
           <Row label="Mobile" value={parent.mobile} />
@@ -824,12 +936,12 @@ export function OnboardingWizard({
 
         {/* Voucher */}
         <div className="mt-5 rounded-card border border-border bg-card p-4 shadow-sm">
-          <div className="flex items-center gap-2 mb-3">
+          <div className="mb-3 flex items-center gap-2">
             <Tag className="h-4 w-4 text-lime-foreground" />
-            <p className="font-semibold text-navy text-sm">Have a voucher code?</p>
+            <p className="text-sm font-semibold text-navy">Have a voucher code?</p>
           </div>
           {appliedVoucher ? (
-            <div className="flex items-center justify-between gap-3 rounded-md bg-lime/10 border border-lime/30 px-3 py-2">
+            <div className="flex items-center justify-between gap-3 rounded-md border border-lime/30 bg-lime/10 px-3 py-2">
               <div>
                 <p className="text-sm font-bold text-navy">{appliedVoucher.code}</p>
                 <p className="text-xs text-muted-foreground">
@@ -891,13 +1003,13 @@ export function OnboardingWizard({
               <p className="text-xs text-muted-foreground">
                 {isOnceOff
                   ? "Pay securely via card or EFT. You will be redirected to Netcash after confirming."
-                  : "Set up your monthly subscription via Netcash. You will be redirected to complete payment."}
+                  : "Set up your monthly subscription securely via Netcash. You will be redirected to complete payment."}
               </p>
             </div>
           </div>
         </div>
 
-        {/* Terms & signature */}
+        {/* Terms & consent */}
         <div className="mt-6 rounded-card border border-border bg-card p-5 shadow-sm">
           <div className="flex items-center justify-between gap-3">
             <h3 className="font-bold text-navy">Terms &amp; Indemnity</h3>
@@ -934,11 +1046,18 @@ export function OnboardingWizard({
           </div>
         </div>
 
+        {netcashUnavailable && (
+          <div className="mt-4 rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900" role="alert">
+            <p className="font-semibold">Your enrolment has been saved.</p>
+            <p className="mt-1">
+              We could not connect to NetCash at this moment. Please try again in a few minutes —
+              your information will not be lost.
+            </p>
+          </div>
+        )}
+
         {error && (
-          <p
-            className="mt-4 rounded-md border border-destructive/30 bg-destructive/10 px-4 py-2 text-sm text-destructive"
-            role="alert"
-          >
+          <p className="mt-4 rounded-md border border-destructive/30 bg-destructive/10 px-4 py-2 text-sm text-destructive" role="alert">
             {error}
           </p>
         )}
@@ -971,12 +1090,90 @@ export function OnboardingWizard({
         </p>
       </div>
     )
-  }
-}
+  } // end renderStep
+} // end OnboardingWizard
 
 // ---------------------------------------------------------------------------
-// Sub-components
+// Sub-components (unchanged from original)
 // ---------------------------------------------------------------------------
+
+function PackagePicker({
+  packages,
+  onSelect,
+}: {
+  packages: PublicPackage[]
+  onSelect: (p: PublicPackage) => void
+}) {
+  const CARD_COLORS = [
+    "from-navy to-[#0d3070]",
+    "from-[#1a4a1a] to-[#2d6e2d]",
+    "from-[#3a1a5c] to-[#5a2d8c]",
+    "from-[#1a3a4a] to-[#0a2a3a]",
+  ]
+  return (
+    <section className="mx-auto max-w-3xl px-4 py-12">
+      <h2 className="text-center text-2xl font-black text-navy">Choose Your Package</h2>
+      <p className="mt-2 text-center text-sm text-muted-foreground">
+        Pick the plan that suits your child — swipe or scroll to explore
+      </p>
+      <div className="mt-8 grid gap-5 sm:grid-cols-2">
+        {packages.map((pkg, i) => {
+          const gradient = CARD_COLORS[i % CARD_COLORS.length]
+          return (
+            <button
+              key={pkg.id}
+              onClick={() => onSelect(pkg)}
+              className="group block w-full overflow-hidden rounded-2xl text-left shadow-xl transition-all duration-300 hover:-translate-y-2 hover:shadow-2xl"
+            >
+              <div className={`relative overflow-hidden bg-gradient-to-br ${gradient} p-5 text-white`}>
+                <div className="absolute -right-6 -top-6 h-20 w-20 rounded-full bg-white/5" />
+                {pkg.popular && (
+                  <span className="mb-2 inline-block rounded-full bg-lime px-3 py-0.5 text-xs font-black text-navy">
+                    Most Popular
+                  </span>
+                )}
+                <h3 className="text-lg font-black leading-tight">{pkg.name}</h3>
+                {pkg.tagline && <p className="mt-1 text-xs text-white/70">{pkg.tagline}</p>}
+                <div className="mt-3 flex items-end gap-2">
+                  <span className="text-4xl font-black text-lime">R{pkg.price.toLocaleString()}</span>
+                  {pkg.period === "once-off" ? (
+                    <span className="mb-1 rounded-full bg-white/20 px-2 py-0.5 text-xs font-bold">once off</span>
+                  ) : (
+                    <span className="mb-1 text-sm text-white/60">/month</span>
+                  )}
+                </div>
+              </div>
+              <div className="bg-card p-5">
+                {pkg.features.length > 0 && (
+                  <div className="space-y-2">
+                    {pkg.features.slice(0, 4).map((item, idx) => (
+                      <div key={idx}>
+                        {item.type === "heading" ? (
+                          <h5 className="mb-1 text-xs font-semibold text-navy">{item.text}</h5>
+                        ) : (
+                          <div className="flex items-start gap-2 text-sm">
+                            <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-lime/20">
+                              <Check className="h-2.5 w-2.5 text-lime-foreground" />
+                            </span>
+                            <span>{item.text}</span>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <span className="mt-5 flex items-center justify-center gap-1.5 rounded-xl bg-lime py-3 text-sm font-black text-lime-foreground transition-all group-hover:bg-navy group-hover:text-white">
+                  Select &amp; Continue
+                  <ChevronRight className="h-4 w-4" />
+                </span>
+              </div>
+            </button>
+          )
+        })}
+      </div>
+    </section>
+  )
+}
 
 function StepNav({
   onBack,
@@ -1064,10 +1261,14 @@ function PrefToggle({
 function Row({ label, value, bold }: { label: string; value: string; bold?: boolean }) {
   return (
     <div
-      className={`flex justify-between gap-4 border-b border-border pb-2 last:border-0 last:pb-0 ${bold ? "border-t border-border pt-2" : ""}`}
+      className={`flex justify-between gap-4 border-b border-border pb-2 last:border-0 last:pb-0 ${
+        bold ? "border-t border-border pt-2" : ""
+      }`}
     >
       <dt className={bold ? "font-bold text-navy" : "text-muted-foreground"}>{label}</dt>
-      <dd className={`text-right ${bold ? "font-extrabold text-navy" : "font-semibold text-navy"}`}>{value}</dd>
+      <dd className={`text-right ${bold ? "font-extrabold text-navy" : "font-semibold text-navy"}`}>
+        {value}
+      </dd>
     </div>
   )
 }
@@ -1123,8 +1324,8 @@ function Confirmation({
         <h2 className="mt-4 text-2xl font-extrabold text-navy">Welcome to Next Gen Padel!</h2>
         <p className="mt-2 text-muted-foreground">
           {childNames.length > 1
-            ? `Your account is ready and ${childNames.length} enrolments have been received.`
-            : `Your account is ready and your enrolment in the ${packageName} has been received.`}
+            ? `Your account is ready and ${childNames.length} enrollments in the ${packageName} have been received.`
+            : `Your account is ready and your enrollment in the ${packageName} has been received.`}
         </p>
         <p className="mt-4 text-sm text-muted-foreground">
           {refs.length > 1 ? "Your reference numbers" : "Your reference number"}
@@ -1134,11 +1335,12 @@ function Confirmation({
             {r}
           </p>
         ))}
+
         {isEft && (
           <div className="mt-6 rounded-card border border-border bg-card p-5 text-left shadow-sm">
             <p className="text-sm font-bold text-navy">Complete your payment via EFT</p>
             <p className="mt-1 text-xs text-muted-foreground">
-              Your enrolment is reserved. Please make payment within 48 hours to confirm your spot.
+              Your enrollment is reserved. Please make payment within 48 hours to confirm your spot.
             </p>
             <dl className="mt-4 space-y-2 text-sm">
               <div className="flex justify-between gap-4 border-b border-border pb-2">
@@ -1171,11 +1373,13 @@ function Confirmation({
             <div className="mt-4 rounded-md border border-amber-300 bg-amber-50 px-4 py-3">
               <p className="text-xs font-semibold text-amber-800">Important</p>
               <p className="mt-1 text-xs text-amber-700">
-                Use <strong>{childLabel}</strong> as the payment reference so we can match your payment.
+                Use <strong>{childLabel}</strong> as the payment reference so we can match your
+                payment and confirm your enrollment.
               </p>
             </div>
           </div>
         )}
+
         <div className="mt-6 flex flex-wrap justify-center gap-3">
           <Link
             href="/dashboard"

@@ -4,8 +4,8 @@ import { useState, useTransition, useMemo, useRef, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import {
   FileText, Mail, RefreshCw, Check, X, Pencil,
-  ChevronDown, ChevronUp, Trash2, Plus, Filter, Search, Link2, UserPlus, Eye,
-  CreditCard, Building2, Landmark, Tag,
+  ChevronDown, ChevronUp, Plus, Filter, Search, Link2, UserPlus, Eye,
+  CreditCard, Building2, Landmark, Tag, PowerOff, RotateCcw, Trash2,
 } from "lucide-react"
 import {
   type AdminSignup,
@@ -15,11 +15,20 @@ import {
   regenerateContract,
   resendWelcome,
   updateSignup,
-  deleteSignup,
+  updateClientTimeSlots,
+  deactivateSignup,
+  reactivateSignup,
   createSignup,
   searchUsers,
+  permanentlyDeleteSignup,
 } from "@/app/actions/admin-signups"
 import { markReferralDiscountApplied } from "@/app/actions/referrals"
+import {
+  getMonthsForEnrollment,
+  updateMonthStatus,
+  type SubscriptionMonthRow,
+} from "@/app/actions/subscription-months"
+import { MONTH_NAMES } from "@/lib/billing-utils"
 import type { CoachRow } from "@/app/actions/coaches"
 import type { PublicPackage } from "@/app/actions/packages"
 import type { Club } from "@/lib/db/schema"
@@ -51,6 +60,14 @@ function pkgAbbr(name: string): string {
     .trim()
 }
 
+/** Format an ISO timestamp as a short date, e.g. "12 Mar 2025". */
+function formatSignupDate(iso: string | null | undefined): string {
+  if (!iso) return "—"
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return "—"
+  return d.toLocaleDateString("en-ZA", { day: "numeric", month: "short", year: "numeric" })
+}
+
 /** Derive an age-group bucket from a numeric age, matching enrollment wizard logic. */
 function ageGroupFromAge(age: number | string | null | undefined): string {
   const n = Number(age)
@@ -62,7 +79,7 @@ function ageGroupFromAge(age: number | string | null | undefined): string {
 
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
 const HOURS = Array.from({ length: 11 }, (_, i) => i + 8)
-const STATUS_OPTIONS = ["active", "pending", "cancelled", "on-hold"]
+const STATUS_OPTIONS = ["active", "pending", "cancelled", "on-hold", "inactive"]
 
 // ---------------------------------------------------------------------------
 // Main component
@@ -86,11 +103,15 @@ export function AdminSignupsManager({
   const [toast, setToast] = useState<{ id: number; ok: boolean; msg: string } | null>(null)
   const [editing, setEditing] = useState<AdminSignup | null>(null)
   const [viewing, setViewing] = useState<AdminSignup | null>(null)
+  const [customizingSlots, setCustomizingSlots] = useState<AdminSignup | null>(null)
   const [expanded, setExpanded] = useState<number | null>(null)
-  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null)
   const [showAddModal, setShowAddModal] = useState(false)
+  const [confirmDeactivateId, setConfirmDeactivateId] = useState<number | null>(null)
+  const [confirmReactivateId, setConfirmReactivateId] = useState<number | null>(null)
+  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null)
 
   // Filters
+  const [filterEnrollmentState, setFilterEnrollmentState] = useState<"active" | "inactive" | "all">("active")
   const [filterCoach, setFilterCoach] = useState("")
   const [filterPackage, setFilterPackage] = useState("")
   const [filterClub, setFilterClub] = useState("")
@@ -151,7 +172,9 @@ export function AdminSignupsManager({
                   childAge: input.childAge,
                   packageName: input.packageName,
                   club: input.club,
+                  clubId: input.clubId ?? p.clubId,
                   coachName: input.coachName,
+                  coachId: input.coachId ?? p.coachId,
                   slotWeekday: input.slotWeekday,
                   slotHour: input.slotHour != null ? String(input.slotHour) : null,
                   slotLabel: slotLabel ?? null,
@@ -171,9 +194,68 @@ export function AdminSignupsManager({
     })
   }
 
-  function handleConfirmDelete(id: number) {
+  function handleSaveTimeSlots(
+    signup: AdminSignup,
+    input: { slotWeekday: number; slotHour: number; slotWeekday2?: number | null; slotHour2?: number | null },
+  ) {
+    return new Promise<{ ok: boolean; error?: string }>((resolve) => {
+      startTransition(async () => {
+        const res = await updateClientTimeSlots(signup.id, input)
+        if (res.ok) {
+          const slotLabel = formatSlot(input.slotWeekday, input.slotHour)
+          const slotLabel2 =
+            input.slotWeekday2 != null && input.slotHour2 != null ? formatSlot(input.slotWeekday2, input.slotHour2) : null
+          const updatedFields = {
+            slotWeekday: input.slotWeekday,
+            slotHour: String(input.slotHour),
+            slotLabel,
+            slotWeekday2: input.slotWeekday2 ?? null,
+            slotHour2: input.slotHour2 != null ? String(input.slotHour2) : null,
+            slotLabel2,
+            scheduleCustomized: true,
+          }
+          setSignups((prev) => prev.map((p) => (p.id === signup.id ? { ...p, ...updatedFields } : p)))
+          setViewing((prev) => (prev && prev.id === signup.id ? { ...prev, ...updatedFields } : prev))
+          setCustomizingSlots(null)
+          flash(signup.id, true, "Time slots successfully updated.")
+          router.refresh()
+        }
+        resolve(res)
+      })
+    })
+  }
+
+  function handleDeactivate(id: number) {
     startTransition(async () => {
-      const res = await deleteSignup(id)
+      const res = await deactivateSignup(id)
+      if (res.ok) {
+        setSignups((prev) => prev.map((s) => s.id === id ? { ...s, status: "inactive" } : s))
+        setConfirmDeactivateId(null)
+        router.refresh()
+      } else {
+        flash(id, false, res.error ?? "Failed to deactivate")
+        setConfirmDeactivateId(null)
+      }
+    })
+  }
+
+  function handleReactivate(id: number) {
+    startTransition(async () => {
+      const res = await reactivateSignup(id)
+      if (res.ok) {
+        setSignups((prev) => prev.map((s) => s.id === id ? { ...s, status: "active" } : s))
+        setConfirmReactivateId(null)
+        router.refresh()
+      } else {
+        flash(id, false, res.error ?? "Failed to reactivate")
+        setConfirmReactivateId(null)
+      }
+    })
+  }
+
+  function handlePermanentDelete(id: number) {
+    startTransition(async () => {
+      const res = await permanentlyDeleteSignup(id)
       if (res.ok) {
         setSignups((prev) => prev.filter((s) => s.id !== id))
         setConfirmDeleteId(null)
@@ -200,6 +282,8 @@ export function AdminSignupsManager({
           childAge: input.childAge,
           packageName: input.packageName,
           club: input.club,
+          clubId: input.clubId ?? null,
+          coachId: input.coachId ?? null,
           coachName: input.coachName || null,
           slotWeekday: input.slotWeekday,
           slotHour: input.slotHour != null ? String(input.slotHour) : null,
@@ -207,6 +291,13 @@ export function AdminSignupsManager({
             input.slotWeekday != null && input.slotHour != null
               ? formatSlot(input.slotWeekday, input.slotHour)
               : null,
+          slotWeekday2: input.slotWeekday2,
+          slotHour2: input.slotHour2 != null ? String(input.slotHour2) : null,
+          slotLabel2:
+            input.slotWeekday2 != null && input.slotHour2 != null
+              ? formatSlot(input.slotWeekday2, input.slotHour2)
+              : null,
+          scheduleCustomized: false,
           emergencyContactName: input.emergencyContactName || null,
           emergencyContactPhone: input.emergencyContactPhone || null,
           debitAccountHolder: null,
@@ -252,15 +343,21 @@ export function AdminSignupsManager({
 
   const filtered = useMemo(() => {
     return signups.filter((s) => {
+      // Enrollment state tab filter
+      if (filterEnrollmentState === "active" && s.status === "inactive") return false
+      if (filterEnrollmentState === "inactive" && s.status !== "inactive") return false
+      // Sub-filters
       if (filterCoach && s.coachName !== filterCoach) return false
       if (filterPackage && s.packageName !== filterPackage) return false
       if (filterClub && s.club !== filterClub) return false
       if (filterStatus && s.status !== filterStatus) return false
       return true
     })
-  }, [signups, filterCoach, filterPackage, filterClub, filterStatus])
+  }, [signups, filterEnrollmentState, filterCoach, filterPackage, filterClub, filterStatus])
 
   const hasFilters = filterCoach || filterPackage || filterClub || filterStatus
+  const activeCount = signups.filter((s) => s.status !== "inactive").length
+  const inactiveCount = signups.filter((s) => s.status === "inactive").length
 
   function statusColor(status: string) {
     switch (status) {
@@ -268,6 +365,7 @@ export function AdminSignupsManager({
       case "pending": return "bg-amber-100 text-amber-800"
       case "cancelled": return "bg-red-100 text-red-700"
       case "on-hold": return "bg-gray-100 text-gray-600"
+      case "inactive": return "bg-muted/60 text-muted-foreground line-through"
       default: return "bg-muted text-muted-foreground"
     }
   }
@@ -293,8 +391,24 @@ export function AdminSignupsManager({
         </button>
       </div>
 
+      {/* Active / Inactive tabs */}
+      <div className="mt-4 flex gap-1 rounded-lg border border-border bg-muted/40 p-1 w-fit">
+        {(["active", "inactive", "all"] as const).map((f) => {
+          const count = f === "active" ? activeCount : f === "inactive" ? inactiveCount : signups.length
+          return (
+            <button
+              key={f}
+              onClick={() => { setFilterEnrollmentState(f); setFilterStatus("") }}
+              className={`rounded-md px-4 py-1.5 text-sm font-semibold transition-colors ${filterEnrollmentState === f ? "bg-card text-navy shadow-sm" : "text-muted-foreground hover:text-navy"}`}
+            >
+              {f === "active" ? "Active" : f === "inactive" ? "Inactive" : "All"} ({count})
+            </button>
+          )
+        })}
+      </div>
+
       {/* Filters */}
-      <div className="mt-5 flex flex-wrap items-center gap-3 rounded-lg border border-border bg-muted/30 px-4 py-3">
+      <div className="mt-3 flex flex-wrap items-center gap-3 rounded-lg border border-border bg-muted/30 px-4 py-3">
         <span className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
           <Filter className="h-3.5 w-3.5" />
           Filter
@@ -343,19 +457,22 @@ export function AdminSignupsManager({
       <div className="mt-4 rounded-card border border-border bg-card shadow-sm">
         <table className="w-full table-fixed text-left text-xs">
           <colgroup>
-            <col style={{ width: "14%" }} />{/* Child */}
+            <col style={{ width: "5%" }} />{/* ID */}
+            <col style={{ width: "13%" }} />{/* Child */}
             <col style={{ width: "5%" }} />{/* Age */}
-            <col style={{ width: "12%" }} />{/* Parent */}
-            <col style={{ width: "10%" }} />{/* Package */}
+            <col style={{ width: "11%" }} />{/* Parent */}
+            <col style={{ width: "9%" }} />{/* Package */}
             <col style={{ width: "8%" }} />{/* Club */}
             <col style={{ width: "9%" }} />{/* Slot */}
             <col style={{ width: "8%" }} />{/* Coach */}
-            <col style={{ width: "8%" }} />{/* Status */}
-            <col style={{ width: "10%" }} />{/* Payment */}
-            <col style={{ width: "8%" }} />{/* Actions */}
+            <col style={{ width: "7%" }} />{/* Status */}
+            <col style={{ width: "8%" }} />{/* Signed up */}
+            <col style={{ width: "8%" }} />{/* Payment */}
+            <col style={{ width: "7%" }} />{/* Actions */}
           </colgroup>
           <thead className="border-b border-border bg-muted/40">
             <tr>
+              <th className="px-2 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">ID</th>
               <th className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Child</th>
               <th className="px-2 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Age</th>
               <th className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Parent</th>
@@ -364,6 +481,7 @@ export function AdminSignupsManager({
               <th className="px-2 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Slot</th>
               <th className="px-2 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Coach</th>
               <th className="px-2 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Status</th>
+              <th className="px-2 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Signed up</th>
               <th className="px-2 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Payment</th>
               <th className="px-2 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Actions</th>
             </tr>
@@ -376,6 +494,12 @@ export function AdminSignupsManager({
               const coachImg = coachData?.imageUrl ?? null
               return (
                 <tr key={s.id} className="hover:bg-muted/20 align-middle">
+                  {/* Enrollment ID */}
+                  <td className="px-2 py-2">
+                    <span className="inline-block rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] font-semibold text-muted-foreground">
+                      #{s.id}
+                    </span>
+                  </td>
                   {/* Child name */}
                   <td className="truncate px-3 py-2">
                     <span className="font-semibold text-navy">{s.childName}</span>
@@ -414,8 +538,17 @@ export function AdminSignupsManager({
                     </div>
                   </td>
                   {/* Slot — compact "Mon 13:30" */}
-                  <td className="whitespace-nowrap px-2 py-2 font-medium text-navy" title={s.slotLabel ?? undefined}>
-                    {compactSlot(s.slotLabel) ?? <span className="text-muted-foreground">TBC</span>}
+                  <td className="px-2 py-2 font-medium text-navy">
+                    <div className="flex flex-col gap-0.5">
+                      <span title={s.slotLabel ?? undefined}>
+                        {compactSlot(s.slotLabel) ?? <span className="text-muted-foreground">TBC</span>}
+                      </span>
+                      {s.slotLabel2 && (
+                        <span className="text-[10px] text-muted-foreground" title={s.slotLabel2}>
+                          {compactSlot(s.slotLabel2)}
+                        </span>
+                      )}
+                    </div>
                   </td>
                   {/* Coach: small avatar + name */}
                   <td className="px-2 py-2">
@@ -444,6 +577,10 @@ export function AdminSignupsManager({
                       {s.status}
                     </span>
                   </td>
+                  {/* Signed up — date this enrollment was successfully created */}
+                  <td className="px-2 py-2 whitespace-nowrap text-muted-foreground" title={s.createdAt ?? undefined}>
+                    {formatSignupDate(s.createdAt)}
+                  </td>
                   {/* Payment */}
                   <td className="px-2 py-2">
                     <PaymentBadge status={s.paymentStatus} />
@@ -460,6 +597,9 @@ export function AdminSignupsManager({
                   {/* Actions — icon-only with title tooltips */}
                   <td className="px-2 py-2">
                     <div className="flex items-center justify-end gap-0.5">
+                      <IconBtn title="View client profile" onClick={() => setViewing(s)}>
+                        <Eye className="h-3.5 w-3.5" />
+                      </IconBtn>
                       <IconBtn title="Edit sign-up" onClick={() => setEditing(s)}>
                         <Pencil className="h-3.5 w-3.5" />
                       </IconBtn>
@@ -494,9 +634,20 @@ export function AdminSignupsManager({
                           ? <RefreshCw className="h-3.5 w-3.5 animate-spin" />
                           : <Mail className="h-3.5 w-3.5" />}
                       </IconBtn>
-                      <IconBtn title="Remove sign-up" onClick={() => setConfirmDeleteId(s.id)} variant="danger">
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </IconBtn>
+                      {s.status !== "inactive" ? (
+                        <IconBtn title="Make Inactive" onClick={() => setConfirmDeactivateId(s.id)} variant="warning">
+                          <PowerOff className="h-3.5 w-3.5" />
+                        </IconBtn>
+                      ) : (
+                        <>
+                          <IconBtn title="Reactivate" onClick={() => setConfirmReactivateId(s.id)} variant="success">
+                            <RotateCcw className="h-3.5 w-3.5" />
+                          </IconBtn>
+                          <IconBtn title="Delete permanently" onClick={() => setConfirmDeleteId(s.id)} variant="danger">
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </IconBtn>
+                        </>
+                      )}
                     </div>
                     {toast?.id === s.id && (
                       <p className={`mt-0.5 text-right text-[10px] font-semibold ${toast.ok ? "text-lime-foreground" : "text-destructive"}`}>
@@ -509,7 +660,7 @@ export function AdminSignupsManager({
             })}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={10} className="px-4 py-10 text-center text-muted-foreground">
+                <td colSpan={12} className="px-4 py-10 text-center text-muted-foreground">
                   {hasFilters ? "No sign-ups match the current filters." : "No sign-ups yet."}
                 </td>
               </tr>
@@ -531,6 +682,29 @@ export function AdminSignupsManager({
         />
       )}
 
+      {/* Client profile view modal */}
+      {viewing && (
+        <ViewModal
+          signup={viewing}
+          onClose={() => setViewing(null)}
+          onEdit={() => {
+            setEditing(viewing)
+            setViewing(null)
+          }}
+          onCustomizeSlots={() => setCustomizingSlots(viewing)}
+        />
+      )}
+
+      {/* Customize time slots modal */}
+      {customizingSlots && (
+        <CustomizeTimeSlotsModal
+          signup={customizingSlots}
+          pending={pending}
+          onSave={(input) => handleSaveTimeSlots(customizingSlots, input)}
+          onClose={() => setCustomizingSlots(null)}
+        />
+      )}
+
       {/* Add modal */}
       {showAddModal && (
         <AddModal
@@ -543,14 +717,39 @@ export function AdminSignupsManager({
         />
       )}
 
-      {/* Delete confirmation dialog */}
+      {/* Deactivate confirmation dialog */}
+      {confirmDeactivateId != null && (
+        <ConfirmDialog
+          message="Make this enrolment Inactive? The player will be hidden from the coaching portal and attendance registers. All data is preserved and can be restored at any time."
+          confirmLabel="Yes, make Inactive"
+          pending={pending}
+          onConfirm={() => handleDeactivate(confirmDeactivateId)}
+          onCancel={() => setConfirmDeactivateId(null)}
+          variant="warning"
+        />
+      )}
+
+      {/* Reactivate confirmation dialog */}
+      {confirmReactivateId != null && (
+        <ConfirmDialog
+          message="Reactivate this enrolment? The player will reappear in the coaching portal and attendance registers."
+          confirmLabel="Yes, reactivate"
+          pending={pending}
+          onConfirm={() => handleReactivate(confirmReactivateId)}
+          onCancel={() => setConfirmReactivateId(null)}
+          variant="success"
+        />
+      )}
+
+      {/* Permanent delete confirmation dialog */}
       {confirmDeleteId != null && (
         <ConfirmDialog
-          message="Are you sure you want to permanently remove this sign-up? This cannot be undone."
-          confirmLabel="Yes, remove"
+          message="Permanently delete this enrolment? This action cannot be undone — all data including the parent record, child details, and payment history will be erased forever. Only inactive enrolments can be deleted."
+          confirmLabel="Yes, delete permanently"
           pending={pending}
-          onConfirm={() => handleConfirmDelete(confirmDeleteId)}
+          onConfirm={() => handlePermanentDelete(confirmDeleteId)}
           onCancel={() => setConfirmDeleteId(null)}
+          variant="danger"
         />
       )}
     </div>
@@ -628,7 +827,7 @@ function IconBtn({
   disabled,
   variant = "ghost",
 }: React.ButtonHTMLAttributes<HTMLButtonElement> & {
-  variant?: "ghost" | "danger" | "success"
+  variant?: "ghost" | "danger" | "success" | "warning"
 }) {
   return (
     <button
@@ -641,6 +840,8 @@ function IconBtn({
           ? "text-red-500 hover:bg-red-50 hover:text-red-600"
           : variant === "success"
           ? "text-lime-foreground hover:bg-lime/20"
+          : variant === "warning"
+          ? "text-amber-600 hover:bg-amber-50 hover:text-amber-700"
           : "text-muted-foreground hover:bg-muted hover:text-navy"
       }`}
     >
@@ -655,14 +856,14 @@ function IconBtn({
 
 function ViewModal({
   signup: s,
-  packagePeriod,
   onClose,
   onEdit,
+  onCustomizeSlots,
 }: {
   signup: AdminSignup
-  packagePeriod: string
   onClose: () => void
   onEdit: () => void
+  onCustomizeSlots: () => void
 }) {
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 pt-10">
@@ -718,8 +919,28 @@ function ViewModal({
             <DetailSection title="Programme">
               <DetailRow label="Package" value={s.packageName} />
               <DetailRow label="Club" value={s.club || "—"} />
-              <DetailRow label="Time slot" value={s.slotLabel || "TBC"} />
+              <DetailRow label="Session 1" value={s.slotLabel || "TBC"} />
+              {s.slotLabel2 && <DetailRow label="Session 2" value={s.slotLabel2} />}
               <DetailRow label="Coach" value={s.coachName || "—"} />
+              <div className="flex items-center justify-between gap-2 pt-1">
+                <div className="flex items-center gap-1.5">
+                  <dt className="text-xs text-muted-foreground">Schedule</dt>
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                      s.scheduleCustomized ? "bg-lime/20 text-navy" : "bg-muted text-muted-foreground"
+                    }`}
+                  >
+                    {s.scheduleCustomized ? "Customized" : "Default"}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={onCustomizeSlots}
+                  className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[11px] font-semibold text-navy hover:bg-muted"
+                >
+                  Customize Time Slots
+                </button>
+              </div>
             </DetailSection>
             {/* Payment */}
             <DetailSection title="Payment">
@@ -748,6 +969,9 @@ function ViewModal({
               <DetailRow label="Created" value={s.createdAt ? new Date(s.createdAt).toLocaleDateString("en-ZA") : "—"} />
             </DetailSection>
           </div>
+
+          {/* Inline billing ledger */}
+          <InlineBillingPanel enrollmentId={s.id} />
         </div>
       </div>
     </div>
@@ -768,6 +992,360 @@ function DetailRow({ label, value }: { label: string; value: string }) {
     <div className="flex gap-2 text-sm">
       <dt className="w-32 shrink-0 text-muted-foreground">{label}</dt>
       <dd className="font-medium text-navy">{value}</dd>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Customize time slots modal — focused, schedule-only edit for one client.
+// Leaves package, club, coach, payment, and every other field untouched.
+// ---------------------------------------------------------------------------
+
+function CustomizeTimeSlotsModal({
+  signup: s,
+  pending,
+  onSave,
+  onClose,
+}: {
+  signup: AdminSignup
+  pending: boolean
+  onSave: (input: { slotWeekday: number; slotHour: number; slotWeekday2?: number | null; slotHour2?: number | null }) => Promise<{ ok: boolean; error?: string }>
+  onClose: () => void
+}) {
+  const isAdvanced = /advanced/i.test(s.packageName)
+
+  const [slotWeekday, setSlotWeekday] = useState(s.slotWeekday != null ? String(s.slotWeekday) : "")
+  const [slotHour, setSlotHour] = useState(s.slotHour != null ? String(parseFloat(s.slotHour)) : "")
+  const [slotWeekday2, setSlotWeekday2] = useState(s.slotWeekday2 != null ? String(s.slotWeekday2) : "")
+  const [slotHour2, setSlotHour2] = useState(s.slotHour2 != null ? String(parseFloat(s.slotHour2)) : "")
+  const [error, setError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+
+  async function handleSubmit() {
+    setError(null)
+    if (slotWeekday === "" || slotHour === "") {
+      setError("Please select a weekly time slot.")
+      return
+    }
+    if (isAdvanced) {
+      if (slotWeekday2 === "" || slotHour2 === "") {
+        setError("This is an Advanced package — please select both weekly time slots.")
+        return
+      }
+      if (Number(slotWeekday) === Number(slotWeekday2) && Number(slotHour) === Number(slotHour2)) {
+        setError("Time Slot 1 and Time Slot 2 cannot be the same.")
+        return
+      }
+    }
+    setSaving(true)
+    const res = await onSave({
+      slotWeekday: Number(slotWeekday),
+      slotHour: Number(slotHour),
+      slotWeekday2: isAdvanced && slotWeekday2 !== "" ? Number(slotWeekday2) : null,
+      slotHour2: isAdvanced && slotHour2 !== "" ? Number(slotHour2) : null,
+    })
+    setSaving(false)
+    if (!res.ok) {
+      setError(res.error ?? "Failed to update time slots.")
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 pt-10">
+      <div className="w-full max-w-lg rounded-xl bg-card shadow-2xl">
+        {/* Header */}
+        <div className="flex items-start justify-between gap-4 border-b border-border px-6 py-4">
+          <div>
+            <h2 className="text-base font-bold text-navy">Customize Time Slots</h2>
+            <p className="text-xs text-muted-foreground">
+              {s.childName} · {s.packageName}
+            </p>
+          </div>
+          <button onClick={onClose} className="rounded-md p-1.5 hover:bg-muted">
+            <X className="h-4 w-4 text-muted-foreground" />
+          </button>
+        </div>
+
+        <div className="space-y-4 px-6 py-5 text-sm">
+          <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
+            This overrides the normal club schedule for this client only — any day and time can be selected here,
+            even ones not usually offered for their age group.
+          </p>
+
+          {error && (
+            <p className="rounded-md bg-destructive/10 px-3 py-2 text-xs font-medium text-destructive">{error}</p>
+          )}
+
+          <div className="space-y-4">
+            <div>
+              <p className="mb-2 text-xs font-semibold text-navy">
+                Weekly Time Slot{isAdvanced ? " 1" : ""}
+              </p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field label="Day">
+                  <select value={slotWeekday} onChange={(e) => setSlotWeekday(e.target.value)} className={selectCls}>
+                    <option value="">— not set —</option>
+                    {WEEKDAYS.map((d, i) => <option key={i} value={i}>{d}</option>)}
+                  </select>
+                </Field>
+                <Field label="Time">
+                  <select value={slotHour} onChange={(e) => setSlotHour(e.target.value)} className={selectCls}>
+                    <option value="">— not set —</option>
+                    {HOURS.map((h) => <option key={h} value={h}>{String(h).padStart(2, "0")}:00</option>)}
+                  </select>
+                </Field>
+              </div>
+            </div>
+            {isAdvanced && (
+              <div>
+                <p className="mb-2 text-xs font-semibold text-navy">Weekly Time Slot 2</p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Field label="Day">
+                    <select value={slotWeekday2} onChange={(e) => setSlotWeekday2(e.target.value)} className={selectCls}>
+                      <option value="">— not set —</option>
+                      {WEEKDAYS.map((d, i) => <option key={i} value={i}>{d}</option>)}
+                    </select>
+                  </Field>
+                  <Field label="Time">
+                    <select value={slotHour2} onChange={(e) => setSlotHour2(e.target.value)} className={selectCls}>
+                      <option value="">— not set —</option>
+                      {HOURS.map((h) => <option key={h} value={h}>{String(h).padStart(2, "0")}:00</option>)}
+                    </select>
+                  </Field>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="flex justify-end gap-2 border-t border-border px-6 py-4">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md border border-border px-4 py-2 text-xs font-semibold text-navy hover:bg-muted"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleSubmit}
+            disabled={saving || pending}
+            className="rounded-md bg-navy px-4 py-2 text-xs font-semibold text-white hover:bg-navy/90 disabled:opacity-50"
+          >
+            {saving || pending ? "Saving…" : "Save Changes"}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Inline billing panel (used inside ViewModal)
+// ---------------------------------------------------------------------------
+
+function InlineBillingPanel({ enrollmentId }: { enrollmentId: number }) {
+  const [months, setMonths] = useState<SubscriptionMonthRow[] | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [updating, setUpdating] = useState<number | null>(null)
+  const [pending, startTransition] = useTransition()
+  const [pendingStatus, setPendingStatus] = useState<Record<number, string>>({})
+  const [discountInputs, setDiscountInputs] = useState<Record<number, string>>({})
+  const [discountReasons, setDiscountReasons] = useState<Record<number, string>>({})
+  const [partialInputs, setPartialInputs] = useState<Record<number, string>>({})
+
+  useEffect(() => {
+    getMonthsForEnrollment(enrollmentId)
+      .then(setMonths)
+      .finally(() => setLoading(false))
+  }, [enrollmentId])
+
+  function handleApply(id: number) {
+    const dbRow = months?.find((m) => m.id === id)
+    const newStatus = (pendingStatus[id] ?? dbRow?.status ?? "outstanding") as "outstanding" | "paid" | "partial"
+    const discountPct = discountInputs[id] !== undefined
+      ? Math.min(100, Math.max(0, parseInt(discountInputs[id]) || 0))
+      : (dbRow?.discountPct ?? 0)
+    const discountReason = discountReasons[id] !== undefined
+      ? discountReasons[id].trim() || undefined
+      : (dbRow?.discountReason ?? undefined)
+    const partialRaw = partialInputs[id] !== undefined
+      ? parseFloat(partialInputs[id]) || 0
+      : (dbRow?.paidCents != null ? dbRow.paidCents / 100 : 0)
+    const paidCents = newStatus === "partial" ? Math.round(partialRaw * 100) : undefined
+    setUpdating(id)
+    startTransition(async () => {
+      const res = await updateMonthStatus(id, newStatus, { discountPct, discountReason, paidCents })
+      setUpdating(null)
+      if (res.ok) {
+        setPendingStatus((p) => { const n = { ...p }; delete n[id]; return n })
+        setDiscountInputs((p) => { const n = { ...p }; delete n[id]; return n })
+        setDiscountReasons((p) => { const n = { ...p }; delete n[id]; return n })
+        setPartialInputs((p) => { const n = { ...p }; delete n[id]; return n })
+        setMonths((prev) =>
+          prev
+            ? prev.map((m) =>
+                m.id === id
+                  ? { ...m, status: newStatus, discountPct, discountReason: discountReason ?? null, paidCents: paidCents ?? null, paidAt: newStatus === "paid" ? new Date() : null }
+                  : m,
+              )
+            : prev,
+        )
+      }
+    })
+  }
+
+  return (
+    <div className="border-t border-border pt-5">
+      <h3 className="mb-3 text-xs font-bold uppercase tracking-wide text-muted-foreground">
+        Monthly Billing — 2026
+      </h3>
+      {loading && (
+        <p className="text-xs text-muted-foreground">Loading billing months…</p>
+      )}
+      {!loading && (!months || months.length === 0) && (
+        <p className="rounded-lg border border-dashed border-border py-4 text-center text-xs text-muted-foreground">
+          No billing months generated yet. Visit the Billing tab and click &ldquo;Sync Months&rdquo;.
+        </p>
+      )}
+      {months && months.length > 0 && (
+        <div className="grid grid-cols-5 gap-2">
+          {months.map((m) => {
+            const isUpdating = updating === m.id
+            const displayStatus = pendingStatus[m.id] ?? m.status
+            const discountVal = discountInputs[m.id] ?? String(m.discountPct ?? 0)
+            const discountNum = Math.min(100, Math.max(0, parseInt(discountVal) || 0))
+            const reasonVal = discountReasons[m.id] ?? (m.discountReason ?? "")
+            const effectiveCents = Math.round(m.amountCents * (1 - discountNum / 100))
+            const partialVal = partialInputs[m.id] ?? (m.paidCents != null ? String((m.paidCents / 100).toFixed(2)) : "")
+            const partialPaid = parseFloat(partialVal) || 0
+            const remainingCents = Math.max(0, effectiveCents - Math.round(partialPaid * 100))
+            const hasDraft =
+              (pendingStatus[m.id] !== undefined && pendingStatus[m.id] !== m.status) ||
+              discountInputs[m.id] !== undefined ||
+              discountReasons[m.id] !== undefined ||
+              partialInputs[m.id] !== undefined
+
+            return (
+              <div
+                key={m.id}
+                className={`rounded-lg border p-2.5 transition-colors ${
+                  displayStatus === "paid" ? "border-lime/40 bg-lime/5" :
+                  displayStatus === "partial" ? "border-orange-200 bg-orange-50" :
+                  "border-amber-200 bg-amber-50"
+                }`}
+              >
+                <p className="text-xs font-bold text-navy">{MONTH_NAMES[m.month - 1]}</p>
+                <p className="text-[10px] text-muted-foreground">
+                  {discountNum > 0 ? (
+                    <>
+                      <span className="line-through">R {(m.amountCents / 100).toFixed(0)}</span>{" "}
+                      <span className="font-semibold text-navy">R {(effectiveCents / 100).toFixed(0)}</span>
+                      <span className="ml-1 text-lime font-bold">-{discountNum}%</span>
+                    </>
+                  ) : `R ${(m.amountCents / 100).toFixed(0)}`}
+                </p>
+                <div className="mt-1">
+                  <span className={`inline-block rounded-full px-1.5 py-0.5 text-[9px] font-semibold capitalize ${
+                    displayStatus === "paid" ? "bg-lime/20 text-navy" :
+                    displayStatus === "partial" ? "bg-orange-100 text-orange-800" :
+                    "bg-amber-100 text-amber-800"
+                  }`}>
+                    {displayStatus}
+                  </span>
+                </div>
+
+                {/* Status dropdown — only updates draft, never auto-saves */}
+                <select
+                  disabled={isUpdating || pending}
+                  value={displayStatus}
+                  onChange={(e) => setPendingStatus((p) => ({ ...p, [m.id]: e.target.value }))}
+                  className="mt-2 w-full rounded border border-border bg-background px-1 py-0.5 text-[10px] focus:outline-none focus:ring-1 focus:ring-navy/30 disabled:opacity-50"
+                >
+                  <option value="outstanding">Outstanding</option>
+                  <option value="paid">Paid</option>
+                  <option value="partial">Partial</option>
+                </select>
+
+                {/* Discount % */}
+                <div className="mt-2">
+                  <label className="block text-[9px] font-semibold uppercase tracking-wide text-muted-foreground mb-0.5">
+                    Discount %
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={discountVal}
+                    onChange={(e) => setDiscountInputs((p) => ({ ...p, [m.id]: e.target.value }))}
+                    placeholder="0"
+                    className="w-full rounded border border-border bg-background px-1.5 py-0.5 text-[10px] focus:outline-none focus:ring-1 focus:ring-navy/30"
+                  />
+                </div>
+
+                {/* Discount reason — shown when discount > 0 */}
+                {discountNum > 0 && (
+                  <div className="mt-1.5">
+                    <label className="block text-[9px] font-semibold uppercase tracking-wide text-muted-foreground mb-0.5">
+                      Reason
+                    </label>
+                    <input
+                      type="text"
+                      value={reasonVal}
+                      onChange={(e) => setDiscountReasons((p) => ({ ...p, [m.id]: e.target.value }))}
+                      placeholder="e.g. Sibling discount"
+                      className="w-full rounded border border-border bg-background px-1.5 py-0.5 text-[10px] focus:outline-none focus:ring-1 focus:ring-navy/30"
+                    />
+                  </div>
+                )}
+
+                {/* Partial amount — shown when draft or saved status is partial */}
+                {displayStatus === "partial" && (
+                  <div className="mt-1.5">
+                    <label className="block text-[9px] font-semibold uppercase tracking-wide text-orange-700 mb-0.5">
+                      Paid (R)
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      step={0.01}
+                      value={partialVal}
+                      onChange={(e) => setPartialInputs((p) => ({ ...p, [m.id]: e.target.value }))}
+                      placeholder="0.00"
+                      className="w-full rounded border border-orange-200 bg-background px-1.5 py-0.5 text-[10px] focus:outline-none focus:ring-1 focus:ring-orange-300"
+                    />
+                    {remainingCents > 0 && (
+                      <p className="mt-0.5 text-[9px] font-semibold text-amber-700">
+                        Balance: R {(remainingCents / 100).toFixed(2)}
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {/* Saved discount reason when not in edit mode */}
+                {discountInputs[m.id] === undefined && !discountNum && m.discountReason && (
+                  <p className="mt-1 text-[9px] italic text-muted-foreground truncate" title={m.discountReason}>
+                    {m.discountReason}
+                  </p>
+                )}
+
+                {/* Save button — always visible, highlighted when unsaved draft */}
+                <button
+                  type="button"
+                  disabled={isUpdating || pending}
+                  onClick={() => handleApply(m.id)}
+                  className={`mt-2 w-full rounded px-1 py-0.5 text-[9px] font-bold text-white transition-colors disabled:opacity-50 ${
+                    hasDraft ? "bg-navy hover:bg-navy/80 ring-1 ring-navy/40" : "bg-navy/50 hover:bg-navy/70"
+                  }`}
+                >
+                  {isUpdating ? "Saving..." : hasDraft ? "Apply changes" : "Save"}
+                </button>
+              </div>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }
@@ -818,17 +1396,28 @@ function ConfirmDialog({
   pending,
   onConfirm,
   onCancel,
+  variant = "danger",
 }: {
   message: string
   confirmLabel: string
   pending: boolean
   onConfirm: () => void
   onCancel: () => void
+  variant?: "danger" | "warning" | "success"
 }) {
+  const btnClass =
+    variant === "warning"
+      ? "bg-amber-600 hover:bg-amber-700"
+      : variant === "success"
+      ? "bg-lime hover:bg-lime/90 text-lime-foreground"
+      : "bg-red-600 hover:bg-red-700"
+  const title =
+    variant === "warning" ? "Make Inactive" : variant === "success" ? "Reactivate" : "Confirm"
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="w-full max-w-sm rounded-xl bg-card p-6 shadow-2xl">
-        <h3 className="text-base font-bold text-navy">Confirm removal</h3>
+        <h3 className="text-base font-bold text-navy">{title}</h3>
         <p className="mt-2 text-sm text-muted-foreground">{message}</p>
         <div className="mt-5 flex justify-end gap-2">
           <button
@@ -840,9 +1429,9 @@ function ConfirmDialog({
           <button
             onClick={onConfirm}
             disabled={pending}
-            className="rounded-md bg-red-600 px-4 py-2 text-sm font-bold text-white hover:bg-red-700 disabled:opacity-50"
+            className={`rounded-md px-4 py-2 text-sm font-bold text-white disabled:opacity-50 ${btnClass}`}
           >
-            {pending ? "Removing…" : confirmLabel}
+            {pending ? "Saving…" : confirmLabel}
           </button>
         </div>
       </div>
@@ -886,12 +1475,20 @@ function EditModal({
   const [childAge, setChildAge] = useState(String(signup.childAge ?? ""))
   const [packageName, setPackageName] = useState(signup.packageName)
   const [club, setClub] = useState(signup.club ?? "")
+  const [clubId, setClubId] = useState<number | null>(signup.clubId ?? null)
   const [coachName, setCoachName] = useState(signup.coachName ?? "")
+  const [coachId, setCoachId] = useState<number | null>(signup.coachId ?? null)
   const [slotWeekday, setSlotWeekday] = useState<string>(
     signup.slotWeekday != null ? String(signup.slotWeekday) : "",
   )
   const [slotHour, setSlotHour] = useState<string>(
     signup.slotHour != null ? String(signup.slotHour) : "",
+  )
+  const [slotWeekday2, setSlotWeekday2] = useState<string>(
+    signup.slotWeekday2 != null ? String(signup.slotWeekday2) : "",
+  )
+  const [slotHour2, setSlotHour2] = useState<string>(
+    signup.slotHour2 != null ? String(signup.slotHour2) : "",
   )
   const [emergencyName, setEmergencyName] = useState(signup.emergencyContactName ?? "")
   const [emergencyPhone, setEmergencyPhone] = useState(signup.emergencyContactPhone ?? "")
@@ -907,9 +1504,11 @@ function EditModal({
     onSave({
       parentName, parentEmail, parentMobile,
       childName, childDob, childAge: Number(childAge) || 0,
-      packageName, club, coachName,
+      packageName, club, clubId, coachName, coachId,
       slotWeekday: slotWeekday !== "" ? Number(slotWeekday) : null,
       slotHour: slotHour !== "" ? Number(slotHour) : null,
+      slotWeekday2: slotWeekday2 !== "" ? Number(slotWeekday2) : null,
+      slotHour2: slotHour2 !== "" ? Number(slotHour2) : null,
       emergencyContactName: emergencyName,
       emergencyContactPhone: emergencyPhone,
       status,
@@ -934,10 +1533,12 @@ function EditModal({
           />
           <ProgrammeFields
             packageName={packageName} setPackageName={setPackageName}
-            club={club} setClub={setClub}
-            coachName={coachName} setCoachName={setCoachName}
+            club={club} setClub={setClub} setClubId={setClubId}
+            coachName={coachName} setCoachName={setCoachName} setCoachId={setCoachId}
             slotWeekday={slotWeekday} setSlotWeekday={setSlotWeekday}
             slotHour={slotHour} setSlotHour={setSlotHour}
+            slotWeekday2={slotWeekday2} setSlotWeekday2={setSlotWeekday2}
+            slotHour2={slotHour2} setSlotHour2={setSlotHour2}
             childAge={childAge}
             allPackages={allPackages} allClubs={allClubs} allCoaches={allCoaches}
           />
@@ -951,7 +1552,7 @@ function EditModal({
             </select>
           </Field>
 
-          {/* Payment status — only for once-off packages */}
+          {/* Payment status — only for once-off (PayFast) packages */}
           {isOnceOff && (
             <Field label="Payment status">
               <div className="mt-1 flex gap-2">
@@ -1024,9 +1625,13 @@ function AddModal({
   const [childAge, setChildAge] = useState("")
   const [packageName, setPackageName] = useState(allPackages[0]?.name ?? "")
   const [club, setClub] = useState(allClubs[0]?.name ?? "")
+  const [clubId, setClubId] = useState<number | null>(allClubs[0]?.id ?? null)
   const [coachName, setCoachName] = useState("")
+  const [coachId, setCoachId] = useState<number | null>(null)
   const [slotWeekday, setSlotWeekday] = useState("")
   const [slotHour, setSlotHour] = useState("")
+  const [slotWeekday2, setSlotWeekday2] = useState("")
+  const [slotHour2, setSlotHour2] = useState("")
   const [emergencyName, setEmergencyName] = useState("")
   const [emergencyPhone, setEmergencyPhone] = useState("")
   const [status, setStatus] = useState("pending")
@@ -1081,9 +1686,11 @@ function AddModal({
     onCreate({
       parentName, parentEmail, parentMobile,
       childName, childDob, childAge: Number(childAge) || 0,
-      packageName, club, coachName,
+      packageName, club, clubId, coachName, coachId,
       slotWeekday: slotWeekday !== "" ? Number(slotWeekday) : null,
       slotHour: slotHour !== "" ? Number(slotHour) : null,
+      slotWeekday2: slotWeekday2 !== "" ? Number(slotWeekday2) : null,
+      slotHour2: slotHour2 !== "" ? Number(slotHour2) : null,
       emergencyContactName: emergencyName,
       emergencyContactPhone: emergencyPhone,
       status,
@@ -1202,10 +1809,12 @@ function AddModal({
           />
           <ProgrammeFields
             packageName={packageName} setPackageName={setPackageName}
-            club={club} setClub={setClub}
-            coachName={coachName} setCoachName={setCoachName}
+            club={club} setClub={setClub} setClubId={setClubId}
+            coachName={coachName} setCoachName={setCoachName} setCoachId={setCoachId}
             slotWeekday={slotWeekday} setSlotWeekday={setSlotWeekday}
             slotHour={slotHour} setSlotHour={setSlotHour}
+            slotWeekday2={slotWeekday2} setSlotWeekday2={setSlotWeekday2}
+            slotHour2={slotHour2} setSlotHour2={setSlotHour2}
             childAge={childAge}
             allPackages={allPackages} allClubs={allClubs} allCoaches={allCoaches}
           />
@@ -1327,18 +1936,24 @@ function ChildFields({ childName, setChildName, childDob, setChildDob, childAge,
 
 function ProgrammeFields({
   packageName, setPackageName,
-  club, setClub,
-  coachName, setCoachName,
+  club, setClub, setClubId,
+  coachName, setCoachName, setCoachId,
   slotWeekday, setSlotWeekday,
   slotHour, setSlotHour,
+  slotWeekday2, setSlotWeekday2,
+  slotHour2, setSlotHour2,
   childAge,
   allPackages, allClubs, allCoaches,
 }: {
   packageName: string; setPackageName: (v: string) => void
   club: string; setClub: (v: string) => void
+  setClubId?: (v: number | null) => void
   coachName: string; setCoachName: (v: string) => void
+  setCoachId?: (v: number | null) => void
   slotWeekday: string; setSlotWeekday: (v: string) => void
   slotHour: string; setSlotHour: (v: string) => void
+  slotWeekday2: string; setSlotWeekday2: (v: string) => void
+  slotHour2: string; setSlotHour2: (v: string) => void
   childAge?: string | number | null
   allPackages: PublicPackage[]
   allClubs: Club[]
@@ -1347,10 +1962,33 @@ function ProgrammeFields({
   // Resolve whether the selected package uses custom slots
   const selectedPkg = allPackages.find((p) => p.name === packageName) ?? null
   const isCustom = selectedPkg?.slotType === "custom"
+  // Advanced package = two sessions per week on different days
+  const isAdvanced = /advanced/i.test(packageName)
 
   // Resolve the clubId from the selected club name
   const selectedClub = allClubs.find((c) => c.name === club) ?? null
   const clubId = selectedClub?.id ?? undefined
+
+  // When club changes, update the clubId state and auto-assign first matching coach
+  function handleClubChange(newClubName: string) {
+    setClub(newClubName)
+    const newClub = allClubs.find((c) => c.name === newClubName) ?? null
+    setClubId?.(newClub?.id ?? null)
+    // Auto-set coach to the first coach assigned to this club (if not already manually set)
+    if (newClub) {
+      const firstCoach = allCoaches.find((c) => c.clubIds.includes(newClub.id))
+      if (firstCoach) {
+        setCoachName(firstCoach.name)
+        setCoachId?.(firstCoach.id)
+      }
+    }
+  }
+
+  function handleCoachChange(newCoachName: string) {
+    setCoachName(newCoachName)
+    const coach = allCoaches.find((c) => c.name === newCoachName) ?? null
+    setCoachId?.(coach?.id ?? null)
+  }
 
   // Derive age group from child's age for the slot picker
   const ageGroup = ageGroupFromAge(childAge)
@@ -1379,7 +2017,7 @@ function ProgrammeFields({
           </select>
         </Field>
         <Field label="Club">
-          <select value={club} onChange={(e) => setClub(e.target.value)} className={selectCls}>
+          <select value={club} onChange={(e) => handleClubChange(e.target.value)} className={selectCls}>
             {allClubs.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
             {club && !allClubs.find((c) => c.name === club) && (
               <option value={club}>{club}</option>
@@ -1387,7 +2025,7 @@ function ProgrammeFields({
           </select>
         </Field>
         <Field label="Coach">
-          <select value={coachName} onChange={(e) => setCoachName(e.target.value)} className={selectCls}>
+          <select value={coachName} onChange={(e) => handleCoachChange(e.target.value)} className={selectCls}>
             <option value="">— not assigned —</option>
             {allCoaches.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
           </select>
@@ -1396,44 +2034,89 @@ function ProgrammeFields({
 
       {isCustom && selectedPkg ? (
         /* Custom package — show the same slot picker customers see, filtered to this club */
-        <div>
-          <p className="mb-2 text-xs font-semibold text-navy">Session slot</p>
-          <p className="mb-3 text-xs text-muted-foreground">
-            Only the slots configured for this package{clubId ? " at this venue" : ""} are shown. Select one to assign it.
-          </p>
-          <PackageSlotPicker
-            packageId={selectedPkg.id}
-            packageName={selectedPkg.name}
-            ageGroup={ageGroup}
-            clubId={clubId}
-            selected={selectedSlot}
-            onSelect={handleSlotSelect}
-          />
-          {selectedSlot && (
-            <p className="mt-2 text-xs text-muted-foreground">
-              Selected: <span className="font-semibold text-navy">{formatSlot(selectedSlot.weekday, selectedSlot.hour)}</span>
-              {" · "}
-              <button type="button" onClick={() => { setSlotWeekday(""); setSlotHour("") }} className="text-destructive hover:underline">
-                Clear
-              </button>
-            </p>
+        <div className="space-y-4">
+          <div>
+            <p className="mb-2 text-xs font-semibold text-navy">Session 1{isAdvanced ? " (first coaching session)" : ""}</p>
+            {!isAdvanced && (
+              <p className="mb-3 text-xs text-muted-foreground">
+                Only the slots configured for this package{clubId ? " at this venue" : ""} are shown. Select one to assign it.
+              </p>
+            )}
+            <PackageSlotPicker
+              packageId={selectedPkg.id}
+              packageName={selectedPkg.name}
+              ageGroup={ageGroup}
+              clubId={clubId}
+              selected={selectedSlot}
+              onSelect={handleSlotSelect}
+            />
+            {selectedSlot && (
+              <p className="mt-2 text-xs text-muted-foreground">
+                Selected: <span className="font-semibold text-navy">{formatSlot(selectedSlot.weekday, selectedSlot.hour)}</span>
+                {" · "}
+                <button type="button" onClick={() => { setSlotWeekday(""); setSlotHour("") }} className="text-destructive hover:underline">
+                  Clear
+                </button>
+              </p>
+            )}
+          </div>
+
+          {isAdvanced && (
+            <div>
+              <p className="mb-2 text-xs font-semibold text-navy">Session 2 (second coaching session — different day)</p>
+              <PackageSlotPicker
+                packageId={selectedPkg.id}
+                packageName={selectedPkg.name}
+                ageGroup={ageGroup}
+                clubId={clubId}
+                selected={slotWeekday2 !== "" && slotHour2 !== "" ? { weekday: Number(slotWeekday2), hour: Number(slotHour2) } : null}
+                onSelect={(slot) => { setSlotWeekday2(String(slot.weekday)); setSlotHour2(String(slot.hour)) }}
+              />
+              {slotWeekday2 !== "" && slotHour2 !== "" && (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Selected: <span className="font-semibold text-navy">{formatSlot(Number(slotWeekday2), Number(slotHour2))}</span>
+                  {" · "}
+                  <button type="button" onClick={() => { setSlotWeekday2(""); setSlotHour2("") }} className="text-destructive hover:underline">
+                    Clear
+                  </button>
+                </p>
+              )}
+            </div>
           )}
         </div>
       ) : (
         /* Standard package — free day + time selects */
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Session day">
-            <select value={slotWeekday} onChange={(e) => setSlotWeekday(e.target.value)} className={selectCls}>
-              <option value="">— not set —</option>
-              {WEEKDAYS.map((d, i) => <option key={i} value={i}>{d}</option>)}
-            </select>
-          </Field>
-          <Field label="Session time">
-            <select value={slotHour} onChange={(e) => setSlotHour(e.target.value)} className={selectCls}>
-              <option value="">— not set —</option>
-              {HOURS.map((h) => <option key={h} value={h}>{String(h).padStart(2, "0")}:00</option>)}
-            </select>
-          </Field>
+        <div className="space-y-3">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label={isAdvanced ? "Session 1 — day" : "Session day"}>
+              <select value={slotWeekday} onChange={(e) => setSlotWeekday(e.target.value)} className={selectCls}>
+                <option value="">— not set —</option>
+                {WEEKDAYS.map((d, i) => <option key={i} value={i}>{d}</option>)}
+              </select>
+            </Field>
+            <Field label={isAdvanced ? "Session 1 — time" : "Session time"}>
+              <select value={slotHour} onChange={(e) => setSlotHour(e.target.value)} className={selectCls}>
+                <option value="">— not set —</option>
+                {HOURS.map((h) => <option key={h} value={h}>{String(h).padStart(2, "0")}:00</option>)}
+              </select>
+            </Field>
+          </div>
+          {isAdvanced && (
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label="Session 2 — day">
+                <select value={slotWeekday2} onChange={(e) => setSlotWeekday2(e.target.value)} className={selectCls}>
+                  <option value="">— not set —</option>
+                  {WEEKDAYS.map((d, i) => <option key={i} value={i}>{d}</option>)}
+                </select>
+              </Field>
+              <Field label="Session 2 — time">
+                <select value={slotHour2} onChange={(e) => setSlotHour2(e.target.value)} className={selectCls}>
+                  <option value="">— not set —</option>
+                  {HOURS.map((h) => <option key={h} value={h}>{String(h).padStart(2, "0")}:00</option>)}
+                </select>
+              </Field>
+            </div>
+          )}
         </div>
       )}
     </fieldset>

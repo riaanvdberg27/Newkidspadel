@@ -2,8 +2,8 @@
 
 import { auth } from "@/lib/auth"
 import { db } from "@/lib/db"
-import { enrollments, user } from "@/lib/db/schema"
-import { and, desc, eq } from "drizzle-orm"
+import { enrollments, user, coachClubs, coaches } from "@/lib/db/schema"
+import { and, asc, desc, eq, inArray } from "drizzle-orm"
 import { headers } from "next/headers"
 import { revalidatePath } from "next/cache"
 import { put } from "@vercel/blob"
@@ -12,7 +12,6 @@ import { sendWelcomeEmail, sendAdminNotificationEmail } from "@/lib/email"
 import { formatSlot } from "@/lib/slots"
 import { buildNetcashPayment } from "@/lib/netcash"
 import { orders } from "@/lib/db/schema"
-import type { CartItem } from "@/lib/db/schema"
 import { recordReferralOnEnrollment } from "@/app/actions/referrals"
 import { redeemVoucher } from "@/app/actions/referrals"
 
@@ -24,8 +23,10 @@ async function getUserId() {
 
 function generateReference() {
   const year = new Date().getFullYear()
-  const rand = Math.random().toString(36).slice(2, 7).toUpperCase()
-  return `NGP-${year}-${rand}`
+  // 8 alphanumeric chars → 36^8 ≈ 2.8 trillion combinations, collision-safe
+  const a = Math.random().toString(36).slice(2, 7).toUpperCase()
+  const b = Math.random().toString(36).slice(2, 5).toUpperCase()
+  return `NGP-${year}-${(a + b).slice(0, 8)}`
 }
 
 export type EnrollmentInput = {
@@ -74,12 +75,43 @@ export type EnrollmentInput = {
   discountPercent?: number
 }
 
+/**
+ * Look up the first coach assigned to a club (by coachId ascending).
+ * Used to auto-assign a coach when one is not explicitly selected during enrollment.
+ */
+async function lookupClubCoach(clubId: number | null | undefined): Promise<{ coachId: number; coachName: string } | null> {
+  if (!clubId) return null
+  try {
+    const rows = await db
+      .select({ coachId: coachClubs.coachId, coachName: coaches.name })
+      .from(coachClubs)
+      .innerJoin(coaches, eq(coaches.id, coachClubs.coachId))
+      .where(eq(coachClubs.clubId, clubId))
+      .orderBy(asc(coachClubs.coachId))
+      .limit(1)
+    return rows[0] ?? null
+  } catch {
+    return null
+  }
+}
+
 export async function createEnrollment(input: EnrollmentInput) {
   const userId = await getUserId()
   const referenceNumber = generateReference()
   const signedAt = new Date()
 
   const isOnceOff = input.paymentType === "once-off"
+
+  // Auto-assign a coach from the club's assigned coaches if one wasn't selected
+  let resolvedCoachId = input.coachId ?? null
+  let resolvedCoachName = input.coachName ?? null
+  if (!resolvedCoachId && input.clubId) {
+    const autoCoach = await lookupClubCoach(input.clubId)
+    if (autoCoach) {
+      resolvedCoachId = autoCoach.coachId
+      resolvedCoachName = autoCoach.coachName
+    }
+  }
 
   const inserted = await db
     .insert(enrollments)
@@ -121,9 +153,9 @@ export async function createEnrollment(input: EnrollmentInput) {
       status: "pending",
       accountStatus: "active",
       onboardingComplete: false,
-      // Coach
-      coachId: input.coachId ?? undefined,
-      coachName: input.coachName ?? undefined,
+      // Coach — either explicitly selected or auto-resolved from club assignments
+      coachId: resolvedCoachId ?? undefined,
+      coachName: resolvedCoachName ?? undefined,
     })
     .returning({ id: enrollments.id })
 
@@ -291,215 +323,6 @@ export async function updateProfile(input: { name: string; mobile: string }) {
   return { success: true }
 }
 
-// ---------------------------------------------------------------------------
-// Cart enrollment — multiple children, each with their own package / club / slot
-// ---------------------------------------------------------------------------
-
-export type CartEnrollmentInput = {
-  cartItems: CartItem[]
-  parentName: string
-  parentEmail: string
-  parentMobile: string
-  emergencyContactName: string
-  emergencyContactPhone: string
-  agreedTerms: boolean
-  consentMedia: boolean
-  signatureData: string | null
-  signedName: string
-  prefEmail: boolean
-  prefWhatsapp: boolean
-  prefSessionReminders: boolean
-  prefAnnouncements: boolean
-  prefEvents: boolean
-  prefHolidayClinics: boolean
-  referralCode?: string | null
-  voucherId?: number | null
-}
-
-/**
- * Create one enrollment record per child in the cart, all sharing the same
- * `orderReference`, then build a single Netcash Pay Now redirect for the
- * combined total.
- */
-export async function createCartEnrollments(input: CartEnrollmentInput): Promise<{
-  netcashUrl: string
-  formFields: Record<string, string>
-}> {
-  const userId = await getUserId()
-  const signedAt = new Date()
-  const sharedOrderRef = generateReference()
-
-  const enrollmentIds: number[] = []
-
-  for (const item of input.cartItems) {
-    const paymentType: "monthly" | "once-off" =
-      item.packageSlug?.includes("once") || item.packageSlug?.includes("bootcamp") ? "once-off" : "monthly"
-
-    const inserted = await db
-      .insert(enrollments)
-      .values({
-        userId,
-        referenceNumber: sharedOrderRef,
-        parentName: input.parentName,
-        parentEmail: input.parentEmail,
-        parentMobile: input.parentMobile,
-        childName: item.childName,
-        childDob: item.childDob,
-        childAge: item.childAge,
-        packageName: item.packageName,
-        club: item.clubName,
-        clubId: item.clubId || undefined,
-        slotWeekday: item.slotWeekday || undefined,
-        slotHour: item.slotHour ? String(item.slotHour) : undefined,
-        slotAgeGroup: item.slotAgeGroup || undefined,
-        emergencyContactName: input.emergencyContactName,
-        emergencyContactPhone: input.emergencyContactPhone,
-        agreedTerms: input.agreedTerms,
-        consentMedia: input.consentMedia,
-        signatureData: input.signatureData ?? undefined,
-        signedName: input.signedName,
-        signedAt,
-        prefEmail: input.prefEmail,
-        prefWhatsapp: input.prefWhatsapp,
-        prefSessionReminders: input.prefSessionReminders,
-        prefAnnouncements: input.prefAnnouncements,
-        prefEvents: input.prefEvents,
-        prefHolidayClinics: input.prefHolidayClinics,
-        paymentType,
-        paymentStatus: "pending",
-        status: "pending",
-        accountStatus: "active",
-        onboardingComplete: false,
-        pendingVoucherId: input.voucherId ?? undefined,
-        pendingDiscountPercent: item.discountPercent ?? 0,
-        // Cart snapshot stored on every row so admin can see the full context
-        orderReference: sharedOrderRef,
-        orderItems: input.cartItems,
-      })
-      .returning({ id: enrollments.id })
-
-    const enrollmentId = inserted[0]?.id
-    if (enrollmentId != null) {
-      enrollmentIds.push(enrollmentId)
-    }
-
-    // Best-effort referral tracking
-    if (enrollmentId != null && input.referralCode) {
-      try { await recordReferralOnEnrollment(input.referralCode, enrollmentId) } catch {}
-    }
-
-    // Generate contract PDF per child (best-effort)
-    try {
-      const slotLabel = item.slotWeekday != null && item.slotHour != null
-        ? formatSlot(item.slotWeekday, item.slotHour)
-        : "To be confirmed"
-      const contractPdf = await generateContractPdf({
-        referenceNumber: sharedOrderRef,
-        packageName: item.packageName,
-        packagePrice: item.packagePrice,
-        clubName: item.clubName,
-        slotLabel,
-        childName: item.childName,
-        childAge: item.childAge,
-        parentName: input.parentName,
-        parentEmail: input.parentEmail,
-        parentMobile: input.parentMobile,
-        emergencyName: input.emergencyContactName,
-        emergencyPhone: input.emergencyContactPhone,
-        agreedTerms: input.agreedTerms,
-        consentMedia: input.consentMedia,
-        signedName: input.signedName,
-        signedAt,
-        signatureDataUrl: input.signatureData,
-      })
-      const blob = await put(
-        `contracts/${sharedOrderRef}-${item.childName.replace(/\s+/g, "_")}.pdf`,
-        Buffer.from(contractPdf),
-        { access: "private", contentType: "application/pdf", addRandomSuffix: true },
-      )
-      if (enrollmentId != null) {
-        await db.update(enrollments).set({ contractUrl: blob.pathname }).where(eq(enrollments.id, enrollmentId))
-      }
-    } catch (err) {
-      console.log("[v0] Contract PDF error for", item.childName, err)
-    }
-
-    // Send per-child welcome email (best-effort)
-    try {
-      const slotLabel = item.slotWeekday != null && item.slotHour != null
-        ? formatSlot(item.slotWeekday, item.slotHour)
-        : "To be confirmed"
-      await sendWelcomeEmail({
-        to: input.parentEmail,
-        parentName: input.parentName,
-        childName: item.childName,
-        packageName: item.packageName,
-        packagePrice: item.packagePrice,
-        clubName: item.clubName,
-        slotLabel,
-        referenceNumber: sharedOrderRef,
-        contractPdf: null,
-      })
-    } catch (err) {
-      console.log("[v0] Welcome email error for", item.childName, err)
-    }
-  }
-
-  // Admin notification (once for the whole cart)
-  try {
-    const first = input.cartItems[0]!
-    const slotLabel = first.slotWeekday != null && first.slotHour != null
-      ? formatSlot(first.slotWeekday, first.slotHour)
-      : "To be confirmed"
-    await sendAdminNotificationEmail({
-      parentName: input.parentName,
-      parentEmail: input.parentEmail,
-      parentMobile: input.parentMobile,
-      childName: input.cartItems.map((i) => i.childName).join(", "),
-      childAge: first.childAge,
-      packageName: input.cartItems.map((i) => i.packageName).join(", "),
-      packagePrice: input.cartItems.reduce((s, i) => s + i.packagePrice, 0),
-      clubName: first.clubName,
-      slotLabel,
-      referenceNumber: sharedOrderRef,
-    })
-  } catch (err) {
-    console.log("[v0] Admin notification error:", err)
-  }
-
-  // Create one combined order record
-  const grandTotal = input.cartItems.reduce((s, i) => s + i.packagePrice, 0)
-  const hasMonthly = input.cartItems.some(
-    (i) => !i.packageSlug?.includes("once") && !i.packageSlug?.includes("bootcamp"),
-  )
-  await db.insert(orders).values({
-    enrollmentId: enrollmentIds[0] ?? 0,
-    userId,
-    packageType: hasMonthly ? "monthly" : "once-off",
-    amount: Math.round(grandTotal * 100), // cents
-    status: "awaiting_payment",
-    netcashOrderId: sharedOrderRef,
-  })
-
-  revalidatePath("/dashboard")
-
-  // Build Netcash redirect for the combined total
-  const { netcashUrl, formFields } = await buildNetcashPayment({
-    referenceNumber: sharedOrderRef,
-    enrollmentId: enrollmentIds[0] ?? 0,
-    parentName: input.parentName,
-    parentEmail: input.parentEmail,
-    packageName:
-      input.cartItems.length === 1
-        ? input.cartItems[0]!.packageName
-        : `${input.cartItems.length} packages`,
-    packagePrice: grandTotal,
-    paymentType: hasMonthly ? "monthly" : "once-off",
-  })
-
-  return { netcashUrl, formFields }
-}
-
 /**
  * Build a Netcash Pay Now payment request for an enrollment.
  * Works for both once-off and monthly subscriptions.
@@ -514,21 +337,54 @@ export async function buildNetcashPaymentForEnrollment(input: {
   packagePrice: number
   paymentType: "once-off" | "monthly"
 }) {
-  // Create an order record so we can track payment state
-  const [orderRow] = await db
-    .insert(orders)
-    .values({
-      enrollmentId: input.enrollmentId,
-      userId: (await (async () => {
-        const rows = await db.select({ userId: enrollments.userId }).from(enrollments).where(eq(enrollments.id, input.enrollmentId)).limit(1)
-        return rows[0]?.userId ?? ""
-      })()),
-      packageType: input.paymentType,
-      amount: Math.round(input.packagePrice * 100), // store cents
-      status: "awaiting_payment",
-      netcashOrderId: input.referenceNumber,
-    })
-    .returning({ id: orders.id })
+  // Resolve the userId from the enrollment record
+  const enrollmentRows = await db
+    .select({ userId: enrollments.userId })
+    .from(enrollments)
+    .where(eq(enrollments.id, input.enrollmentId))
+    .limit(1)
+  const userId = enrollmentRows[0]?.userId ?? ""
+
+  // Upsert: reuse an existing pending/awaiting_payment order for this enrollment
+  // to prevent duplicate order rows when the parent clicks "Pay" more than once.
+  const existingOrderRows = await db
+    .select()
+    .from(orders)
+    .where(
+      and(
+        eq(orders.enrollmentId, input.enrollmentId),
+        inArray(orders.status, ["pending", "awaiting_payment"]),
+      ),
+    )
+    .limit(1)
+
+  let orderId: number | undefined = existingOrderRows[0]?.id
+
+  if (orderId) {
+    // Reset the existing order so it is ready for a fresh payment attempt
+    await db
+      .update(orders)
+      .set({
+        status: "awaiting_payment",
+        netcashOrderId: input.referenceNumber,
+        failureReason: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(orders.id, orderId))
+  } else {
+    const [orderRow] = await db
+      .insert(orders)
+      .values({
+        enrollmentId: input.enrollmentId,
+        userId,
+        packageType: input.paymentType,
+        amount: Math.round(input.packagePrice * 100), // store in cents
+        status: "awaiting_payment",
+        netcashOrderId: input.referenceNumber,
+      })
+      .returning({ id: orders.id })
+    orderId = orderRow?.id
+  }
 
   const { netcashUrl, formFields } = await buildNetcashPayment({
     referenceNumber: input.referenceNumber,
@@ -540,5 +396,222 @@ export async function buildNetcashPaymentForEnrollment(input: {
     paymentType: input.paymentType,
   })
 
-  return { netcashUrl, formFields, orderId: orderRow?.id }
+  return { netcashUrl, formFields, orderId }
+}
+
+// ---------------------------------------------------------------------------
+// Multi-child cart checkout
+// ---------------------------------------------------------------------------
+
+export type CartItem = {
+  child: { firstName: string; lastName: string; dob: string }
+  packageId: number
+  packageName: string
+  packagePrice: number      // per-child price in Rands
+  packagePeriod: string     // 'monthly' | 'once-off'
+  clubId: number | null
+  clubName: string
+  schoolId: number | null
+  schoolName: string | null
+  slotWeekday: number | null
+  slotHour: number | null
+  ageGroup: string | null
+  discountPercent?: number
+  voucherId?: number | null
+}
+
+type CartPrefs = {
+  prefEmail: boolean
+  prefWhatsapp: boolean
+  prefSessionReminders: boolean
+  prefAnnouncements: boolean
+  prefEvents: boolean
+  prefHolidayClinics: boolean
+}
+
+/**
+ * createCartEnrollments
+ *
+ * Creates one enrollment row per cart item (per child), then inserts a single
+ * `orders` row for the total cart amount.  All enrollment rows share the same
+ * `orderReference` so the Netcash ITN webhook can activate all siblings when
+ * a single payment confirmation arrives.
+ *
+ * Returns the shared orderReference and totalAmount (Rands) to pass on to
+ * the Netcash payment form.
+ */
+export async function createCartEnrollments(input: {
+  parent: { firstName: string; lastName: string; email: string; mobile: string }
+  cartItems: CartItem[]
+  prefs: CartPrefs
+  emergencyContactName: string
+  emergencyContactPhone: string
+  agreedTerms: boolean
+  consentMedia: boolean
+  signatureData: string | null
+  signedName: string
+  referralCode: string | null
+  voucherId: number | null
+  discountPercent: number | undefined
+}): Promise<{ orderReference: string; totalAmount: number; enrollmentIds: number[] }> {
+  const userId = await getUserId()
+  const signedAt = new Date()
+
+  // Cart-level shared reference — used as Netcash p3 and stored on each enrollment row
+  const orderReference = generateReference()
+
+  const parentName = `${input.parent.firstName} ${input.parent.lastName}`.trim()
+
+  // Compute total with discount
+  const subtotal = input.cartItems.reduce((sum, item) => sum + item.packagePrice, 0)
+  const disc = input.discountPercent ?? 0
+  const totalAmount = disc > 0 ? subtotal * (1 - disc / 100) : subtotal
+
+  const isOnceOff = input.cartItems.every((item) => item.packagePeriod === "once-off")
+
+  // Create one enrollment per cart item
+  const enrollmentIds: number[] = []
+
+  for (const item of input.cartItems) {
+    const childFullName = `${item.child.firstName} ${item.child.lastName}`.trim()
+    const childDob = item.child.dob
+    const childAge = childDob
+      ? Math.floor((Date.now() - new Date(childDob).getTime()) / (1000 * 60 * 60 * 24 * 365.25))
+      : 0
+
+    // Auto-assign coach from club (best-effort)
+    let resolvedCoachId: number | null = null
+    let resolvedCoachName: string | null = null
+    if (item.clubId) {
+      const autoCoach = await lookupClubCoach(item.clubId)
+      if (autoCoach) {
+        resolvedCoachId = autoCoach.coachId
+        resolvedCoachName = autoCoach.coachName
+      }
+    }
+
+    const [inserted] = await db
+      .insert(enrollments)
+      .values({
+        userId,
+        referenceNumber: generateReference(), // unique per enrollment
+        orderReference,                        // shared cart ref
+        orderItems: input.cartItems,           // full cart stored for reference
+        parentName,
+        parentEmail: input.parent.email,
+        parentMobile: input.parent.mobile,
+        childName: childFullName,
+        childDob,
+        childAge,
+        packageName: item.packageName,
+        club: item.clubName,
+        clubId: item.clubId ?? undefined,
+        schoolId: item.schoolId ?? undefined,
+        schoolName: item.schoolName ?? undefined,
+        slotWeekday: item.slotWeekday ?? undefined,
+        slotHour: item.slotHour != null ? String(item.slotHour) : undefined,
+        slotAgeGroup: item.ageGroup ?? undefined,
+        emergencyContactName: input.emergencyContactName,
+        emergencyContactPhone: input.emergencyContactPhone,
+        agreedTerms: input.agreedTerms,
+        consentMedia: input.consentMedia,
+        signatureData: input.signatureData ?? undefined,
+        signedName: input.signedName,
+        signedAt,
+        prefEmail: input.prefs.prefEmail,
+        prefWhatsapp: input.prefs.prefWhatsapp,
+        prefSessionReminders: input.prefs.prefSessionReminders,
+        prefAnnouncements: input.prefs.prefAnnouncements,
+        prefEvents: input.prefs.prefEvents,
+        prefHolidayClinics: input.prefs.prefHolidayClinics,
+        paymentType: isOnceOff ? "once-off" : "monthly",
+        paymentStatus: "pending",
+        status: "pending",
+        accountStatus: "active",
+        onboardingComplete: false,
+        coachId: resolvedCoachId ?? undefined,
+        coachName: resolvedCoachName ?? undefined,
+        pendingVoucherId: input.voucherId ?? undefined,
+      })
+      .returning({ id: enrollments.id })
+
+    if (inserted?.id) {
+      enrollmentIds.push(inserted.id)
+
+      // Record referral (best-effort)
+      if (input.referralCode) {
+        try { await recordReferralOnEnrollment(input.referralCode, inserted.id) } catch {}
+      }
+    }
+  }
+
+  // Insert one order row for the entire cart
+  const firstEnrollmentId = enrollmentIds[0]
+  if (firstEnrollmentId == null) {
+    throw new Error("No enrollment rows created for cart")
+  }
+
+  await db
+    .insert(orders)
+    .values({
+      enrollmentId: firstEnrollmentId,
+      userId,
+      packageType: isOnceOff ? "once-off" : "monthly",
+      amount: Math.round(totalAmount * 100), // cents
+      status: "awaiting_payment",
+      netcashOrderId: orderReference,        // the p3 we'll send to Netcash
+    })
+
+  // Best-effort: send welcome email for first child only (to avoid spam for multi-child)
+  try {
+    const firstItem = input.cartItems[0]
+    if (firstItem) {
+      const slotLabel =
+        firstItem.slotWeekday != null && firstItem.slotHour != null
+          ? formatSlot(firstItem.slotWeekday, firstItem.slotHour)
+          : "To be confirmed"
+
+      await sendWelcomeEmail({
+        to: input.parent.email,
+        parentName,
+        childName: `${firstItem.child.firstName} ${firstItem.child.lastName}`.trim(),
+        packageName: firstItem.packageName,
+        packagePrice: firstItem.packagePrice,
+        clubName: firstItem.clubName,
+        slotLabel,
+        referenceNumber: orderReference,
+        contractPdf: null,
+      })
+    }
+  } catch {
+    // best-effort — failure must not block enrollment
+  }
+
+  // Best-effort: admin notification
+  try {
+    const firstItem = input.cartItems[0]
+    if (firstItem) {
+      const slotLabel =
+        firstItem.slotWeekday != null && firstItem.slotHour != null
+          ? formatSlot(firstItem.slotWeekday, firstItem.slotHour)
+          : "To be confirmed"
+      await sendAdminNotificationEmail({
+        parentName,
+        parentEmail: input.parent.email,
+        parentMobile: input.parent.mobile,
+        childName: input.cartItems.map((c) => `${c.child.firstName} ${c.child.lastName}`).join(", "),
+        childAge: 0,
+        packageName: firstItem.packageName + (input.cartItems.length > 1 ? ` (${input.cartItems.length} children)` : ""),
+        packagePrice: totalAmount,
+        clubName: firstItem.clubName,
+        slotLabel,
+        referenceNumber: orderReference,
+      })
+    }
+  } catch {
+    // best-effort — failure must not block enrollment
+  }
+
+  revalidatePath("/dashboard")
+  return { orderReference, totalAmount, enrollmentIds }
 }
