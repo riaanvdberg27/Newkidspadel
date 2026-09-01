@@ -6,6 +6,7 @@ import {
   FileText, Mail, RefreshCw, Check, X, Pencil,
   ChevronDown, ChevronUp, Plus, Filter, Search, Link2, UserPlus, Eye,
   CreditCard, Building2, Landmark, Tag, PowerOff, RotateCcw, Trash2,
+  FileSpreadsheet, Loader2,
 } from "lucide-react"
 import {
   type AdminSignup,
@@ -26,6 +27,7 @@ import { markReferralDiscountApplied } from "@/app/actions/referrals"
 import {
   getMonthsForEnrollment,
   updateMonthStatus,
+  getMonthlyBillingRows,
   type SubscriptionMonthRow,
 } from "@/app/actions/subscription-months"
 import { MONTH_NAMES } from "@/lib/billing-utils"
@@ -359,6 +361,99 @@ export function AdminSignupsManager({
   const activeCount = signups.filter((s) => s.status !== "inactive").length
   const inactiveCount = signups.filter((s) => s.status === "inactive").length
 
+  const [exporting, setExporting] = useState(false)
+
+  async function handleExportExcel() {
+    setExporting(true)
+    try {
+      const XLSX = await import("xlsx")
+      const rows = await getMonthlyBillingRows(filtered.map((s) => s.id))
+      const byEnrollment = new Map<number, typeof rows>()
+      for (const row of rows) {
+        const list = byEnrollment.get(row.enrollmentId) ?? []
+        list.push(row)
+        byEnrollment.set(row.enrollmentId, list)
+      }
+
+      const wb = XLSX.utils.book_new()
+
+      // --- Summary sheet: club x month kid counts ---
+      const monthKeys = Array.from(new Set(rows.map((r) => `${r.year}-${String(r.month).padStart(2, "0")}`))).sort()
+      const clubs = Array.from(new Set(filtered.map((s) => s.club ?? "No club"))).sort()
+      const summaryRows = clubs.map((club) => {
+        const row: Record<string, string | number> = { Club: club }
+        for (const key of monthKeys) {
+          const [year, month] = key.split("-").map(Number)
+          const label = `${MONTH_NAMES[month - 1]} ${year}`
+          const kidsForMonth = new Set(
+            filtered
+              .filter((s) => (s.club ?? "No club") === club)
+              .filter((s) => (byEnrollment.get(s.id) ?? []).some((r) => r.year === year && r.month === month))
+              .map((s) => s.id),
+          )
+          row[label] = kidsForMonth.size
+        }
+        return row
+      })
+      const summarySheet = XLSX.utils.json_to_sheet(summaryRows)
+      XLSX.utils.book_append_sheet(wb, summarySheet, "Summary")
+
+      // --- One sheet per month: which kids played, at which club ---
+      for (const key of monthKeys) {
+        const [year, month] = key.split("-").map(Number)
+        const label = `${MONTH_NAMES[month - 1]} ${year}`
+        const monthSignups = filtered.filter((s) => (byEnrollment.get(s.id) ?? []).some((r) => r.year === year && r.month === month))
+        const monthRows = monthSignups.map((s) => {
+          const billing = (byEnrollment.get(s.id) ?? []).find((r) => r.year === year && r.month === month)
+          return {
+            Child: s.childName,
+            Age: s.childAge ?? "",
+            Club: s.club ?? "",
+            Coach: s.coachName ?? "",
+            Slot: s.slotLabel ?? "",
+            Parent: s.parentName,
+            "Parent Mobile": s.parentMobile,
+            Package: s.packageName,
+            "Billing Status": billing?.status ?? "",
+            "Amount Due (R)": billing ? (billing.amountCents / 100).toFixed(2) : "",
+            "Amount Paid (R)": billing?.paidCents != null ? (billing.paidCents / 100).toFixed(2) : "",
+          }
+        })
+        // Sheet names are limited to 31 chars and can't contain []:*?/\
+        const sheetName = label.slice(0, 31)
+        const sheet = XLSX.utils.json_to_sheet(monthRows.length > 0 ? monthRows : [{ Child: "No sign-ups billed this month" }])
+        XLSX.utils.book_append_sheet(wb, sheet, sheetName)
+      }
+
+      // --- Flat sheet matching the current on-screen filtered list ---
+      const flatRows = filtered.map((s) => ({
+        ID: s.id,
+        Child: s.childName,
+        Age: s.childAge ?? "",
+        Parent: s.parentName,
+        "Parent Mobile": s.parentMobile,
+        Package: s.packageName,
+        Club: s.club ?? "",
+        Slot: s.slotLabel ?? "",
+        Coach: s.coachName ?? "",
+        Status: s.status,
+        "Signed Up": s.createdAt ? formatSignupDate(s.createdAt) : "",
+        Payment: s.paymentStatus,
+      }))
+      const flatSheet = XLSX.utils.json_to_sheet(flatRows)
+      XLSX.utils.book_append_sheet(wb, flatSheet, "All (current filter)")
+
+      const clubSuffix = filterClub ? `-${filterClub.replace(/[^a-z0-9]+/gi, "-")}` : ""
+      const dateSuffix = new Date().toISOString().slice(0, 10)
+      XLSX.writeFile(wb, `signups${clubSuffix}-${dateSuffix}.xlsx`)
+    } catch (err) {
+      console.error("[v0] Excel export failed:", err)
+      alert("Could not generate the Excel export. Please try again.")
+    } finally {
+      setExporting(false)
+    }
+  }
+
   function statusColor(status: string) {
     switch (status) {
       case "active": return "bg-lime/20 text-navy"
@@ -446,11 +541,21 @@ export function AdminSignupsManager({
         {hasFilters && (
           <button
             onClick={() => { setFilterCoach(""); setFilterPackage(""); setFilterClub(""); setFilterStatus("") }}
-            className="ml-auto text-xs font-semibold text-muted-foreground underline-offset-2 hover:text-navy hover:underline"
+            className="text-xs font-semibold text-muted-foreground underline-offset-2 hover:text-navy hover:underline"
           >
             Clear filters
           </button>
         )}
+
+        <button
+          onClick={handleExportExcel}
+          disabled={exporting || filtered.length === 0}
+          title="Export the currently filtered sign-ups, plus a per-month breakdown of which kids were enrolled at each club"
+          className="ml-auto inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-1.5 text-xs font-semibold text-navy hover:bg-muted/60 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {exporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileSpreadsheet className="h-3.5 w-3.5" />}
+          {exporting ? "Exporting…" : "Export to Excel"}
+        </button>
       </div>
 
       {/* List */}

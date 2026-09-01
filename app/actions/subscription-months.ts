@@ -162,6 +162,36 @@ export async function getMonthsForEnrollment(
 }
 
 // ---------------------------------------------------------------------------
+// Get months for a specific set of enrollments (used by admin Excel export)
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetch every subscription-month row for a given list of enrollment IDs.
+ * Used by the admin Sign-ups "Export to Excel" feature to build a per-month
+ * breakdown of which kids were enrolled/billed at each club, for each month.
+ * Admin-only — the caller must already be authenticated as admin.
+ */
+export async function getMonthlyBillingRows(
+  enrollmentIds: number[],
+): Promise<Pick<SubscriptionMonthRow, "enrollmentId" | "year" | "month" | "status" | "amountCents" | "paidCents">[]> {
+  await requireAdmin()
+  if (enrollmentIds.length === 0) return []
+  const rows = await db
+    .select({
+      enrollmentId: subscriptionMonths.enrollmentId,
+      year: subscriptionMonths.year,
+      month: subscriptionMonths.month,
+      status: subscriptionMonths.status,
+      amountCents: subscriptionMonths.amountCents,
+      paidCents: subscriptionMonths.paidCents,
+    })
+    .from(subscriptionMonths)
+    .where(inArray(subscriptionMonths.enrollmentId, enrollmentIds))
+    .orderBy(asc(subscriptionMonths.year), asc(subscriptionMonths.month))
+  return rows
+}
+
+// ---------------------------------------------------------------------------
 // Get full billing ledger (all enrollments + their months)
 // ---------------------------------------------------------------------------
 
