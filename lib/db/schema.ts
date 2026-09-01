@@ -183,6 +183,14 @@ export const enrollments = pgTable("enrollments", {
   slotWeekday: integer("slotWeekday"),
   slotHour: numeric("slotHour", { precision: 4, scale: 1 }),
   slotAgeGroup: text("slotAgeGroup"),
+  // Slot 2 — advanced packages meet twice a week; slot 2 is the second
+  // weekly session (independent day/time/age-group from slot 1 above).
+  slotWeekday2: integer("slotWeekday2"),
+  slotHour2: numeric("slotHour2", { precision: 4, scale: 1 }),
+  slotAgeGroup2: text("slotAgeGroup2"),
+  // True once an admin has customized this enrollment's time slot(s) away
+  // from the package/club default via the admin "Customize Time Slots" flow.
+  scheduleCustomized: boolean("scheduleCustomized").notNull().default(false),
   // Debit order
   debitAccountHolder: text("debitAccountHolder"),
   debitBankName: text("debitBankName"),
@@ -212,9 +220,14 @@ export const enrollments = pgTable("enrollments", {
   // 'pending' | 'complete' | 'failed' | 'cancelled'
   paymentStatus: text("paymentStatus").notNull().default("pending"),
   payfastPaymentId: text("payfastPaymentId"),
-  // Coach assignment
+  // Coach assignment — for slot 1 (slotWeekday/slotHour)
   coachId: integer("coachId"),
   coachName: text("coachName"),
+  // Coach assignment for slot 2 (slotWeekday2/slotHour2), when an advanced
+  // package's two weekly sessions are split between two different coaches.
+  // Falls back to coachId/coachName when null (single coach covers both).
+  coachId2: integer("coachId2"),
+  coachName2: text("coachName2"),
   // Status
   status: text("status").notNull().default("pending"),
   accountStatus: text("accountStatus").notNull().default("active"),
@@ -283,7 +296,20 @@ export const coaches = pgTable("coaches", {
   published: boolean("published").notNull().default(true),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
   updatedAt: timestamp("updatedAt").notNull().defaultNow(),
-})
+  // HR / contact details (admin-only, not shown on the public coaches page)
+  mobile: text("mobile").notNull().default(""),
+  qualifications: text("qualifications").notNull().default(""),
+  employmentStatus: text("employmentStatus").notNull().default("active"),
+  emergencyContactName: text("emergencyContactName").notNull().default(""),
+  emergencyContactPhone: text("emergencyContactPhone").notNull().default(""),
+  // Coach portal login access — set via the admin Login Access panel
+  email: text("email"),
+  username: text("username"),
+  passwordHash: text("passwordHash"),
+  accountStatus: text("accountStatus").notNull().default("active"),
+  // Whether this coach can submit player evaluations
+  evalEnabled: boolean("evalEnabled").notNull().default(false),
+  })
 
 export type Coach = typeof coaches.$inferSelect
 
