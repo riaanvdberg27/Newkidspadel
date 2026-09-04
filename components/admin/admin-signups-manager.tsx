@@ -426,19 +426,39 @@ export function AdminSignupsManager({
       }
 
       // --- Flat sheet matching the current on-screen filtered list ---
+      // Includes every field on the signup record — not just what's visible in
+      // the compact on-screen table — since this export is also used to
+      // reconcile bank/EFT payments (Reference Number) and other admin work.
       const flatRows = filtered.map((s) => ({
         ID: s.id,
+        "Reference Number": s.referenceNumber,
         Child: s.childName,
+        "Child DOB": s.childDob ? formatSignupDate(s.childDob) : "",
         Age: s.childAge ?? "",
         Parent: s.parentName,
+        "Parent Email": s.parentEmail,
         "Parent Mobile": s.parentMobile,
+        "Emergency Contact": s.emergencyContactName ?? "",
+        "Emergency Contact Phone": s.emergencyContactPhone ?? "",
         Package: s.packageName,
         Club: s.club ?? "",
         Slot: s.slotLabel ?? "",
+        "Slot 2": s.slotLabel2 ?? "",
         Coach: s.coachName ?? "",
         Status: s.status,
         "Signed Up": s.createdAt ? formatSignupDate(s.createdAt) : "",
+        "Signed Contract At": s.signedAt ? formatSignupDate(s.signedAt) : "",
+        "Payment Type": s.paymentType,
         Payment: s.paymentStatus,
+        "Discount %": s.pendingDiscountPercent ?? 0,
+        "Debit Account Holder": s.debitAccountHolder ?? "",
+        "Debit Bank": s.debitBankName ?? "",
+        "Debit Account Number": s.debitAccountNumber ?? "",
+        "Debit Account Type": s.debitAccountType ?? "",
+        "Debit Day": s.debitDay ?? "",
+        "Agreed Terms": s.agreedTerms ? "Yes" : "No",
+        "Consent Media": s.consentMedia ? "Yes" : "No",
+        "Contract URL": s.contractUrl ?? "",
       }))
       const flatSheet = XLSX.utils.json_to_sheet(flatRows)
       XLSX.utils.book_append_sheet(wb, flatSheet, "All (current filter)")
