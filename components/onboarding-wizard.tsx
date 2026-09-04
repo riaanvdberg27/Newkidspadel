@@ -2,7 +2,7 @@
 
 import Image from "next/image"
 import Link from "next/link"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Check, ChevronRight, Tag, X } from "lucide-react"
 import { formatSlot } from "@/lib/slots"
@@ -15,10 +15,11 @@ import { DobPicker } from "@/components/dob-picker"
 import { SignaturePad } from "@/components/signature-pad"
 import { CONSENT_TERMS_LABEL, CONSENT_MEDIA_LABEL, TERMS_TITLE, TERMS_SECTIONS } from "@/lib/terms"
 import { authClient } from "@/lib/auth-client"
-import { createCartEnrollments } from "@/app/actions/enrollment"
+import { createCartEnrollments, getOrderAmountByReference } from "@/app/actions/enrollment"
 import type { CartItem } from "@/app/actions/enrollment"
 import { blobUrl } from "@/lib/blob"
 import { validateVoucherCode } from "@/app/actions/referrals"
+import { BankDetailsCard } from "@/components/bank-details-card"
 
 // ---------------------------------------------------------------------------
 // Step labels
@@ -145,6 +146,38 @@ export function OnboardingWizard({
   const [error, setError] = useState<string | null>(null)
   const [netcashUnavailable, setNetcashUnavailable] = useState(false)
   const [confirmedRef, setConfirmedRef] = useState<string | null>(null)
+  // Set right after the enrollment/order records are created, before the Netcash
+  // redirect attempt — used to show the EFT fallback with the correct reference
+  // and amount if the Netcash gateway turns out to be unreachable.
+  const [pendingOrder, setPendingOrder] = useState<{ reference: string; amount: number } | null>(null)
+
+  // ── Returned from a declined / cancelled Netcash payment ────────────────
+  // Netcash's Decline/Cancel URL is configured to /enrollment?cancelled=1, with
+  // ?ref=...&name=... appended from the m10 field we sent. Detect that here and
+  // show the EFT bank details fallback instead of restarting the wizard.
+  const cancelledRef = searchParams.get("cancelled") === "1" ? searchParams.get("ref") : null
+  const [declinedAmount, setDeclinedAmount] = useState<number | null>(null)
+
+  useEffect(() => {
+    if (!cancelledRef) return
+    let active = true
+    getOrderAmountByReference(cancelledRef).then((amount) => {
+      if (active) setDeclinedAmount(amount)
+    })
+    return () => {
+      active = false
+    }
+  }, [cancelledRef])
+
+  // ── Returned from a declined / cancelled Netcash payment ────────────────
+  if (cancelledRef) {
+    return (
+      <PaymentDeclinedNotice
+        reference={cancelledRef}
+        amount={declinedAmount ?? undefined}
+      />
+    )
+  }
 
   // ── Package not yet selected ─────────────────────────────────────────────
   if (!selectedPackage) {
@@ -267,6 +300,10 @@ export function OnboardingWizard({
         voucherId: appliedVoucher?.id ?? null,
         discountPercent: appliedVoucher?.discountPercent ?? undefined,
       })
+
+      // Enrollment + order records now exist — remember them so the EFT
+      // fallback can show the correct reference/amount if Netcash fails below.
+      setPendingOrder({ reference: orderReference, amount: totalAmount })
 
       // 4. Build Netcash cart payment via API route
       const payResponse = await fetch("/api/netcash/pay", {
@@ -1052,12 +1089,21 @@ export function OnboardingWizard({
         </div>
 
         {netcashUnavailable && (
-          <div className="mt-4 rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900" role="alert">
-            <p className="font-semibold">Your enrolment has been saved.</p>
-            <p className="mt-1">
-              We could not connect to NetCash at this moment. Please try again in a few minutes —
-              your information will not be lost.
-            </p>
+          <div className="mt-4 space-y-4">
+            <div className="rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900" role="alert">
+              <p className="font-semibold">Your enrolment has been saved.</p>
+              <p className="mt-1">
+                We could not connect to NetCash at this moment. Your spot is reserved — you can try the
+                card payment again below, or pay via EFT using the details below.
+              </p>
+            </div>
+            {pendingOrder && (
+              <BankDetailsCard
+                amount={pendingOrder.amount}
+                paymentReference={pendingOrder.reference}
+                note="NetCash could not be reached, but you can complete your payment manually via EFT using the banking details below."
+              />
+            )}
           </div>
         )}
 
@@ -1342,46 +1388,12 @@ function Confirmation({
         ))}
 
         {isEft && (
-          <div className="mt-6 rounded-card border border-border bg-card p-5 text-left shadow-sm">
-            <p className="text-sm font-bold text-navy">Complete your payment via EFT</p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Your enrollment is reserved. Please make payment within 48 hours to confirm your spot.
-            </p>
-            <dl className="mt-4 space-y-2 text-sm">
-              <div className="flex justify-between gap-4 border-b border-border pb-2">
-                <dt className="text-muted-foreground">Account Name</dt>
-                <dd className="font-semibold text-navy">NEXT GEN PADEL ACADEMY</dd>
-              </div>
-              <div className="flex justify-between gap-4 border-b border-border pb-2">
-                <dt className="text-muted-foreground">Bank</dt>
-                <dd className="font-semibold text-navy">First National Bank</dd>
-              </div>
-              <div className="flex justify-between gap-4 border-b border-border pb-2">
-                <dt className="text-muted-foreground">Account Number</dt>
-                <dd className="font-semibold text-navy">63214278441</dd>
-              </div>
-              <div className="flex justify-between gap-4 border-b border-border pb-2">
-                <dt className="text-muted-foreground">Branch Code</dt>
-                <dd className="font-semibold text-navy">252445</dd>
-              </div>
-              {packagePrice !== undefined && (
-                <div className="flex justify-between gap-4 border-b border-border pb-2">
-                  <dt className="text-muted-foreground">Amount</dt>
-                  <dd className="font-semibold text-navy">R{packagePrice.toLocaleString()}</dd>
-                </div>
-              )}
-              <div className="flex justify-between gap-4">
-                <dt className="text-muted-foreground">Payment Reference</dt>
-                <dd className="font-black text-navy">{childLabel}</dd>
-              </div>
-            </dl>
-            <div className="mt-4 rounded-md border border-amber-300 bg-amber-50 px-4 py-3">
-              <p className="text-xs font-semibold text-amber-800">Important</p>
-              <p className="mt-1 text-xs text-amber-700">
-                Use <strong>{childLabel}</strong> as the payment reference so we can match your
-                payment and confirm your enrollment.
-              </p>
-            </div>
+          <div className="mt-6">
+            <BankDetailsCard
+              amount={packagePrice}
+              paymentReference={childLabel}
+              note="Your enrollment is reserved. Please make payment within 48 hours to confirm your spot."
+            />
           </div>
         )}
 
@@ -1391,6 +1403,55 @@ function Confirmation({
             className="rounded-md bg-lime px-6 py-2.5 font-bold text-lime-foreground transition-colors hover:bg-lime/90"
           >
             Go to My Dashboard
+          </Link>
+          <Link
+            href="/"
+            className="rounded-md border border-border px-6 py-2.5 font-semibold text-navy transition-colors hover:bg-muted"
+          >
+            Back to Home
+          </Link>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+/**
+ * Shown when a parent is bounced back from Netcash after a declined or
+ * cancelled card payment (Netcash redirects to /enrollment?cancelled=1, with
+ * ?ref=...&name=... appended). Their enrollment/order record already exists
+ * and is reserved — this screen offers the EFT bank details as a fallback,
+ * or a way to retry the card payment.
+ */
+function PaymentDeclinedNotice({ reference, amount }: { reference: string; amount?: number }) {
+  return (
+    <section className="mx-auto max-w-2xl px-4 py-16">
+      <div className="rounded-card border border-amber-300 bg-amber-50 p-8 text-center">
+        <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-amber-200 text-amber-800">
+          <X className="h-7 w-7" />
+        </span>
+        <h2 className="mt-4 text-2xl font-extrabold text-navy">Your Netcash Payment Didn&apos;t Go Through</h2>
+        <p className="mt-2 text-muted-foreground">
+          Don&apos;t worry — your enrollment details have been saved and your spot is reserved. You can try
+          your card again, or pay via EFT using the banking details below.
+        </p>
+        <p className="mt-4 text-sm text-muted-foreground">Your reference number</p>
+        <p className="text-lg font-extrabold tracking-wide text-navy">{reference}</p>
+
+        <div className="mt-6">
+          <BankDetailsCard
+            amount={amount}
+            paymentReference={reference}
+            note="Your Netcash payment was declined or cancelled. You can complete your payment manually via EFT using the details below."
+          />
+        </div>
+
+        <div className="mt-6 flex flex-wrap justify-center gap-3">
+          <Link
+            href="/enrollment"
+            className="rounded-md bg-lime px-6 py-2.5 font-bold text-lime-foreground transition-colors hover:bg-lime/90"
+          >
+            Try Card Payment Again
           </Link>
           <Link
             href="/"

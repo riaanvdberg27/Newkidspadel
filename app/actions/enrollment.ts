@@ -615,3 +615,20 @@ export async function createCartEnrollments(input: {
   revalidatePath("/dashboard")
   return { orderReference, totalAmount, enrollmentIds }
 }
+
+/**
+ * Looks up the total amount (in Rands) owed for a cart order, by its shared
+ * orderReference. Used on the enrollment page when a parent is bounced back
+ * from a declined/cancelled Netcash payment, so we can show the correct
+ * amount alongside the EFT bank details fallback.
+ *
+ * Public (no auth check) — the reference is an unguessable random token, and
+ * this is read-only, so it's safe to call from an unauthenticated redirect.
+ */
+export async function getOrderAmountByReference(reference: string): Promise<number | null> {
+  if (!reference) return null
+  const rows = await db.select({ amount: orders.amount }).from(orders).where(eq(orders.netcashOrderId, reference))
+  if (rows.length === 0) return null
+  const totalCents = rows.reduce((sum, r) => sum + r.amount, 0)
+  return totalCents / 100
+}
