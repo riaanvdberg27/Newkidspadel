@@ -105,7 +105,9 @@ export async function backfillAllEnrollments(): Promise<{ generated: number }> {
     return { generated: 0 }
   }
 
-  // Load all active/pending enrollments with their package price
+  // Only generate/show billing months for enrollments that are actually
+  // active. Pending (awaiting first payment) and inactive/cancelled
+  // enrollments — including test signups — must never appear in billing.
   const rows = await db
     .select({
       id: enrollments.id,
@@ -114,7 +116,7 @@ export async function backfillAllEnrollments(): Promise<{ generated: number }> {
       paymentType: enrollments.paymentType,
     })
     .from(enrollments)
-    .where(inArray(enrollments.status, ["active", "pending"]))
+    .where(eq(enrollments.status, "active"))
 
   // Load package prices for lookup
   const pkgRows = await db.select({ name: packages.name, price: packages.price }).from(packages)
@@ -228,7 +230,15 @@ export async function getBillingLedger(year = BILLING_START_YEAR): Promise<Billi
     })
     .from(subscriptionMonths)
     .innerJoin(enrollments, eq(subscriptionMonths.enrollmentId, enrollments.id))
-    .where(eq(subscriptionMonths.year, year))
+    .where(
+      and(
+        eq(subscriptionMonths.year, year),
+        // Only active enrollments belong in billing — pending (not yet
+        // confirmed) and inactive/cancelled (including test signups) must
+        // never appear here, even if month records exist from before.
+        eq(enrollments.status, "active"),
+      ),
+    )
     .orderBy(asc(enrollments.childName), asc(subscriptionMonths.month))
 
   return rows
@@ -293,6 +303,8 @@ export async function getOutstandingReport(year = BILLING_START_YEAR): Promise<O
         eq(subscriptionMonths.year, year),
         // outstanding OR partial (partial still has a remaining balance)
         sql`${subscriptionMonths.status} IN ('outstanding', 'partial')`,
+        // Only active enrollments belong in billing — see getBillingLedger.
+        eq(enrollments.status, "active"),
       )
     )
     .orderBy(asc(enrollments.childName), asc(subscriptionMonths.month))
@@ -371,7 +383,14 @@ export async function getRevenueReport(year = BILLING_START_YEAR): Promise<Reven
       paidCents: subscriptionMonths.paidCents,
     })
     .from(subscriptionMonths)
-    .where(eq(subscriptionMonths.year, year))
+    .innerJoin(enrollments, eq(subscriptionMonths.enrollmentId, enrollments.id))
+    .where(
+      and(
+        eq(subscriptionMonths.year, year),
+        // Only active enrollments belong in billing — see getBillingLedger.
+        eq(enrollments.status, "active"),
+      ),
+    )
     .orderBy(asc(subscriptionMonths.month))
 
   // Build summary per month
