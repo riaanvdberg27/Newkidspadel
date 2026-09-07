@@ -414,6 +414,7 @@ export function AdminSignupsManager({
             Parent: s.parentName,
             "Parent Mobile": s.parentMobile,
             Package: s.packageName,
+            "Signed Up": s.createdAt ? formatSignupDate(s.createdAt) : "",
             "Billing Status": billing?.status ?? "",
             "Amount Due (R)": billing ? (billing.amountCents / 100).toFixed(2) : "",
             "Amount Paid (R)": billing?.paidCents != null ? (billing.paidCents / 100).toFixed(2) : "",
