@@ -406,15 +406,17 @@ export function AdminSignupsManager({
         const monthRows = monthSignups.map((s) => {
           const billing = (byEnrollment.get(s.id) ?? []).find((r) => r.year === year && r.month === month)
           return {
+            ID: s.id,
             Child: s.childName,
             Age: s.childAge ?? "",
-            Club: s.club ?? "",
-            Coach: s.coachName ?? "",
-            Slot: s.slotLabel ?? "",
             Parent: s.parentName,
-            "Parent Mobile": s.parentMobile,
             Package: s.packageName,
+            Club: s.club ?? "",
+            Slot: s.slotLabel ?? "",
+            Coach: s.coachName ?? "",
+            Status: s.status,
             "Signed Up": s.createdAt ? formatSignupDate(s.createdAt) : "",
+            "Parent Mobile": s.parentMobile,
             "Billing Status": billing?.status ?? "",
             "Amount Due (R)": billing ? (billing.amountCents / 100).toFixed(2) : "",
             "Amount Paid (R)": billing?.paidCents != null ? (billing.paidCents / 100).toFixed(2) : "",
