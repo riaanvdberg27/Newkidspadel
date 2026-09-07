@@ -29,13 +29,14 @@ import {
   paymentEvents,
   webhookLogs,
 } from "@/lib/db/schema"
-import { eq } from "drizzle-orm"
+import { and, eq } from "drizzle-orm"
 import {
   parseNetcashItn,
   amountMatchesExpected,
   type NetcashItnPayload,
 } from "@/lib/netcash"
 import { completeReferralForEnrollment } from "@/app/actions/referrals"
+import { autoMarkMonthPaidFromWebhook } from "@/app/actions/subscription-months"
 import { revalidatePath } from "next/cache"
 
 // ---------------------------------------------------------------------------
@@ -122,14 +123,25 @@ export async function POST(req: NextRequest) {
     return ack(msg)
   }
 
-  // Look up the order by our referenceNumber
+  // Netcash appends "-O{n}" to the reference for recurring billing occurrences
+  // e.g. "NGP-2026-LMDFFFXRAE-O15" → base ref is "NGP-2026-LMDFFFXRAE"
+  // Strip the suffix so we can match against our stored referenceNumber.
+  const enrollmentRef = reference.replace(/-O\d+$/, "")
+  console.log(`[netcash-itn] reference="${reference}" enrollmentRef="${enrollmentRef}"`)
+
+  // Look up the order by our referenceNumber (try both raw and stripped)
   const orderRows = await db
     .select()
     .from(orders)
     .where(eq(orders.netcashOrderId, reference))
     .limit(1)
 
-  let order = orderRows[0]
+  // Also try with the stripped reference in case orders were stored that way
+  const orderRowsFallback = orderRows.length === 0
+    ? await db.select().from(orders).where(eq(orders.netcashOrderId, enrollmentRef)).limit(1)
+    : []
+
+  let order = orderRows[0] ?? orderRowsFallback[0]
 
   // Resolve the enrollment — either via order or directly by referenceNumber
   let enrollmentRow: typeof enrollments.$inferSelect | undefined
@@ -141,18 +153,22 @@ export async function POST(req: NextRequest) {
       .where(eq(enrollments.id, order.enrollmentId))
       .limit(1)
     enrollmentRow = enrollRows[0]
-  } else {
-    // Fallback: look up enrollment directly by referenceNumber
+  }
+
+  if (!enrollmentRow) {
+    // Fallback: look up enrollment directly by stripped referenceNumber
+    // This handles the common case where Netcash sends "NGP-2026-LMDFFFXRAE-O15"
+    // and we need to match against stored "NGP-2026-LMDFFFXRAE"
     const enrollRows = await db
       .select()
       .from(enrollments)
-      .where(eq(enrollments.referenceNumber, reference))
+      .where(eq(enrollments.referenceNumber, enrollmentRef))
       .limit(1)
     enrollmentRow = enrollRows[0]
   }
 
   if (!enrollmentRow) {
-    const msg = `Step 1 failed — no enrollment found for Reference: ${reference}`
+    const msg = `Step 1 failed — no enrollment found for Reference: ${reference} (enrollmentRef: ${enrollmentRef})`
     console.error("[netcash-itn]", msg)
     if (logId) {
       await db
@@ -268,7 +284,7 @@ export async function POST(req: NextRequest) {
           paymentStatus: "paid",
           status: "active",
           onboardingComplete: true,
-          payfastPaymentId: requestTrace, // reuses this column for the Netcash transaction ID
+          payfastPaymentId: requestTrace, // reuses existing column for transaction ID
           updatedAt: now,
         })
         .where(eq(enrollments.id, enrollmentRow.id))
@@ -288,6 +304,44 @@ export async function POST(req: NextRequest) {
           extra1,
         },
       })
+
+      // Activate sibling enrollments for cart checkouts (multi-child).
+      // All cart enrollment rows share the same orderReference column.
+      if (enrollmentRow.orderReference) {
+        try {
+          const siblings = await db
+            .select({ id: enrollments.id })
+            .from(enrollments)
+            .where(and(eq(enrollments.orderReference, enrollmentRow.orderReference)))
+          for (const sibling of siblings) {
+            if (sibling.id === enrollmentRow.id) continue
+            await db
+              .update(enrollments)
+              .set({
+                paymentStatus: "paid",
+                status: "active",
+                onboardingComplete: true,
+                payfastPaymentId: requestTrace,
+                updatedAt: now,
+              })
+              .where(eq(enrollments.id, sibling.id))
+          }
+        } catch (siblingErr) {
+          console.error("[netcash-itn] sibling activation error:", siblingErr)
+        }
+      }
+
+      // Auto-mark the corresponding subscription month as paid
+      // Best-effort: never fail the webhook over billing ledger errors
+      try {
+        await autoMarkMonthPaidFromWebhook(
+          enrollmentRow.id,
+          Math.round(postedAmountRands * 100),
+          requestTrace || reference,
+        )
+      } catch (billingErr) {
+        console.error("[netcash-itn] billing ledger update failed:", billingErr)
+      }
 
       // Complete any pending referral — marks it "complete", issues the referrer
       // their voucher, and stamps pendingDiscountPercent on the referrer's enrollment.

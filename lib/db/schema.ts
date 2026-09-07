@@ -2,6 +2,7 @@ import {
   pgTable,
   text,
   timestamp,
+  date,
   boolean,
   integer,
   serial,
@@ -145,22 +146,6 @@ export const clubSlots = pgTable(
   }),
 )
 
-/** One line in the enrollment cart (one child → one package at one club). */
-export type CartItem = {
-  childName: string
-  childDob: string
-  childAge: number
-  packageName: string
-  packageSlug: string
-  packagePrice: number
-  clubId: number
-  clubName: string
-  slotWeekday: number
-  slotHour: number
-  slotAgeGroup: string
-  discountPercent: number
-}
-
 export const enrollments = pgTable("enrollments", {
   id: serial("id").primaryKey(),
   userId: text("userId").notNull(),
@@ -183,6 +168,12 @@ export const enrollments = pgTable("enrollments", {
   slotWeekday: integer("slotWeekday"),
   slotHour: numeric("slotHour", { precision: 4, scale: 1 }),
   slotAgeGroup: text("slotAgeGroup"),
+  // Slot 2 for advanced packages (2 sessions per week on different days)
+  slotWeekday2: integer("slotWeekday2"),
+  slotHour2: numeric("slotHour2", { precision: 4, scale: 1 }),
+  slotAgeGroup2: text("slotAgeGroup2"),
+  // True once an admin has manually customized this client's time slot(s) away from the default
+  scheduleCustomized: boolean("scheduleCustomized").notNull().default(false),
   // Debit order
   debitAccountHolder: text("debitAccountHolder"),
   debitBankName: text("debitBankName"),
@@ -212,9 +203,14 @@ export const enrollments = pgTable("enrollments", {
   // 'pending' | 'complete' | 'failed' | 'cancelled'
   paymentStatus: text("paymentStatus").notNull().default("pending"),
   payfastPaymentId: text("payfastPaymentId"),
-  // Coach assignment
+  // Coach assignment — for slot 1 (slotWeekday/slotHour)
   coachId: integer("coachId"),
   coachName: text("coachName"),
+  // Coach assignment for slot 2 (slotWeekday2/slotHour2), when an advanced
+  // package's two weekly sessions are split between two different coaches.
+  // Falls back to coachId/coachName when null (single coach covers both).
+  coachId2: integer("coachId2"),
+  coachName2: text("coachName2"),
   // Status
   status: text("status").notNull().default("pending"),
   accountStatus: text("accountStatus").notNull().default("active"),
@@ -227,10 +223,11 @@ export const enrollments = pgTable("enrollments", {
   // FK to vouchers(id) ON DELETE SET NULL — expressed in DB but not in Drizzle
   // schema to avoid a circular reference (vouchers is declared after enrollments).
   pendingVoucherId: integer("pending_voucher_id"),
-  // Multi-child cart checkout — shared reference across sibling enrollments
-  // and a snapshot of every child+package in the cart.
+  // Multi-child cart checkout: all sibling enrollments share the same orderReference.
+  // This is the p3 reference sent to Netcash and stored on the orders.netcashOrderId column.
   orderReference: text("orderReference"),
-  orderItems: jsonb("orderItems").$type<CartItem[]>(),
+  // Cart items JSON — stored for receipt / admin view, not used for payment logic.
+  orderItems: jsonb("orderItems"),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
   updatedAt: timestamp("updatedAt").notNull().defaultNow(),
 })
@@ -283,6 +280,13 @@ export const coaches = pgTable("coaches", {
   published: boolean("published").notNull().default(true),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
   updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+  // Coach portal login access — managed via app/actions/coach-auth.ts.
+  // These columns already exist on the live coaches table; adding them
+  // here keeps Drizzle's schema in sync so getCoaches() can surface the
+  // current login email / account status back to the admin UI.
+  email: text("email"),
+  passwordHash: text("passwordHash"),
+  accountStatus: text("accountStatus").notNull().default("active"),
 })
 
 export type Coach = typeof coaches.$inferSelect
@@ -504,6 +508,49 @@ export const subscriptions = pgTable("subscriptions", {
 export type Subscription = typeof subscriptions.$inferSelect
 
 /**
+ * subscription_months — one row per enrollment per billing month.
+ * Tracks the payment status of every monthly period for a given enrollment.
+ * Idempotently generated: generating the same year+month twice is a no-op
+ * (unique constraint on enrollmentId+year+month).
+ */
+export const subscriptionMonths = pgTable(
+  "subscription_months",
+  {
+    id: serial("id").primaryKey(),
+    enrollmentId: integer("enrollmentId")
+      .notNull()
+      .references(() => enrollments.id, { onDelete: "cascade" }),
+    // Calendar year, e.g. 2026
+    year: integer("year").notNull(),
+    // Calendar month 1–12
+    month: integer("month").notNull(),
+    // Amount due in cents (copied from package price at generation time)
+    amountCents: integer("amountCents").notNull().default(0),
+    // 'outstanding' | 'paid' | 'partial'
+    status: text("status").notNull().default("outstanding"),
+    // Discount percentage applied to this month (0–100)
+    discountPct: integer("discountPct").notNull().default(0),
+    // Human-readable reason for the discount, e.g. "Sibling discount", "Bursary"
+    discountReason: text("discountReason"),
+    // For partial payments: amount actually received in cents
+    paidCents: integer("paidCents"),
+    // Netcash/payment reference that settled this month (if any)
+    paymentReference: text("paymentReference"),
+    // Notes added by admin
+    notes: text("notes"),
+    // When the status was last changed
+    paidAt: timestamp("paidAt"),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+  },
+  (t) => ({
+    uniqueMonth: unique("subscription_months_unique").on(t.enrollmentId, t.year, t.month),
+  }),
+)
+
+export type SubscriptionMonth = typeof subscriptionMonths.$inferSelect
+
+/**
  * payment_events — immutable audit log; one row per significant event.
  */
 export const paymentEvents = pgTable("payment_events", {
@@ -586,3 +633,29 @@ export const siteImages = pgTable("site_images", {
 })
 
 export type SiteImage = typeof siteImages.$inferSelect
+
+// ---- Session Attendance (coaching portal) ----
+
+/**
+ * session_attendance — one row per child per session date.
+ * status: 'present' | 'absent' | 'excused'
+ * A record exists once the coach marks the session (no record = not yet marked).
+ */
+export const sessionAttendance = pgTable("session_attendance", {
+  id: serial("id").primaryKey(),
+  coachId: integer("coachId")
+    .notNull()
+    .references(() => coaches.id, { onDelete: "cascade" }),
+  enrollmentId: integer("enrollmentId")
+    .notNull()
+    .references(() => enrollments.id, { onDelete: "cascade" }),
+  // Stored as DATE in Postgres — Drizzle date() returns a "YYYY-MM-DD" string directly
+  sessionDate: date("sessionDate").notNull(),
+  // 'present' | 'absent' | 'excused'
+  status: text("status").notNull().default("present"),
+  note: text("note"),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+  updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+})
+
+export type SessionAttendance = typeof sessionAttendance.$inferSelect
