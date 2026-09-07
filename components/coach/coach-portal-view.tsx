@@ -281,6 +281,7 @@ export function CoachPortalView({
   const [history, setHistory] = useState(initialHistory)
   const [loading, startLoading] = useTransition()
   const [loggingOut, startLogout] = useTransition()
+  const [actionError, setActionError] = useState<string | null>(null)
 
   // Unique clubs
   const clubs = useMemo(() => {
@@ -354,6 +355,7 @@ export function CoachPortalView({
     startLoading(async () => {
       const res = await selfMarkAttendance({ enrollmentId, sessionDate: dateStr, status })
       if (res.ok && res.id) {
+        setActionError(null)
         const key = `${enrollmentId}:${dateStr}`
         setAttendance((prev) => {
           const existing = prev.find((a) => `${a.enrollmentId}:${a.sessionDate}` === key)
@@ -365,6 +367,8 @@ export function CoachPortalView({
           if (existing) return prev.map((a) => a.id === res.id ? { ...a, status, note: null } : a)
           return [...prev, { id: res.id!, enrollmentId, sessionDate: dateStr, status, note: null }]
         })
+      } else {
+        setActionError(res.error ?? "Couldn't save attendance. Please try again.")
       }
     })
   }
@@ -373,9 +377,12 @@ export function CoachPortalView({
     startLoading(async () => {
       const res = await selfCorrectAttendance(record.id, status, note)
       if (res.ok) {
+        setActionError(null)
         const update = (a: AttendanceRecord) => a.id === record.id ? { ...a, status, note: note ?? null } : a
         setAttendance((prev) => prev.map(update))
         setHistory((prev) => prev.map(update))
+      } else {
+        setActionError(res.error ?? "Couldn't save the correction. Please try again.")
       }
     })
   }
@@ -419,6 +426,21 @@ export function CoachPortalView({
       </header>
 
       <div className="mx-auto max-w-6xl px-4 py-6 space-y-6">
+        {actionError && (
+          <div className="flex items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 shrink-0 text-red-600" />
+              <p className="text-sm font-medium text-red-700">{actionError}</p>
+            </div>
+            <button
+              onClick={() => setActionError(null)}
+              className="shrink-0 text-xs font-semibold text-red-600 hover:text-red-800"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+
         {/* Stats */}
         <div className="grid grid-cols-3 gap-3 sm:gap-4">
           {[
