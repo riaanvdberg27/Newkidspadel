@@ -10,8 +10,8 @@ export default function manifest(): MetadataRoute.Manifest {
     background_color: "#0B1C3F",
     theme_color: "#0B1C3F",
     icons: [
-      { src: "/images/mk-padel-logo.png", sizes: "192x192", type: "image/png" },
-      { src: "/images/mk-padel-logo.png", sizes: "512x512", type: "image/png" },
+      { src: "/images/nextgen-padel-logo.png", sizes: "192x192", type: "image/png" },
+      { src: "/images/nextgen-padel-logo.png", sizes: "512x512", type: "image/png" },
     ],
   }
 }

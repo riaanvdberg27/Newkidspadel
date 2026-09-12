@@ -27,7 +27,7 @@ const localBusinessSchema = {
   description:
     "NextGen Padel Academy offers professional padel coaching for children aged 4–17 across Pretoria — Brooklyn, Menlo Park, Moreleta Park, Garsfontein, Waterkloof, Menlyn, Lynnwood, Faerie Glen and Silver Lakes.",
   url: "https://nextgenpadel.co.za",
-  image: "https://nextgenpadel.co.za/images/mk-padel-logo.png",
+  image: "https://nextgenpadel.co.za/images/nextgen-padel-logo.png",
   priceRange: "R300–R1200/month",
   address: {
     "@type": "PostalAddress",
