@@ -330,6 +330,7 @@ export async function deactivateSignup(id: number): Promise<{ ok: boolean; error
     await requireAdmin()
     await db.update(enrollments).set({ status: "inactive", updatedAt: new Date() }).where(eq(enrollments.id, id))
     revalidatePath("/admin")
+    revalidatePath("/coach/portal")
     return { ok: true }
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Failed to deactivate" }
@@ -345,6 +346,7 @@ export async function reactivateSignup(id: number): Promise<{ ok: boolean; error
     await requireAdmin()
     await db.update(enrollments).set({ status: "active", updatedAt: new Date() }).where(eq(enrollments.id, id))
     revalidatePath("/admin")
+    revalidatePath("/coach/portal")
     return { ok: true }
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Failed to reactivate" }
@@ -385,6 +387,7 @@ export async function permanentlyDeleteSignup(id: number): Promise<{ ok: boolean
     }
     await db.delete(enrollments).where(eq(enrollments.id, id))
     revalidatePath("/admin")
+    revalidatePath("/coach/portal")
     return { ok: true }
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Delete failed" }

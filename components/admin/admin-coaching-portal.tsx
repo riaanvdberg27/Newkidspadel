@@ -37,6 +37,13 @@ import {
 
 const WEEKDAY_FULL = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
 
+// Inactive enrollments must never surface in the coaching portal — this is a
+// defensive safety net on top of the server-side status filter, so a stale
+// prop or cached payload can never leave a deactivated signup visible here.
+function onlyVisible(enrollments: CoachingEnrollment[]): CoachingEnrollment[] {
+  return enrollments.filter((e) => e.status === "active" || e.status === "pending")
+}
+
 function formatHour(h: number): string {
   const hh = Math.floor(h)
   const mm = Math.round((h - hh) * 60)
@@ -652,7 +659,7 @@ export function AdminCoachingPortal({
   const [filterVenue, setFilterVenue] = useState<string | null>(null)
   const [view, setView] = useState<"calendar" | "corrections" | "conflicts">("calendar")
 
-  const [enrollments, setEnrollments] = useState<CoachingEnrollment[]>(initialEnrollments)
+  const [enrollments, setEnrollments] = useState<CoachingEnrollment[]>(onlyVisible(initialEnrollments))
   const [attendance, setAttendance] = useState<AttendanceRecord[]>(initialAttendance)
   const [history, setHistory] = useState<AttendanceRecord[]>(initialHistory)
   const [loading, startLoading] = useTransition()
@@ -669,7 +676,7 @@ export function AdminCoachingPortal({
         getCoachAttendance(coachId, 0),
         getCoachAttendanceHistory(coachId),
       ])
-      setEnrollments(enrs)
+      setEnrollments(onlyVisible(enrs))
       setAttendance(att)
       setHistory(hist)
     })
