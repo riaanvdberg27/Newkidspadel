@@ -179,7 +179,7 @@ export function OnboardingWizard({
     )
   }
 
-  // ── Package not yet selected ─────────────────────────────────────────────
+  // ─��� Package not yet selected ─────────────────────────────────────────────
   if (!selectedPackage) {
     return (
       <PackagePicker
@@ -1014,15 +1014,22 @@ export function OnboardingWizard({
                 onClick={async () => {
                   setVoucherValidating(true)
                   setVoucherError(null)
-                  const result = await validateVoucherCode(
-                    voucherInput,
-                    isOnceOff ? "once-off" : "monthly",
-                  )
-                  setVoucherValidating(false)
-                  if (result.valid) {
-                    setAppliedVoucher(result.voucher)
-                  } else {
-                    setVoucherError(result.error)
+                  try {
+                    const result = await validateVoucherCode(
+                      voucherInput,
+                      isOnceOff ? "once-off" : "monthly",
+                    )
+                    if (result.valid) {
+                      setAppliedVoucher(result.voucher)
+                    } else {
+                      setVoucherError(result.error)
+                    }
+                  } catch {
+                    // Guard against any unexpected network/server error so the
+                    // button never gets stuck on "Checking..." indefinitely.
+                    setVoucherError("Could not check that code right now. Please try again.")
+                  } finally {
+                    setVoucherValidating(false)
                   }
                 }}
                 className="rounded-md bg-navy px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
