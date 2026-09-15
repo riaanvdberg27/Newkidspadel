@@ -2,17 +2,15 @@
 
 import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
-import { Pencil, Plus, CalendarClock, X, PowerOff, RotateCcw } from "lucide-react"
+import { Pencil, Plus, X, PowerOff, RotateCcw } from "lucide-react"
 import type { Club } from "@/lib/db/schema"
 import { createClub, updateClub, deactivateClub, reactivateClub, type ClubInput } from "@/app/actions/admin"
 import { ClubForm } from "@/components/admin/club-form"
-import { SlotEditor } from "@/components/admin/slot-editor"
 
 export function AdminClubManager({ initialClubs }: { initialClubs: Club[] }) {
   const router = useRouter()
   const [editing, setEditing] = useState<Club | null>(null)
   const [creating, setCreating] = useState(false)
-  const [slotClub, setSlotClub] = useState<Club | null>(null)
   const [pending, startTransition] = useTransition()
   const [filter, setFilter] = useState<"active" | "inactive" | "all">("active")
   const [confirmDeactivate, setConfirmDeactivate] = useState<{ id: number; name: string } | null>(null)
@@ -68,6 +66,14 @@ export function AdminClubManager({ initialClubs }: { initialClubs: Club[] }) {
         </button>
       </div>
 
+      <p className="mt-2 text-sm text-muted-foreground">
+        Time slots are managed per package, not per club.{" "}
+        <a href="/admin?tab=packages" className="font-semibold text-lime underline underline-offset-2">
+          Go to Packages
+        </a>{" "}
+        to edit the days, times, and capacity a family can book at each club.
+      </p>
+
       {/* Filter tabs */}
       <div className="mt-4 flex gap-1 rounded-lg border border-border bg-muted/40 p-1 w-fit">
         {(["active", "inactive", "all"] as const).map((f) => {
@@ -101,13 +107,6 @@ export function AdminClubManager({ initialClubs }: { initialClubs: Club[] }) {
                 <p className="mt-1 text-sm text-muted-foreground">{club.address}</p>
               </div>
               <div className="flex flex-wrap gap-2">
-                <button
-                  onClick={() => setSlotClub(club)}
-                  className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm font-semibold text-navy transition-colors hover:bg-muted"
-                >
-                  <CalendarClock className="h-4 w-4 text-lime" />
-                  Slots
-                </button>
                 <button
                   onClick={() => {
                     setEditing(club)
@@ -217,12 +216,6 @@ export function AdminClubManager({ initialClubs }: { initialClubs: Club[] }) {
         </Modal>
       )}
 
-      {/* Slot editor modal */}
-      {slotClub && (
-        <Modal title={`Slots — ${slotClub.name}`} onClose={() => setSlotClub(null)} wide>
-          <SlotEditor clubId={slotClub.id} />
-        </Modal>
-      )}
     </div>
   )
 }
