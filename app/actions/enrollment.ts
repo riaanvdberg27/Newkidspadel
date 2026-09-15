@@ -2,7 +2,7 @@
 
 import { auth } from "@/lib/auth"
 import { db } from "@/lib/db"
-import { enrollments, user, coachClubs, coaches } from "@/lib/db/schema"
+import { enrollments, user, coachClubs, coachSchools, coaches } from "@/lib/db/schema"
 import { and, asc, desc, eq, inArray } from "drizzle-orm"
 import { headers } from "next/headers"
 import { revalidatePath } from "next/cache"
@@ -95,6 +95,27 @@ async function lookupClubCoach(clubId: number | null | undefined): Promise<{ coa
   }
 }
 
+/**
+ * Look up the first coach assigned to a school (by coachId ascending).
+ * Used to auto-assign a coach when one is not explicitly selected during a
+ * school-package enrollment.
+ */
+async function lookupSchoolCoach(schoolId: number | null | undefined): Promise<{ coachId: number; coachName: string } | null> {
+  if (!schoolId) return null
+  try {
+    const rows = await db
+      .select({ coachId: coachSchools.coachId, coachName: coaches.name })
+      .from(coachSchools)
+      .innerJoin(coaches, eq(coaches.id, coachSchools.coachId))
+      .where(eq(coachSchools.schoolId, schoolId))
+      .orderBy(asc(coachSchools.coachId))
+      .limit(1)
+    return rows[0] ?? null
+  } catch {
+    return null
+  }
+}
+
 export async function createEnrollment(input: EnrollmentInput) {
   const userId = await getUserId()
   const referenceNumber = generateReference()
@@ -102,11 +123,18 @@ export async function createEnrollment(input: EnrollmentInput) {
 
   const isOnceOff = input.paymentType === "once-off"
 
-  // Auto-assign a coach from the club's assigned coaches if one wasn't selected
+  // Auto-assign a coach from the club's (or school's) assigned coaches if one wasn't selected
   let resolvedCoachId = input.coachId ?? null
   let resolvedCoachName = input.coachName ?? null
   if (!resolvedCoachId && input.clubId) {
     const autoCoach = await lookupClubCoach(input.clubId)
+    if (autoCoach) {
+      resolvedCoachId = autoCoach.coachId
+      resolvedCoachName = autoCoach.coachName
+    }
+  }
+  if (!resolvedCoachId && input.schoolId) {
+    const autoCoach = await lookupSchoolCoach(input.schoolId)
     if (autoCoach) {
       resolvedCoachId = autoCoach.coachId
       resolvedCoachName = autoCoach.coachName
@@ -479,11 +507,18 @@ export async function createCartEnrollments(input: {
       ? Math.floor((Date.now() - new Date(childDob).getTime()) / (1000 * 60 * 60 * 24 * 365.25))
       : 0
 
-    // Auto-assign coach from club (best-effort)
+    // Auto-assign coach from club or school (best-effort)
     let resolvedCoachId: number | null = null
     let resolvedCoachName: string | null = null
     if (item.clubId) {
       const autoCoach = await lookupClubCoach(item.clubId)
+      if (autoCoach) {
+        resolvedCoachId = autoCoach.coachId
+        resolvedCoachName = autoCoach.coachName
+      }
+    }
+    if (!resolvedCoachId && item.schoolId) {
+      const autoCoach = await lookupSchoolCoach(item.schoolId)
       if (autoCoach) {
         resolvedCoachId = autoCoach.coachId
         resolvedCoachName = autoCoach.coachName

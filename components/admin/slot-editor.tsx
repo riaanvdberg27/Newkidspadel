@@ -3,8 +3,9 @@
 import { useEffect, useState, useTransition } from "react"
 import { Loader2, Check } from "lucide-react"
 import { getClubSlots, setSlotCapacity } from "@/app/actions/admin"
+import { getSchoolSlots, setSchoolSlotCapacity } from "@/app/actions/schools"
 import { SLOT_HOURS, WEEKDAYS, formatHour } from "@/lib/slots"
-import { AGE_GROUPS, type AgeGroup, type ClubSlot } from "@/lib/db/schema"
+import { AGE_GROUPS, type AgeGroup, type ClubSlot, type SchoolSlot } from "@/lib/db/schema"
 
 // Mon–Sun order
 const WEEKDAY_ORDER = [1, 2, 3, 4, 5, 6, 0]
@@ -15,7 +16,9 @@ const AGE_GROUP_LABELS: Record<AgeGroup, string> = {
   "14-17": "Ages 14 – 17",
 }
 
-function AgeGroupGrid({ clubId, ageGroup }: { clubId: number; ageGroup: AgeGroup }) {
+type VenueRef = { kind: "club"; id: number } | { kind: "school"; id: number }
+
+function AgeGroupGrid({ venue, ageGroup }: { venue: VenueRef; ageGroup: AgeGroup }) {
   const [grid, setGrid] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(true)
   const [savedKey, setSavedKey] = useState<string | null>(null)
@@ -24,8 +27,10 @@ function AgeGroupGrid({ clubId, ageGroup }: { clubId: number; ageGroup: AgeGroup
   useEffect(() => {
     let active = true
     setLoading(true)
-    getClubSlots(clubId, ageGroup)
-      .then((slots: ClubSlot[]) => {
+    const load =
+      venue.kind === "club" ? getClubSlots(venue.id, ageGroup) : getSchoolSlots(venue.id, ageGroup)
+    load
+      .then((slots: ClubSlot[] | SchoolSlot[]) => {
         if (!active) return
         const next: Record<string, number> = {}
         for (const s of slots) {
@@ -36,14 +41,18 @@ function AgeGroupGrid({ clubId, ageGroup }: { clubId: number; ageGroup: AgeGroup
       })
       .finally(() => active && setLoading(false))
     return () => { active = false }
-  }, [clubId, ageGroup])
+  }, [venue.kind, venue.id, ageGroup])
 
   function updateCell(weekday: number, hour: number, value: number) {
     const key = `${weekday}-${hour}`
     const capacity = Math.max(0, Math.min(99, Math.floor(value || 0)))
     setGrid((g) => ({ ...g, [key]: capacity }))
     startTransition(async () => {
-      await setSlotCapacity({ clubId, weekday, hour, capacity, ageGroup })
+      if (venue.kind === "club") {
+        await setSlotCapacity({ clubId: venue.id, weekday, hour, capacity, ageGroup })
+      } else {
+        await setSchoolSlotCapacity({ schoolId: venue.id, weekday, hour, capacity, ageGroup })
+      }
       setSavedKey(key)
       setTimeout(() => setSavedKey((k) => (k === key ? null : k)), 1400)
     })
@@ -123,8 +132,12 @@ function AgeGroupGrid({ clubId, ageGroup }: { clubId: number; ageGroup: AgeGroup
   )
 }
 
-export function SlotEditor({ clubId }: { clubId: number }) {
+export function SlotEditor({ clubId, schoolId }: { clubId?: number; schoolId?: number }) {
   const [activeGroup, setActiveGroup] = useState<AgeGroup>("4-8")
+  const venue: VenueRef | null =
+    clubId != null ? { kind: "club", id: clubId } : schoolId != null ? { kind: "school", id: schoolId } : null
+
+  if (!venue) return null
 
   return (
     <div>
@@ -147,7 +160,7 @@ export function SlotEditor({ clubId }: { clubId: number }) {
       </div>
 
       <div className="mt-5">
-        <AgeGroupGrid key={`${clubId}-${activeGroup}`} clubId={clubId} ageGroup={activeGroup} />
+        <AgeGroupGrid key={`${venue.kind}-${venue.id}-${activeGroup}`} venue={venue} ageGroup={activeGroup} />
       </div>
     </div>
   )

@@ -143,7 +143,15 @@ type SessionSlot = {
   hour: number
   club: string
   clubId: number | null
+  schoolId: number | null
   enrollments: CoachingEnrollment[]
+}
+
+/** Display name for a session's venue — the club name, or the school name for school-package sessions. */
+function venueLabel(slot: { club: string; clubId: number | null; schoolId: number | null; enrollments: CoachingEnrollment[] }): string {
+  if (slot.clubId != null) return slot.club
+  const schoolName = slot.enrollments[0]?.schoolName
+  return schoolName || slot.club || "School program"
 }
 
 function SessionCard({
@@ -252,7 +260,10 @@ function SessionCard({
           <span className="text-white/30">|</span>
           <div className="flex items-center gap-1.5">
             <Building2 className="h-3.5 w-3.5 text-white/50" />
-            <span className="text-sm font-semibold text-white/80">{slot.club}</span>
+            <span className="text-sm font-semibold text-white/80">
+              {venueLabel(slot)}
+              {slot.clubId == null && <span className="ml-1.5 text-white/40">(School)</span>}
+            </span>
           </div>
         </div>
         <div className="flex items-center gap-3">
@@ -637,7 +648,8 @@ export function AdminCoachingPortal({
     initialCoaches[0]?.id ?? null
   )
   const [weekOffset, setWeekOffset] = useState(0)
-  const [filterClubId, setFilterClubId] = useState<number | null>(null)
+  // Venue filter — either "club-<id>" or "school-<id>", or null for "all venues"
+  const [filterVenue, setFilterVenue] = useState<string | null>(null)
   const [view, setView] = useState<"calendar" | "corrections" | "conflicts">("calendar")
 
   const [enrollments, setEnrollments] = useState<CoachingEnrollment[]>(initialEnrollments)
@@ -649,7 +661,7 @@ export function AdminCoachingPortal({
   function handleCoachChange(coachId: number) {
     if (coachId === selectedCoachId) return
     setSelectedCoachId(coachId)
-    setFilterClubId(null)
+    setFilterVenue(null)
     setWeekOffset(0)
     startLoading(async () => {
       const [enrs, att, hist] = await Promise.all([
@@ -714,18 +726,19 @@ export function AdminCoachingPortal({
       const daySlots: DaySlots = new Map()
 
       for (const enr of enrollments) {
-        if (!filterClubId || enr.clubId === filterClubId) {
+        const enrVenue = enr.clubId != null ? `club-${enr.clubId}` : enr.schoolId != null ? `school-${enr.schoolId}` : null
+        if (!filterVenue || enrVenue === filterVenue) {
           if (enr.slotWeekday === weekdayNum && enr.slotHour !== null) {
-            const key = `${enr.clubId ?? "null"}-${enr.slotHour}`
+            const key = `${enrVenue ?? "none"}-${enr.slotHour}`
             if (!daySlots.has(key)) {
-              daySlots.set(key, { weekday: weekdayNum, hour: enr.slotHour, club: enr.club, clubId: enr.clubId, enrollments: [] })
+              daySlots.set(key, { weekday: weekdayNum, hour: enr.slotHour, club: enr.club, clubId: enr.clubId, schoolId: enr.schoolId, enrollments: [] })
             }
             daySlots.get(key)!.enrollments.push(enr)
           }
           if (enr.slotWeekday2 === weekdayNum && enr.slotHour2 !== null) {
-            const key = `${enr.clubId ?? "null"}-${enr.slotHour2}`
+            const key = `${enrVenue ?? "none"}-${enr.slotHour2}`
             if (!daySlots.has(key)) {
-              daySlots.set(key, { weekday: weekdayNum, hour: enr.slotHour2, club: enr.club, clubId: enr.clubId, enrollments: [] })
+              daySlots.set(key, { weekday: weekdayNum, hour: enr.slotHour2, club: enr.club, clubId: enr.clubId, schoolId: enr.schoolId, enrollments: [] })
             }
             const slot2 = daySlots.get(key)!
             if (!slot2.enrollments.some((x) => x.enrollmentId === enr.enrollmentId)) {
@@ -737,15 +750,19 @@ export function AdminCoachingPortal({
       if (daySlots.size > 0) result.set(dateStr, daySlots)
     }
     return result
-  }, [enrollments, weekDays, filterClubId])
+  }, [enrollments, weekDays, filterVenue])
 
-  const coachClubs = useMemo(() => {
-    const seen = new Map<number, string>()
+  const coachVenues = useMemo(() => {
+    const seen = new Map<string, { label: string; kind: "club" | "school" }>()
     for (const enr of enrollments) {
-      if (enr.clubId != null && !seen.has(enr.clubId)) seen.set(enr.clubId, enr.club)
+      if (enr.clubId != null && !seen.has(`club-${enr.clubId}`)) {
+        seen.set(`club-${enr.clubId}`, { label: enr.club, kind: "club" })
+      } else if (enr.clubId == null && enr.schoolId != null && !seen.has(`school-${enr.schoolId}`)) {
+        seen.set(`school-${enr.schoolId}`, { label: enr.schoolName || enr.club || "School", kind: "school" })
+      }
     }
     return Array.from(seen.entries())
-      .map(([id, name]) => ({ id, name }))
+      .map(([id, v]) => ({ id, name: v.label, kind: v.kind }))
       .sort((a, b) => a.name.localeCompare(b.name))
   }, [enrollments])
 
@@ -979,31 +996,32 @@ export function AdminCoachingPortal({
                 This week
               </button>
             )}
-            {/* Club filter */}
-            {coachClubs.length > 1 && (
+            {/* Venue filter — clubs and schools */}
+            {coachVenues.length > 1 && (
               <div className="ml-auto flex flex-wrap items-center gap-1.5">
                 <span className="text-xs font-medium text-muted-foreground mr-1">Filter:</span>
                 <button
-                  onClick={() => setFilterClubId(null)}
+                  onClick={() => setFilterVenue(null)}
                   className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
-                    filterClubId === null
+                    filterVenue === null
                       ? "border-navy bg-navy text-white"
                       : "border-border text-muted-foreground hover:border-navy/60 hover:text-navy"
                   }`}
                 >
-                  All clubs
+                  All venues
                 </button>
-                {coachClubs.map((c) => (
+                {coachVenues.map((v) => (
                   <button
-                    key={c.id}
-                    onClick={() => setFilterClubId(c.id)}
+                    key={v.id}
+                    onClick={() => setFilterVenue(v.id)}
                     className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
-                      filterClubId === c.id
+                      filterVenue === v.id
                         ? "border-navy bg-navy text-white"
                         : "border-border text-muted-foreground hover:border-navy/60 hover:text-navy"
                     }`}
                   >
-                    {c.name}
+                    {v.name}
+                    {v.kind === "school" && <span className="ml-1 opacity-60">(School)</span>}
                   </button>
                 ))}
               </div>

@@ -31,6 +31,7 @@ type Tab = "clubs" | "schools" | "packages" | "signups" | "contact" | "coaches" 
 export function AdminTabs({
   clubs,
   schools,
+  schoolCoachAssignments,
   packages,
   signups,
   contacts,
@@ -54,6 +55,7 @@ export function AdminTabs({
 }: {
   clubs: Club[]
   schools: School[]
+  schoolCoachAssignments: Record<number, number[]>
   packages: PackageDTO[]
   signups: AdminSignup[]
   contacts: ContactPerson[]
@@ -113,7 +115,13 @@ export function AdminTabs({
 
       <div className="mt-8">
         {tab === "clubs" && <AdminClubManager initialClubs={clubs} />}
-        {tab === "schools" && <AdminSchoolsManager initialSchools={schools} />}
+        {tab === "schools" && (
+          <AdminSchoolsManager
+            initialSchools={schools}
+            coaches={coachOptions.map((c) => ({ id: c.id, name: c.name }))}
+            coachAssignments={schoolCoachAssignments}
+          />
+        )}
         {tab === "packages" && <AdminPackageManager initialPackages={packages} allClubs={clubs} allSchools={schools} />}
         {tab === "signups" && <AdminSignupsManager initialSignups={signups} allCoaches={coaches} allPackages={packages} allClubs={clubs} />}
         {tab === "coaches" && <AdminCoachesManager initialCoaches={coaches} allClubs={clubs} />}

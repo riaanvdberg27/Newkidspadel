@@ -146,6 +146,32 @@ export const clubSlots = pgTable(
   }),
 )
 
+// ---- School time slots (mirrors club_slots, keyed by schoolId) ----
+
+export const schoolSlots = pgTable(
+  "school_slots",
+  {
+    id: serial("id").primaryKey(),
+    schoolId: integer("schoolId")
+      .notNull()
+      .references(() => schools.id, { onDelete: "cascade" }),
+    // 0 = Sunday ... 6 = Saturday
+    weekday: integer("weekday").notNull(),
+    // Start hour as decimal: 8 = 08:00, 8.5 = 08:30, 13.5 = 13:30 etc.
+    hour: numeric("hour", { precision: 4, scale: 1 }).notNull(),
+    capacity: integer("capacity").notNull().default(0),
+    // Age group this slot is available for
+    ageGroup: text("ageGroup").notNull().default("4-8"),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+  },
+  (t) => ({
+    uniqueSlot: unique("school_slots_unique").on(t.schoolId, t.weekday, t.hour, t.ageGroup),
+  }),
+)
+
+export type SchoolSlot = typeof schoolSlots.$inferSelect
+
 export const enrollments = pgTable("enrollments", {
   id: serial("id").primaryKey(),
   userId: text("userId").notNull(),
@@ -310,6 +336,26 @@ export const coachClubs = pgTable(
 )
 
 export type CoachClub = typeof coachClubs.$inferSelect
+
+// ---- Coach ↔ School assignments ----
+
+export const coachSchools = pgTable(
+  "coach_schools",
+  {
+    id: serial("id").primaryKey(),
+    coachId: integer("coachId")
+      .notNull()
+      .references(() => coaches.id, { onDelete: "cascade" }),
+    schoolId: integer("schoolId")
+      .notNull()
+      .references(() => schools.id, { onDelete: "cascade" }),
+  },
+  (t) => ({
+    uniqueAssignment: unique("coach_schools_unique").on(t.coachId, t.schoolId),
+  }),
+)
+
+export type CoachSchool = typeof coachSchools.$inferSelect
 
 // ---- Package ↔ Club restrictions ----
 

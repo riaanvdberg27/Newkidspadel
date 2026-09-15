@@ -2,31 +2,27 @@
 
 import { useState, useTransition, useRef } from "react"
 import { useRouter } from "next/navigation"
-import { Plus, Pencil, X, Upload, Globe, Phone, Mail, MapPin, User, ExternalLink, PowerOff, RotateCcw } from "lucide-react"
+import { Plus, Pencil, X, Upload, Globe, Phone, Mail, MapPin, User, ExternalLink, PowerOff, RotateCcw, CalendarClock, Users } from "lucide-react"
 import type { School } from "@/lib/db/schema"
 import { createSchool, updateSchool, deactivateSchool, reactivateSchool, type SchoolInput } from "@/app/actions/schools"
+import { SlotEditor } from "@/components/admin/slot-editor"
 
-const EMPTY: SchoolInput = {
-  name: "",
-  location: "",
-  address: "",
-  phone: "",
-  email: "",
-  website: "",
-  description: "",
-  logoUrl: null,
-  contactPerson: "",
-  published: true,
-}
+export type CoachOption = { id: number; name: string }
+
+
 
 // ── School Form ────────────────────────────────────────────────────────────────
 function SchoolForm({
   school,
+  coaches,
+  assignedCoachIds,
   pending,
   onSubmit,
   onCancel,
 }: {
   school: School | null
+  coaches: CoachOption[]
+  assignedCoachIds: number[]
   pending: boolean
   onSubmit: (input: SchoolInput) => void
   onCancel: () => void
@@ -40,6 +36,11 @@ function SchoolForm({
   const [description, setDescription] = useState(school?.description ?? "")
   const [contactPerson, setContactPerson] = useState(school?.contactPerson ?? "")
   const [published, setPublished] = useState(school?.published ?? true)
+  const [coachIds, setCoachIds] = useState<number[]>(assignedCoachIds)
+
+  function toggleCoach(id: number) {
+    setCoachIds((prev) => (prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id]))
+  }
 
   // Logo
   const [logoUrl, setLogoUrl] = useState<string | null>(school?.logoUrl ?? null)
@@ -75,7 +76,7 @@ function SchoolForm({
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!valid) return
-    onSubmit({ name, location, address, phone, email, website, description, logoUrl, contactPerson, published })
+    onSubmit({ name, location, address, phone, email, website, description, logoUrl, contactPerson, published, coachIds })
   }
 
   return (
@@ -196,6 +197,39 @@ function SchoolForm({
         </div>
       </div>
 
+      {/* Assign coaches */}
+      <div>
+        <p className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-navy">
+          <Users className="h-4 w-4 text-lime" /> Assign Coaches
+        </p>
+        {coaches.length === 0 ? (
+          <p className="text-xs text-muted-foreground">No coaches available yet. Add coaches in the Coaches tab first.</p>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {coaches.map((c) => {
+              const active = coachIds.includes(c.id)
+              return (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => toggleCoach(c.id)}
+                  className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                    active
+                      ? "border-lime bg-lime/15 text-lime-800"
+                      : "border-border text-muted-foreground hover:bg-muted"
+                  }`}
+                >
+                  {c.name}
+                </button>
+              )
+            })}
+          </div>
+        )}
+        <p className="mt-1.5 text-xs text-muted-foreground">
+          Assigned coaches will see this school and its enrolled students in their coaching portal.
+        </p>
+      </div>
+
       {/* Published toggle */}
       <label className="flex cursor-pointer items-center gap-3">
         <input
@@ -224,11 +258,20 @@ function SchoolForm({
 }
 
 // ── Admin Schools Manager ──────────────────────────────────────────────────────
-export function AdminSchoolsManager({ initialSchools }: { initialSchools: School[] }) {
+export function AdminSchoolsManager({
+  initialSchools,
+  coaches = [],
+  coachAssignments = {},
+}: {
+  initialSchools: School[]
+  coaches?: CoachOption[]
+  coachAssignments?: Record<number, number[]>
+}) {
   const router = useRouter()
   const [schools, setSchools] = useState<School[]>(initialSchools)
   const [editing, setEditing] = useState<School | null>(null)
   const [creating, setCreating] = useState(false)
+  const [slotSchool, setSlotSchool] = useState<School | null>(null)
   const [pending, startTransition] = useTransition()
   const [filter, setFilter] = useState<"active" | "inactive" | "all">("active")
   const [confirmDeactivate, setConfirmDeactivate] = useState<{ id: number; name: string } | null>(null)
@@ -301,7 +344,14 @@ export function AdminSchoolsManager({ initialSchools }: { initialSchools: School
       {creating && (
         <div className="mt-6 rounded-card border border-lime/30 bg-lime/5 p-6">
           <h3 className="mb-4 text-base font-bold text-navy">New School</h3>
-          <SchoolForm school={null} pending={pending} onSubmit={(input) => handleSave(input)} onCancel={() => setCreating(false)} />
+          <SchoolForm
+            school={null}
+            coaches={coaches}
+            assignedCoachIds={[]}
+            pending={pending}
+            onSubmit={(input) => handleSave(input)}
+            onCancel={() => setCreating(false)}
+          />
         </div>
       )}
 
@@ -324,7 +374,14 @@ export function AdminSchoolsManager({ initialSchools }: { initialSchools: School
                       <X className="h-4 w-4" />
                     </button>
                   </div>
-                  <SchoolForm school={school} pending={pending} onSubmit={(input) => handleSave(input, school.id)} onCancel={() => setEditing(null)} />
+                  <SchoolForm
+                    school={school}
+                    coaches={coaches}
+                    assignedCoachIds={coachAssignments[school.id] ?? []}
+                    pending={pending}
+                    onSubmit={(input) => handleSave(input, school.id)}
+                    onCancel={() => setEditing(null)}
+                  />
                 </>
               ) : (
                 <>
@@ -378,6 +435,12 @@ export function AdminSchoolsManager({ initialSchools }: { initialSchools: School
 
                   {/* Actions */}
                   <div className="flex shrink-0 flex-wrap gap-2">
+                    <button
+                      onClick={() => setSlotSchool(school)}
+                      className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-semibold transition-colors hover:bg-muted"
+                    >
+                      <CalendarClock className="h-3.5 w-3.5 text-lime" /> Slots
+                    </button>
                     <button
                       onClick={() => { setEditing(school); setCreating(false) }}
                       className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-semibold transition-colors hover:bg-muted"
@@ -457,6 +520,42 @@ export function AdminSchoolsManager({ initialSchools }: { initialSchools: School
             </article>
           )
         })}
+      </div>
+
+      {/* Slot editor modal */}
+      {slotSchool && (
+        <Modal title={`Slots — ${slotSchool.name}`} onClose={() => setSlotSchool(null)} wide>
+          <SlotEditor schoolId={slotSchool.id} />
+        </Modal>
+      )}
+    </div>
+  )
+}
+
+function Modal({
+  title,
+  children,
+  onClose,
+  wide,
+}: {
+  title: string
+  children: React.ReactNode
+  onClose: () => void
+  wide?: boolean
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy/60 p-4" onClick={onClose}>
+      <div
+        className={`max-h-[90vh] w-full overflow-y-auto rounded-card bg-card p-6 shadow-xl ${wide ? "max-w-3xl" : "max-w-lg"}`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="text-lg font-bold text-navy">{title}</h3>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        {children}
       </div>
     </div>
   )
