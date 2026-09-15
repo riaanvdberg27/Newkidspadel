@@ -60,6 +60,12 @@ function initials(name: string): string {
   return name.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2)
 }
 
+/** Display name for a session's venue — the club name, or the school name for school-package sessions. */
+function venueLabel(clubId: number | null, club: string, enrollments: CoachingEnrollment[]): string {
+  if (clubId != null) return club
+  return enrollments[0]?.schoolName || club || "School program"
+}
+
 // ---------------------------------------------------------------------------
 // Status badge
 // ---------------------------------------------------------------------------
@@ -87,7 +93,7 @@ function StatusBadge({ status }: { status: string }) {
 // ---------------------------------------------------------------------------
 
 function SessionCard({
-  date, weekday, hour, club, enrollments, attendanceMap,
+  date, weekday, hour, club, clubId, enrollments, attendanceMap,
   onMark, onCorrect,
 }: {
   date: Date
@@ -100,6 +106,7 @@ function SessionCard({
   onMark: (enrollmentId: number, dateStr: string, status: "present" | "absent" | "excused") => void
   onCorrect: (record: AttendanceRecord, status: "present" | "absent" | "excused", note?: string) => void
 }) {
+  const venue = venueLabel(clubId, club, enrollments)
   const dateStr = toDateStr(date)
   const [correcting, setCorrecting] = useState<number | null>(null)
   const [correctStatus, setCorrectStatus] = useState<"present" | "absent" | "excused">("present")
@@ -132,7 +139,10 @@ function SessionCard({
           <span className="text-xs font-bold text-white">{formatHour(hour)}</span>
           <span className="text-white/40">·</span>
           <Building2 className="h-3.5 w-3.5 text-white/60" />
-          <span className="text-xs font-semibold text-white/80 truncate max-w-[140px]">{club}</span>
+          <span className="text-xs font-semibold text-white/80 truncate max-w-[140px]">
+            {venue}
+            {clubId == null && <span className="ml-1 text-white/40">(School)</span>}
+          </span>
         </div>
         <div className="flex items-center gap-2">
           <span className="text-xs text-white/50">{markedCount}/{enrollments.length}</span>
@@ -274,7 +284,8 @@ export function CoachPortalView({
   initialHistory: AttendanceRecord[]
 }) {
   const [weekOffset, setWeekOffset] = useState(0)
-  const [filterClubId, setFilterClubId] = useState<number | null>(null)
+  // Venue filter — either "club-<id>" or "school-<id>", or null for "all venues"
+  const [filterVenue, setFilterVenue] = useState<string | null>(null)
   const [view, setView] = useState<"calendar" | "corrections">("calendar")
   const [enrollments, setEnrollments] = useState(initialEnrollments)
   const [attendance, setAttendance] = useState(initialAttendance)
@@ -283,13 +294,19 @@ export function CoachPortalView({
   const [loggingOut, startLogout] = useTransition()
   const [actionError, setActionError] = useState<string | null>(null)
 
-  // Unique clubs
-  const clubs = useMemo(() => {
-    const seen = new Map<number, string>()
+  // Unique venues — clubs and schools
+  const venues = useMemo(() => {
+    const seen = new Map<string, { label: string; kind: "club" | "school" }>()
     for (const e of enrollments) {
-      if (e.clubId != null && !seen.has(e.clubId)) seen.set(e.clubId, e.club)
+      if (e.clubId != null && !seen.has(`club-${e.clubId}`)) {
+        seen.set(`club-${e.clubId}`, { label: e.club, kind: "club" })
+      } else if (e.clubId == null && e.schoolId != null && !seen.has(`school-${e.schoolId}`)) {
+        seen.set(`school-${e.schoolId}`, { label: e.schoolName || e.club || "School", kind: "school" })
+      }
     }
-    return Array.from(seen.entries()).map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name))
+    return Array.from(seen.entries())
+      .map(([id, v]) => ({ id, name: v.label, kind: v.kind }))
+      .sort((a, b) => a.name.localeCompare(b.name))
   }, [enrollments])
 
   // Attendance lookup
@@ -305,17 +322,22 @@ export function CoachPortalView({
 
   // Build session slots per day
   const sessionSlots = useMemo(() => {
-    const active = enrollments.filter(
-      (e) => e.status === "active" || e.status === "pending"
-    ).filter((e) => filterClubId == null || e.clubId === filterClubId)
+    const active = enrollments
+      .filter((e) => e.status === "active" || e.status === "pending")
+      .filter((e) => {
+        if (filterVenue == null) return true
+        const venue = e.clubId != null ? `club-${e.clubId}` : e.schoolId != null ? `school-${e.schoolId}` : null
+        return venue === filterVenue
+      })
 
     type Slot = { hour: number; club: string; clubId: number | null; enrollments: CoachingEnrollment[] }
     const daySlots = weekDays.map((d) => {
       const wd = d.getDay() // 0=Sun,1=Mon...
       const slotMap = new Map<string, Slot>()
       for (const e of active) {
+        const venueKey = e.clubId ?? (e.schoolId != null ? `school-${e.schoolId}` : e.club)
         if (e.slotWeekday === wd && e.slotHour != null) {
-          const k = `${e.slotHour}:${e.clubId ?? e.club}`
+          const k = `${e.slotHour}:${venueKey}`
           if (!slotMap.has(k)) slotMap.set(k, { hour: e.slotHour, club: e.club, clubId: e.clubId, enrollments: [] })
           const slot = slotMap.get(k)!
           if (!slot.enrollments.some((x) => x.enrollmentId === e.enrollmentId)) {
@@ -323,7 +345,7 @@ export function CoachPortalView({
           }
         }
         if (e.slotWeekday2 === wd && e.slotHour2 != null) {
-          const k = `${e.slotHour2}:${e.clubId ?? e.club}`
+          const k = `${e.slotHour2}:${venueKey}`
           if (!slotMap.has(k)) slotMap.set(k, { hour: e.slotHour2, club: e.club, clubId: e.clubId, enrollments: [] })
           const slot = slotMap.get(k)!
           // Only add if this student isn't already in this slot (via slot 1)
@@ -335,7 +357,7 @@ export function CoachPortalView({
       return { date: d, slots: Array.from(slotMap.values()).sort((a, b) => a.hour - b.hour) }
     })
     return daySlots
-  }, [enrollments, weekDays, filterClubId])
+  }, [enrollments, weekDays, filterVenue])
 
   // Stats
   const totalStudents = useMemo(() => new Set(enrollments.filter(e => e.status === "active" || e.status === "pending").map(e => e.enrollmentId)).size, [enrollments])
@@ -500,18 +522,19 @@ export function CoachPortalView({
               )}
               <div className="flex flex-wrap gap-1.5 ml-auto">
                 <button
-                  onClick={() => setFilterClubId(null)}
-                  className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${filterClubId == null ? "bg-navy text-white" : "bg-muted text-muted-foreground hover:text-navy"}`}
+                  onClick={() => setFilterVenue(null)}
+                  className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${filterVenue == null ? "bg-navy text-white" : "bg-muted text-muted-foreground hover:text-navy"}`}
                 >
-                  All clubs
+                  All venues
                 </button>
-                {clubs.map((c) => (
+                {venues.map((v) => (
                   <button
-                    key={c.id}
-                    onClick={() => setFilterClubId(filterClubId === c.id ? null : c.id)}
-                    className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${filterClubId === c.id ? "bg-navy text-white" : "bg-muted text-muted-foreground hover:text-navy"}`}
+                    key={v.id}
+                    onClick={() => setFilterVenue(filterVenue === v.id ? null : v.id)}
+                    className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${filterVenue === v.id ? "bg-navy text-white" : "bg-muted text-muted-foreground hover:text-navy"}`}
                   >
-                    {c.name}
+                    {v.name}
+                    {v.kind === "school" && <span className="ml-1 opacity-60">(School)</span>}
                   </button>
                 ))}
               </div>
@@ -558,7 +581,7 @@ export function CoachPortalView({
                   <Calendar className="mx-auto h-10 w-10 text-muted-foreground/30" />
                   <p className="mt-3 text-sm font-semibold text-muted-foreground">No sessions this week</p>
                   <p className="mt-1 text-xs text-muted-foreground/60">
-                    {filterClubId != null ? "Try switching to 'All clubs'" : "No enrollments with slots assigned for this week."}
+                    {filterVenue != null ? "Try switching to 'All venues'" : "No enrollments with slots assigned for this week."}
                   </p>
                 </div>
               )}

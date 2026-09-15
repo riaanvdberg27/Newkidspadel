@@ -77,7 +77,7 @@ const organizationSchema = {
   "@type": ["Organization", "SportsOrganization"],
   name: "NextGen Padel Academy",
   url: SITE_URL,
-  logo: `${SITE_URL}/images/mk-padel-logo.png`,
+  logo: `${SITE_URL}/images/nextgen-padel-logo.png`,
   description:
     "NextGen Padel Academy provides structured padel coaching for children aged 4–17 in Pretoria — Brooklyn, Menlo Park, Moreleta Park, Garsfontein, Waterkloof, Menlyn, Lynnwood, Faerie Glen and Silver Lakes.",
   address: {

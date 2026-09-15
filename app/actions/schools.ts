@@ -1,11 +1,13 @@
 "use server"
 
 import { db } from "@/lib/db"
-import { schools } from "@/lib/db/schema"
-import { asc, eq } from "drizzle-orm"
+import { schools, coachSchools, coaches, schoolSlots } from "@/lib/db/schema"
+import { asc, eq, and, inArray } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { requireAdmin } from "@/lib/admin-auth"
-import type { School } from "@/lib/db/schema"
+import type { School, SchoolSlot, AgeGroup } from "@/lib/db/schema"
+import { AGE_GROUPS } from "@/lib/db/schema"
+import { SLOT_HOURS } from "@/lib/slots"
 
 export type SchoolInput = {
   name: string
@@ -18,6 +20,7 @@ export type SchoolInput = {
   logoUrl?: string | null
   contactPerson: string
   published: boolean
+  coachIds: number[]
 }
 
 /** All published schools for the public site. */
@@ -34,6 +37,40 @@ export async function getAllSchoolsAdmin(): Promise<School[]> {
 export async function getSchoolById(id: number): Promise<School | null> {
   const rows = await db.select().from(schools).where(eq(schools.id, id)).limit(1)
   return rows[0] ?? null
+}
+
+/** Coach IDs assigned to each school (admin only) — keyed by schoolId. */
+export async function getSchoolCoachAssignments(): Promise<Record<number, number[]>> {
+  await requireAdmin()
+  const rows = await db.select().from(coachSchools)
+  const map: Record<number, number[]> = {}
+  for (const r of rows) {
+    if (!map[r.schoolId]) map[r.schoolId] = []
+    map[r.schoolId].push(r.coachId)
+  }
+  return map
+}
+
+/** Coaches assigned to a specific school — used by the enrollment/coaching portal to attribute students. */
+export async function getCoachesBySchool(schoolId: number) {
+  const assignments = await db
+    .select({ coachId: coachSchools.coachId })
+    .from(coachSchools)
+    .where(eq(coachSchools.schoolId, schoolId))
+  if (assignments.length === 0) return []
+  const coachIds = assignments.map((a) => a.coachId)
+  return db
+    .select({ id: coaches.id, name: coaches.name })
+    .from(coaches)
+    .where(inArray(coaches.id, coachIds))
+    .orderBy(asc(coaches.sortOrder), asc(coaches.id))
+}
+
+async function syncSchoolCoaches(schoolId: number, coachIds: number[]) {
+  await db.delete(coachSchools).where(eq(coachSchools.schoolId, schoolId))
+  if (coachIds.length > 0) {
+    await db.insert(coachSchools).values(coachIds.map((coachId) => ({ coachId, schoolId })))
+  }
 }
 
 /** Create a new school (admin only). */
@@ -54,6 +91,7 @@ export async function createSchool(input: SchoolInput): Promise<School> {
       published: input.published,
     })
     .returning()
+  await syncSchoolCoaches(row.id, input.coachIds ?? [])
   revalidatePath("/schools")
   revalidatePath("/admin")
   return row
@@ -79,9 +117,71 @@ export async function updateSchool(id: number, input: SchoolInput): Promise<Scho
     })
     .where(eq(schools.id, id))
     .returning()
+  await syncSchoolCoaches(id, input.coachIds ?? [])
   revalidatePath("/schools")
   revalidatePath("/admin")
   return row
+}
+
+/** Full slot grid (weekday x hour) for a school filtered by age group, including hours with 0 capacity. */
+export async function getSchoolSlots(schoolId: number, ageGroup: AgeGroup): Promise<SchoolSlot[]> {
+  await requireAdmin()
+  return db
+    .select()
+    .from(schoolSlots)
+    .where(and(eq(schoolSlots.schoolId, schoolId), eq(schoolSlots.ageGroup, ageGroup)))
+    .orderBy(asc(schoolSlots.weekday), asc(schoolSlots.hour))
+}
+
+/** Upsert a single school slot's capacity per age group. Capacity 0 removes the slot. */
+export async function setSchoolSlotCapacity(input: {
+  schoolId: number
+  weekday: number
+  hour: number
+  capacity: number
+  ageGroup: AgeGroup
+}) {
+  await requireAdmin()
+  const capacity = Math.max(0, Math.floor(input.capacity))
+  const hour = Math.round(input.hour * 2) / 2
+
+  if (!(SLOT_HOURS as readonly number[]).includes(hour)) {
+    throw new Error("Invalid hour")
+  }
+  if (!AGE_GROUPS.includes(input.ageGroup as AgeGroup)) {
+    throw new Error("Invalid age group")
+  }
+
+  const existing = await db
+    .select()
+    .from(schoolSlots)
+    .where(
+      and(
+        eq(schoolSlots.schoolId, input.schoolId),
+        eq(schoolSlots.weekday, input.weekday),
+        eq(schoolSlots.hour, String(hour)),
+        eq(schoolSlots.ageGroup, input.ageGroup),
+      ),
+    )
+    .limit(1)
+
+  if (existing.length > 0) {
+    await db
+      .update(schoolSlots)
+      .set({ capacity, updatedAt: new Date() })
+      .where(eq(schoolSlots.id, existing[0].id))
+  } else if (capacity > 0) {
+    await db.insert(schoolSlots).values({
+      schoolId: input.schoolId,
+      weekday: input.weekday,
+      hour: String(hour),
+      capacity,
+      ageGroup: input.ageGroup,
+    })
+  }
+  revalidatePath("/admin")
+  revalidatePath("/enrollment")
+  return { success: true }
 }
 
 /**

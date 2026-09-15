@@ -37,6 +37,13 @@ import {
 
 const WEEKDAY_FULL = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
 
+// Inactive enrollments must never surface in the coaching portal — this is a
+// defensive safety net on top of the server-side status filter, so a stale
+// prop or cached payload can never leave a deactivated signup visible here.
+function onlyVisible(enrollments: CoachingEnrollment[]): CoachingEnrollment[] {
+  return enrollments.filter((e) => e.status === "active" || e.status === "pending")
+}
+
 function formatHour(h: number): string {
   const hh = Math.floor(h)
   const mm = Math.round((h - hh) * 60)
@@ -143,7 +150,15 @@ type SessionSlot = {
   hour: number
   club: string
   clubId: number | null
+  schoolId: number | null
   enrollments: CoachingEnrollment[]
+}
+
+/** Display name for a session's venue — the club name, or the school name for school-package sessions. */
+function venueLabel(slot: { club: string; clubId: number | null; schoolId: number | null; enrollments: CoachingEnrollment[] }): string {
+  if (slot.clubId != null) return slot.club
+  const schoolName = slot.enrollments[0]?.schoolName
+  return schoolName || slot.club || "School program"
 }
 
 function SessionCard({
@@ -152,12 +167,14 @@ function SessionCard({
   coachId,
   attendance,
   onAttendanceChange,
+  onError,
 }: {
   slot: SessionSlot
   date: Date
   coachId: number
   attendance: AttendanceRecord[]
   onAttendanceChange: (record: AttendanceRecord) => void
+  onError: (message: string) => void
 }) {
   const dateStr = toDateStr(date)
   const [pending, startTransition] = useTransition()
@@ -174,9 +191,15 @@ function SessionCard({
 
   function handleMark(enrollmentId: number, status: "present" | "absent" | "excused") {
     startTransition(async () => {
-      const res = await markAttendance({ coachId, enrollmentId, sessionDate: dateStr, status })
-      if (res.ok && res.id) {
-        onAttendanceChange({ id: res.id, enrollmentId, sessionDate: dateStr, status, note: null })
+      try {
+        const res = await markAttendance({ coachId, enrollmentId, sessionDate: dateStr, status })
+        if (res.ok && res.id) {
+          onAttendanceChange({ id: res.id, enrollmentId, sessionDate: dateStr, status, note: null })
+        } else {
+          onError(res.error ?? "Couldn't save attendance. Please try again.")
+        }
+      } catch (err) {
+        onError(err instanceof Error ? err.message : "Couldn't save attendance. Please try again.")
       }
     })
   }
@@ -189,14 +212,20 @@ function SessionCard({
 
   function handleCorrect(att: AttendanceRecord) {
     startTransition(async () => {
-      const res = await correctAttendance({
-        attendanceId: att.id,
-        status: correctionStatus,
-        note: correctionNote || undefined,
-      })
-      if (res.ok) {
-        onAttendanceChange({ ...att, status: correctionStatus, note: correctionNote || null })
-        setCorrectingId(null)
+      try {
+        const res = await correctAttendance({
+          attendanceId: att.id,
+          status: correctionStatus,
+          note: correctionNote || undefined,
+        })
+        if (res.ok) {
+          onAttendanceChange({ ...att, status: correctionStatus, note: correctionNote || null })
+          setCorrectingId(null)
+        } else {
+          onError(res.error ?? "Couldn't save the correction. Please try again.")
+        }
+      } catch (err) {
+        onError(err instanceof Error ? err.message : "Couldn't save the correction. Please try again.")
       }
     })
   }
@@ -206,9 +235,15 @@ function SessionCard({
     if (unmarked.length === 0) return
     startTransition(async () => {
       for (const enr of unmarked) {
-        const res = await markAttendance({ coachId, enrollmentId: enr.enrollmentId, sessionDate: dateStr, status })
-        if (res.ok && res.id) {
-          onAttendanceChange({ id: res.id, enrollmentId: enr.enrollmentId, sessionDate: dateStr, status, note: null })
+        try {
+          const res = await markAttendance({ coachId, enrollmentId: enr.enrollmentId, sessionDate: dateStr, status })
+          if (res.ok && res.id) {
+            onAttendanceChange({ id: res.id, enrollmentId: enr.enrollmentId, sessionDate: dateStr, status, note: null })
+          } else {
+            onError(res.error ?? "Couldn't save attendance for one or more students.")
+          }
+        } catch (err) {
+          onError(err instanceof Error ? err.message : "Couldn't save attendance for one or more students.")
         }
       }
     })
@@ -232,7 +267,10 @@ function SessionCard({
           <span className="text-white/30">|</span>
           <div className="flex items-center gap-1.5">
             <Building2 className="h-3.5 w-3.5 text-white/50" />
-            <span className="text-sm font-semibold text-white/80">{slot.club}</span>
+            <span className="text-sm font-semibold text-white/80">
+              {venueLabel(slot)}
+              {slot.clubId == null && <span className="ml-1.5 text-white/40">(School)</span>}
+            </span>
           </div>
         </div>
         <div className="flex items-center gap-3">
@@ -380,11 +418,13 @@ function CorrectionPanel({
   enrollments,
   history,
   onHistoryChange,
+  onError,
 }: {
   coachId: number
   enrollments: CoachingEnrollment[]
   history: AttendanceRecord[]
   onHistoryChange: (updated: AttendanceRecord[]) => void
+  onError: (message: string) => void
 }) {
   const [pending, startTransition] = useTransition()
   const [editing, setEditing] = useState<number | null>(null)
@@ -417,14 +457,20 @@ function CorrectionPanel({
 
   function handleSave(recordId: number) {
     startTransition(async () => {
-      const res = await correctAttendance({ attendanceId: recordId, status: newStatus, note: newNote || undefined })
-      if (res.ok) {
-        onHistoryChange(
-          history.map((r) =>
-            r.id === recordId ? { ...r, status: newStatus, note: newNote || null } : r
+      try {
+        const res = await correctAttendance({ attendanceId: recordId, status: newStatus, note: newNote || undefined })
+        if (res.ok) {
+          onHistoryChange(
+            history.map((r) =>
+              r.id === recordId ? { ...r, status: newStatus, note: newNote || null } : r
+            )
           )
-        )
-        setEditing(null)
+          setEditing(null)
+        } else {
+          onError(res.error ?? "Couldn't save the correction. Please try again.")
+        }
+      } catch (err) {
+        onError(err instanceof Error ? err.message : "Couldn't save the correction. Please try again.")
       }
     })
   }
@@ -432,10 +478,16 @@ function CorrectionPanel({
   function handleDelete(recordId: number) {
     if (!confirm("Remove this attendance record entirely?")) return
     startTransition(async () => {
-      const res = await deleteAttendance(recordId)
-      if (res.ok) {
-        onHistoryChange(history.filter((r) => r.id !== recordId))
-        setEditing(null)
+      try {
+        const res = await deleteAttendance(recordId)
+        if (res.ok) {
+          onHistoryChange(history.filter((r) => r.id !== recordId))
+          setEditing(null)
+        } else {
+          onError(res.error ?? "Couldn't delete the record. Please try again.")
+        }
+      } catch (err) {
+        onError(err instanceof Error ? err.message : "Couldn't delete the record. Please try again.")
       }
     })
   }
@@ -603,18 +655,20 @@ export function AdminCoachingPortal({
     initialCoaches[0]?.id ?? null
   )
   const [weekOffset, setWeekOffset] = useState(0)
-  const [filterClubId, setFilterClubId] = useState<number | null>(null)
+  // Venue filter — either "club-<id>" or "school-<id>", or null for "all venues"
+  const [filterVenue, setFilterVenue] = useState<string | null>(null)
   const [view, setView] = useState<"calendar" | "corrections" | "conflicts">("calendar")
 
-  const [enrollments, setEnrollments] = useState<CoachingEnrollment[]>(initialEnrollments)
+  const [enrollments, setEnrollments] = useState<CoachingEnrollment[]>(onlyVisible(initialEnrollments))
   const [attendance, setAttendance] = useState<AttendanceRecord[]>(initialAttendance)
   const [history, setHistory] = useState<AttendanceRecord[]>(initialHistory)
   const [loading, startLoading] = useTransition()
+  const [actionError, setActionError] = useState<string | null>(null)
 
   function handleCoachChange(coachId: number) {
     if (coachId === selectedCoachId) return
     setSelectedCoachId(coachId)
-    setFilterClubId(null)
+    setFilterVenue(null)
     setWeekOffset(0)
     startLoading(async () => {
       const [enrs, att, hist] = await Promise.all([
@@ -622,7 +676,7 @@ export function AdminCoachingPortal({
         getCoachAttendance(coachId, 0),
         getCoachAttendanceHistory(coachId),
       ])
-      setEnrollments(enrs)
+      setEnrollments(onlyVisible(enrs))
       setAttendance(att)
       setHistory(hist)
     })
@@ -679,18 +733,19 @@ export function AdminCoachingPortal({
       const daySlots: DaySlots = new Map()
 
       for (const enr of enrollments) {
-        if (!filterClubId || enr.clubId === filterClubId) {
+        const enrVenue = enr.clubId != null ? `club-${enr.clubId}` : enr.schoolId != null ? `school-${enr.schoolId}` : null
+        if (!filterVenue || enrVenue === filterVenue) {
           if (enr.slotWeekday === weekdayNum && enr.slotHour !== null) {
-            const key = `${enr.clubId ?? "null"}-${enr.slotHour}`
+            const key = `${enrVenue ?? "none"}-${enr.slotHour}`
             if (!daySlots.has(key)) {
-              daySlots.set(key, { weekday: weekdayNum, hour: enr.slotHour, club: enr.club, clubId: enr.clubId, enrollments: [] })
+              daySlots.set(key, { weekday: weekdayNum, hour: enr.slotHour, club: enr.club, clubId: enr.clubId, schoolId: enr.schoolId, enrollments: [] })
             }
             daySlots.get(key)!.enrollments.push(enr)
           }
           if (enr.slotWeekday2 === weekdayNum && enr.slotHour2 !== null) {
-            const key = `${enr.clubId ?? "null"}-${enr.slotHour2}`
+            const key = `${enrVenue ?? "none"}-${enr.slotHour2}`
             if (!daySlots.has(key)) {
-              daySlots.set(key, { weekday: weekdayNum, hour: enr.slotHour2, club: enr.club, clubId: enr.clubId, enrollments: [] })
+              daySlots.set(key, { weekday: weekdayNum, hour: enr.slotHour2, club: enr.club, clubId: enr.clubId, schoolId: enr.schoolId, enrollments: [] })
             }
             const slot2 = daySlots.get(key)!
             if (!slot2.enrollments.some((x) => x.enrollmentId === enr.enrollmentId)) {
@@ -702,15 +757,19 @@ export function AdminCoachingPortal({
       if (daySlots.size > 0) result.set(dateStr, daySlots)
     }
     return result
-  }, [enrollments, weekDays, filterClubId])
+  }, [enrollments, weekDays, filterVenue])
 
-  const coachClubs = useMemo(() => {
-    const seen = new Map<number, string>()
+  const coachVenues = useMemo(() => {
+    const seen = new Map<string, { label: string; kind: "club" | "school" }>()
     for (const enr of enrollments) {
-      if (enr.clubId != null && !seen.has(enr.clubId)) seen.set(enr.clubId, enr.club)
+      if (enr.clubId != null && !seen.has(`club-${enr.clubId}`)) {
+        seen.set(`club-${enr.clubId}`, { label: enr.club, kind: "club" })
+      } else if (enr.clubId == null && enr.schoolId != null && !seen.has(`school-${enr.schoolId}`)) {
+        seen.set(`school-${enr.schoolId}`, { label: enr.schoolName || enr.club || "School", kind: "school" })
+      }
     }
     return Array.from(seen.entries())
-      .map(([id, name]) => ({ id, name }))
+      .map(([id, v]) => ({ id, name: v.label, kind: v.kind }))
       .sort((a, b) => a.name.localeCompare(b.name))
   }, [enrollments])
 
@@ -765,6 +824,21 @@ export function AdminCoachingPortal({
           </button>
         </div>
       </div>
+
+      {actionError && (
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 shrink-0 text-red-600" />
+            <p className="text-sm font-medium text-red-700">{actionError}</p>
+          </div>
+          <button
+            onClick={() => setActionError(null)}
+            className="shrink-0 text-xs font-semibold text-red-600 hover:text-red-800"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {/* Coach selector cards */}
       <div>
@@ -858,6 +932,7 @@ export function AdminCoachingPortal({
           enrollments={enrollments}
           history={history}
           onHistoryChange={setHistory}
+          onError={setActionError}
         />
       ) : view === "conflicts" ? (
         <ConflictPanel
@@ -928,31 +1003,32 @@ export function AdminCoachingPortal({
                 This week
               </button>
             )}
-            {/* Club filter */}
-            {coachClubs.length > 1 && (
+            {/* Venue filter — clubs and schools */}
+            {coachVenues.length > 1 && (
               <div className="ml-auto flex flex-wrap items-center gap-1.5">
                 <span className="text-xs font-medium text-muted-foreground mr-1">Filter:</span>
                 <button
-                  onClick={() => setFilterClubId(null)}
+                  onClick={() => setFilterVenue(null)}
                   className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
-                    filterClubId === null
+                    filterVenue === null
                       ? "border-navy bg-navy text-white"
                       : "border-border text-muted-foreground hover:border-navy/60 hover:text-navy"
                   }`}
                 >
-                  All clubs
+                  All venues
                 </button>
-                {coachClubs.map((c) => (
+                {coachVenues.map((v) => (
                   <button
-                    key={c.id}
-                    onClick={() => setFilterClubId(c.id)}
+                    key={v.id}
+                    onClick={() => setFilterVenue(v.id)}
                     className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
-                      filterClubId === c.id
+                      filterVenue === v.id
                         ? "border-navy bg-navy text-white"
                         : "border-border text-muted-foreground hover:border-navy/60 hover:text-navy"
                     }`}
                   >
-                    {c.name}
+                    {v.name}
+                    {v.kind === "school" && <span className="ml-1 opacity-60">(School)</span>}
                   </button>
                 ))}
               </div>
@@ -1026,6 +1102,7 @@ export function AdminCoachingPortal({
                           coachId={selectedCoachId!}
                           attendance={attendance}
                           onAttendanceChange={handleAttendanceChange}
+                          onError={setActionError}
                         />
                       ))}
                     </div>

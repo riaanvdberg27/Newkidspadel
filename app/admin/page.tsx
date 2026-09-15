@@ -2,7 +2,7 @@ import { redirect } from "next/navigation"
 import { isAdminAuthenticated } from "@/lib/admin-auth"
 import { getAllClubsAdmin, adminLogout } from "@/app/actions/admin"
 import { getAllPackagesAdmin } from "@/app/actions/packages"
-import { getAllSchoolsAdmin } from "@/app/actions/schools"
+import { getAllSchoolsAdmin, getSchoolCoachAssignments } from "@/app/actions/schools"
 import { getAllSignups } from "@/app/actions/admin-signups"
 import { getContacts } from "@/app/actions/contact-settings"
 import { getCoaches } from "@/app/actions/coaches"
@@ -26,10 +26,11 @@ export default async function AdminPage() {
   // Auto-backfill billing months for all active enrollments (idempotent)
   await backfillAllEnrollments().catch(() => {})
 
-  const [clubs, schools, packages, signups, contacts, coaches, coachOptions, referrals, vouchers, campaigns, allPayments, allOrders, allSubscriptions, webhookLogs, moments, siteImages, billingLedger, billingOutstanding, billingRevenue] =
+  const [clubs, schools, schoolCoachAssignments, packages, signups, contacts, coaches, coachOptions, referrals, vouchers, campaigns, allPayments, allOrders, allSubscriptions, webhookLogs, moments, siteImages, billingLedger, billingOutstanding, billingRevenue] =
     await Promise.all([
       getAllClubsAdmin(),
       getAllSchoolsAdmin(),
+      getSchoolCoachAssignments().catch(() => ({})),
       getAllPackagesAdmin(),
       getAllSignups(),
       getContacts(),
@@ -83,6 +84,7 @@ export default async function AdminPage() {
         <AdminTabs
           clubs={clubs}
           schools={schools}
+          schoolCoachAssignments={schoolCoachAssignments}
           packages={packages}
           signups={signups}
           contacts={contacts}

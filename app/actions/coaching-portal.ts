@@ -1,8 +1,8 @@
 "use server"
 
 import { db } from "@/lib/db"
-import { sessionAttendance, enrollments, coaches, coachClubs, clubs } from "@/lib/db/schema"
-import { eq, and, gte, lte, inArray, asc } from "drizzle-orm"
+import { sessionAttendance, enrollments, coaches, coachClubs, coachSchools, clubs } from "@/lib/db/schema"
+import { eq, and, gte, lte, inArray, asc, or } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { requireAdmin } from "@/lib/admin-auth"
 // requireAdmin is used only in getCoachOptions (admin-only list).
@@ -27,6 +27,8 @@ export type CoachingEnrollment = {
   parentName: string
   club: string
   clubId: number | null
+  schoolId: number | null
+  schoolName: string | null
   packageName: string
   status: string
   // Slot 1
@@ -147,13 +149,21 @@ export async function getCoachOptions(): Promise<CoachOption[]> {
  * where multiple coaches cover the same venue.
  */
 export async function getCoachEnrollments(coachId: number): Promise<CoachingEnrollment[]> {
-  // Resolve which club IDs this coach covers
-  const ccRows = await db
-    .select({ clubId: coachClubs.clubId })
-    .from(coachClubs)
-    .where(eq(coachClubs.coachId, coachId))
+  // Resolve which clubs AND schools this coach covers
+  const [ccRows, csRows] = await Promise.all([
+    db.select({ clubId: coachClubs.clubId }).from(coachClubs).where(eq(coachClubs.coachId, coachId)),
+    db.select({ schoolId: coachSchools.schoolId }).from(coachSchools).where(eq(coachSchools.coachId, coachId)),
+  ])
   const clubIds = ccRows.map((r) => r.clubId)
-  if (clubIds.length === 0) return []
+  const schoolIds = csRows.map((r) => r.schoolId)
+  if (clubIds.length === 0 && schoolIds.length === 0) return []
+
+  const scopeFilter =
+    clubIds.length > 0 && schoolIds.length > 0
+      ? or(inArray(enrollments.clubId, clubIds), inArray(enrollments.schoolId, schoolIds))
+      : clubIds.length > 0
+        ? inArray(enrollments.clubId, clubIds)
+        : inArray(enrollments.schoolId, schoolIds)
 
   const rows = await db
     .select({
@@ -162,6 +172,8 @@ export async function getCoachEnrollments(coachId: number): Promise<CoachingEnro
       parentName: enrollments.parentName,
       club: enrollments.club,
       clubId: enrollments.clubId,
+      schoolId: enrollments.schoolId,
+      schoolName: enrollments.schoolName,
       packageName: enrollments.packageName,
       status: enrollments.status,
       slotWeekday: enrollments.slotWeekday,
@@ -172,12 +184,7 @@ export async function getCoachEnrollments(coachId: number): Promise<CoachingEnro
       coachId2: enrollments.coachId2,
     })
     .from(enrollments)
-    .where(
-      and(
-        inArray(enrollments.clubId, clubIds),
-        inArray(enrollments.status, ["active", "pending"])
-      )
-    )
+    .where(and(scopeFilter, inArray(enrollments.status, ["active", "pending"])))
     .orderBy(asc(enrollments.clubId), asc(enrollments.slotWeekday), asc(enrollments.slotHour))
 
   return rows.map((r) => ({
@@ -186,6 +193,8 @@ export async function getCoachEnrollments(coachId: number): Promise<CoachingEnro
     parentName: r.parentName ?? "",
     club: r.club ?? "",
     clubId: r.clubId ?? null,
+    schoolId: r.schoolId ?? null,
+    schoolName: r.schoolName ?? null,
     packageName: r.packageName,
     status: r.status,
     slotWeekday: r.slotWeekday ?? null,

@@ -146,6 +146,32 @@ export const clubSlots = pgTable(
   }),
 )
 
+// ---- School time slots (mirrors club_slots, keyed by schoolId) ----
+
+export const schoolSlots = pgTable(
+  "school_slots",
+  {
+    id: serial("id").primaryKey(),
+    schoolId: integer("schoolId")
+      .notNull()
+      .references(() => schools.id, { onDelete: "cascade" }),
+    // 0 = Sunday ... 6 = Saturday
+    weekday: integer("weekday").notNull(),
+    // Start hour as decimal: 8 = 08:00, 8.5 = 08:30, 13.5 = 13:30 etc.
+    hour: numeric("hour", { precision: 4, scale: 1 }).notNull(),
+    capacity: integer("capacity").notNull().default(0),
+    // Age group this slot is available for
+    ageGroup: text("ageGroup").notNull().default("4-8"),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+  },
+  (t) => ({
+    uniqueSlot: unique("school_slots_unique").on(t.schoolId, t.weekday, t.hour, t.ageGroup),
+  }),
+)
+
+export type SchoolSlot = typeof schoolSlots.$inferSelect
+
 export const enrollments = pgTable("enrollments", {
   id: serial("id").primaryKey(),
   userId: text("userId").notNull(),
@@ -311,6 +337,26 @@ export const coachClubs = pgTable(
 
 export type CoachClub = typeof coachClubs.$inferSelect
 
+// ---- Coach ↔ School assignments ----
+
+export const coachSchools = pgTable(
+  "coach_schools",
+  {
+    id: serial("id").primaryKey(),
+    coachId: integer("coachId")
+      .notNull()
+      .references(() => coaches.id, { onDelete: "cascade" }),
+    schoolId: integer("schoolId")
+      .notNull()
+      .references(() => schools.id, { onDelete: "cascade" }),
+  },
+  (t) => ({
+    uniqueAssignment: unique("coach_schools_unique").on(t.coachId, t.schoolId),
+  }),
+)
+
+export type CoachSchool = typeof coachSchools.$inferSelect
+
 // ---- Package ↔ Club restrictions ----
 
 export const packageClubs = pgTable(
@@ -399,10 +445,9 @@ export const vouchers = pgTable("vouchers", {
   campaignId: integer("campaignId")
     .notNull()
     .references(() => voucherCampaigns.id, { onDelete: "cascade" }),
-  // The parent who owns this voucher
-  userId: text("userId")
-    .notNull()
-    .references(() => user.id, { onDelete: "cascade" }),
+  // The parent who owns this voucher. Null for bulk/pre-generated codes
+  // (e.g. school or event promo codes) that have not yet been redeemed.
+  userId: text("userId").references(() => user.id, { onDelete: "cascade" }),
   discountPercent: integer("discountPercent").notNull(),
   // 'active' | 'used' | 'expired'
   status: text("status").notNull().default("active"),
