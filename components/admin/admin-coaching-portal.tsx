@@ -152,12 +152,14 @@ function SessionCard({
   coachId,
   attendance,
   onAttendanceChange,
+  onError,
 }: {
   slot: SessionSlot
   date: Date
   coachId: number
   attendance: AttendanceRecord[]
   onAttendanceChange: (record: AttendanceRecord) => void
+  onError: (message: string) => void
 }) {
   const dateStr = toDateStr(date)
   const [pending, startTransition] = useTransition()
@@ -174,9 +176,15 @@ function SessionCard({
 
   function handleMark(enrollmentId: number, status: "present" | "absent" | "excused") {
     startTransition(async () => {
-      const res = await markAttendance({ coachId, enrollmentId, sessionDate: dateStr, status })
-      if (res.ok && res.id) {
-        onAttendanceChange({ id: res.id, enrollmentId, sessionDate: dateStr, status, note: null })
+      try {
+        const res = await markAttendance({ coachId, enrollmentId, sessionDate: dateStr, status })
+        if (res.ok && res.id) {
+          onAttendanceChange({ id: res.id, enrollmentId, sessionDate: dateStr, status, note: null })
+        } else {
+          onError(res.error ?? "Couldn't save attendance. Please try again.")
+        }
+      } catch (err) {
+        onError(err instanceof Error ? err.message : "Couldn't save attendance. Please try again.")
       }
     })
   }
@@ -189,14 +197,20 @@ function SessionCard({
 
   function handleCorrect(att: AttendanceRecord) {
     startTransition(async () => {
-      const res = await correctAttendance({
-        attendanceId: att.id,
-        status: correctionStatus,
-        note: correctionNote || undefined,
-      })
-      if (res.ok) {
-        onAttendanceChange({ ...att, status: correctionStatus, note: correctionNote || null })
-        setCorrectingId(null)
+      try {
+        const res = await correctAttendance({
+          attendanceId: att.id,
+          status: correctionStatus,
+          note: correctionNote || undefined,
+        })
+        if (res.ok) {
+          onAttendanceChange({ ...att, status: correctionStatus, note: correctionNote || null })
+          setCorrectingId(null)
+        } else {
+          onError(res.error ?? "Couldn't save the correction. Please try again.")
+        }
+      } catch (err) {
+        onError(err instanceof Error ? err.message : "Couldn't save the correction. Please try again.")
       }
     })
   }
@@ -206,9 +220,15 @@ function SessionCard({
     if (unmarked.length === 0) return
     startTransition(async () => {
       for (const enr of unmarked) {
-        const res = await markAttendance({ coachId, enrollmentId: enr.enrollmentId, sessionDate: dateStr, status })
-        if (res.ok && res.id) {
-          onAttendanceChange({ id: res.id, enrollmentId: enr.enrollmentId, sessionDate: dateStr, status, note: null })
+        try {
+          const res = await markAttendance({ coachId, enrollmentId: enr.enrollmentId, sessionDate: dateStr, status })
+          if (res.ok && res.id) {
+            onAttendanceChange({ id: res.id, enrollmentId: enr.enrollmentId, sessionDate: dateStr, status, note: null })
+          } else {
+            onError(res.error ?? "Couldn't save attendance for one or more students.")
+          }
+        } catch (err) {
+          onError(err instanceof Error ? err.message : "Couldn't save attendance for one or more students.")
         }
       }
     })
@@ -380,11 +400,13 @@ function CorrectionPanel({
   enrollments,
   history,
   onHistoryChange,
+  onError,
 }: {
   coachId: number
   enrollments: CoachingEnrollment[]
   history: AttendanceRecord[]
   onHistoryChange: (updated: AttendanceRecord[]) => void
+  onError: (message: string) => void
 }) {
   const [pending, startTransition] = useTransition()
   const [editing, setEditing] = useState<number | null>(null)
@@ -417,14 +439,20 @@ function CorrectionPanel({
 
   function handleSave(recordId: number) {
     startTransition(async () => {
-      const res = await correctAttendance({ attendanceId: recordId, status: newStatus, note: newNote || undefined })
-      if (res.ok) {
-        onHistoryChange(
-          history.map((r) =>
-            r.id === recordId ? { ...r, status: newStatus, note: newNote || null } : r
+      try {
+        const res = await correctAttendance({ attendanceId: recordId, status: newStatus, note: newNote || undefined })
+        if (res.ok) {
+          onHistoryChange(
+            history.map((r) =>
+              r.id === recordId ? { ...r, status: newStatus, note: newNote || null } : r
+            )
           )
-        )
-        setEditing(null)
+          setEditing(null)
+        } else {
+          onError(res.error ?? "Couldn't save the correction. Please try again.")
+        }
+      } catch (err) {
+        onError(err instanceof Error ? err.message : "Couldn't save the correction. Please try again.")
       }
     })
   }
@@ -432,10 +460,16 @@ function CorrectionPanel({
   function handleDelete(recordId: number) {
     if (!confirm("Remove this attendance record entirely?")) return
     startTransition(async () => {
-      const res = await deleteAttendance(recordId)
-      if (res.ok) {
-        onHistoryChange(history.filter((r) => r.id !== recordId))
-        setEditing(null)
+      try {
+        const res = await deleteAttendance(recordId)
+        if (res.ok) {
+          onHistoryChange(history.filter((r) => r.id !== recordId))
+          setEditing(null)
+        } else {
+          onError(res.error ?? "Couldn't delete the record. Please try again.")
+        }
+      } catch (err) {
+        onError(err instanceof Error ? err.message : "Couldn't delete the record. Please try again.")
       }
     })
   }
@@ -610,6 +644,7 @@ export function AdminCoachingPortal({
   const [attendance, setAttendance] = useState<AttendanceRecord[]>(initialAttendance)
   const [history, setHistory] = useState<AttendanceRecord[]>(initialHistory)
   const [loading, startLoading] = useTransition()
+  const [actionError, setActionError] = useState<string | null>(null)
 
   function handleCoachChange(coachId: number) {
     if (coachId === selectedCoachId) return
@@ -766,6 +801,21 @@ export function AdminCoachingPortal({
         </div>
       </div>
 
+      {actionError && (
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 shrink-0 text-red-600" />
+            <p className="text-sm font-medium text-red-700">{actionError}</p>
+          </div>
+          <button
+            onClick={() => setActionError(null)}
+            className="shrink-0 text-xs font-semibold text-red-600 hover:text-red-800"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
       {/* Coach selector cards */}
       <div>
         <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -858,6 +908,7 @@ export function AdminCoachingPortal({
           enrollments={enrollments}
           history={history}
           onHistoryChange={setHistory}
+          onError={setActionError}
         />
       ) : view === "conflicts" ? (
         <ConflictPanel
@@ -1026,6 +1077,7 @@ export function AdminCoachingPortal({
                           coachId={selectedCoachId!}
                           attendance={attendance}
                           onAttendanceChange={handleAttendanceChange}
+                          onError={setActionError}
                         />
                       ))}
                     </div>

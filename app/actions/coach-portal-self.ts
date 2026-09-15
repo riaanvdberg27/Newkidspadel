@@ -135,8 +135,8 @@ export async function selfMarkAttendance(input: {
   status: "present" | "absent" | "excused"
   note?: string
 }): Promise<{ ok: boolean; id?: number; error?: string }> {
-  const { coachId } = await requireCoachSession()
   try {
+    const { coachId } = await requireCoachSession()
     const existing = await db
       .select({ id: sessionAttendance.id })
       .from(sessionAttendance)
@@ -171,7 +171,16 @@ export async function selfMarkAttendance(input: {
     revalidatePath("/coach/portal")
     return { ok: true, id: row.id }
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : "Failed to mark attendance" }
+    console.error("[v0] selfMarkAttendance failed:", err)
+    return {
+      ok: false,
+      error:
+        err instanceof Error && err.message === "Not authenticated as coach"
+          ? "Your session has expired. Please sign in again."
+          : err instanceof Error
+            ? err.message
+            : "Failed to mark attendance",
+    }
   }
 }
 
@@ -180,9 +189,9 @@ export async function selfCorrectAttendance(
   status: "present" | "absent" | "excused",
   note?: string
 ): Promise<{ ok: boolean; error?: string }> {
-  const { coachId } = await requireCoachSession()
   try {
-    await db
+    const { coachId } = await requireCoachSession()
+    const result = await db
       .update(sessionAttendance)
       .set({ status, note: note ?? null, updatedAt: new Date() })
       .where(
@@ -191,9 +200,22 @@ export async function selfCorrectAttendance(
           eq(sessionAttendance.coachId, coachId) // scoped to this coach
         )
       )
+      .returning({ id: sessionAttendance.id })
+    if (result.length === 0) {
+      return { ok: false, error: "Attendance record not found or not owned by you." }
+    }
     revalidatePath("/coach/portal")
     return { ok: true }
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : "Failed to correct attendance" }
+    console.error("[v0] selfCorrectAttendance failed:", err)
+    return {
+      ok: false,
+      error:
+        err instanceof Error && err.message === "Not authenticated as coach"
+          ? "Your session has expired. Please sign in again."
+          : err instanceof Error
+            ? err.message
+            : "Failed to correct attendance",
+    }
   }
 }
