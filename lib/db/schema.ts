@@ -445,10 +445,9 @@ export const vouchers = pgTable("vouchers", {
   campaignId: integer("campaignId")
     .notNull()
     .references(() => voucherCampaigns.id, { onDelete: "cascade" }),
-  // The parent who owns this voucher
-  userId: text("userId")
-    .notNull()
-    .references(() => user.id, { onDelete: "cascade" }),
+  // The parent who owns this voucher. Null for bulk/pre-generated codes
+  // (e.g. school or event promo codes) that have not yet been redeemed.
+  userId: text("userId").references(() => user.id, { onDelete: "cascade" }),
   discountPercent: integer("discountPercent").notNull(),
   // 'active' | 'used' | 'expired'
   status: text("status").notNull().default("active"),

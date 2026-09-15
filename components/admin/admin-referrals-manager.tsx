@@ -9,6 +9,7 @@ import type { VoucherCampaign } from "@/lib/db/schema"
 import {
   adminUpdateCampaign,
   adminCreateCampaign,
+  adminGenerateBulkVouchers,
   issueBootcampVoucher,
 } from "@/app/actions/referrals"
 
@@ -59,7 +60,7 @@ export function AdminReferralsManager({
 
       {subTab === "referrals" && <ReferralsTab rows={referrals} />}
       {subTab === "vouchers" && <VouchersTab rows={vouchers} campaigns={campaigns} />}
-      {subTab === "campaigns" && <CampaignsTab campaigns={campaigns} />}
+      {subTab === "campaigns" && <CampaignsTab campaigns={campaigns} vouchers={vouchers} />}
     </div>
   )
 }
@@ -243,8 +244,14 @@ function VouchersTab({
               <tr key={v.id} className="border-b border-border last:border-0 hover:bg-muted/20">
                 <td className="px-4 py-3 font-mono text-xs font-semibold text-navy">{v.code}</td>
                 <td className="px-4 py-3">
-                  <p className="font-semibold text-navy">{v.userName}</p>
-                  <p className="text-xs text-muted-foreground">{v.userEmail}</p>
+                  {v.userEmail ? (
+                    <>
+                      <p className="font-semibold text-navy">{v.userName}</p>
+                      <p className="text-xs text-muted-foreground">{v.userEmail}</p>
+                    </>
+                  ) : (
+                    <p className="text-xs italic text-muted-foreground">Unassigned</p>
+                  )}
                 </td>
                 <td className="px-4 py-3 text-muted-foreground">{v.campaignName}</td>
                 <td className="px-4 py-3 font-bold text-lime-foreground">{v.discountPercent}%</td>
@@ -270,11 +277,23 @@ function VouchersTab({
 // Campaigns sub-tab
 // ---------------------------------------------------------------------------
 
-function CampaignsTab({ campaigns: initial }: { campaigns: VoucherCampaign[] }) {
+const MIN_BULK_CODES = 10
+const MAX_BULK_CODES = 1000
+
+function CampaignsTab({
+  campaigns: initial,
+  vouchers,
+}: {
+  campaigns: VoucherCampaign[]
+  vouchers: AdminVoucherRow[]
+}) {
   const [campaigns, setCampaigns] = useState(initial)
   const [editingId, setEditingId] = useState<number | null>(null)
   const [saving, setSaving] = useState(false)
   const [showNew, setShowNew] = useState(false)
+  const [bulkQuantity, setBulkQuantity] = useState<number | "">(50)
+  const [generatingId, setGeneratingId] = useState<number | null>(null)
+  const [genMessage, setGenMessage] = useState<{ id: number; text: string; isError: boolean } | null>(null)
   const [newForm, setNewForm] = useState({
     name: "",
     description: "",
@@ -285,6 +304,14 @@ function CampaignsTab({ campaigns: initial }: { campaigns: VoucherCampaign[] }) 
   })
 
   const editForm = campaigns.find((c) => c.id === editingId)
+
+  const voucherCountsByCampaign = new Map<number, { total: number; used: number }>()
+  for (const v of vouchers) {
+    const entry = voucherCountsByCampaign.get(v.campaignId) ?? { total: 0, used: 0 }
+    entry.total += 1
+    if (v.status === "used") entry.used += 1
+    voucherCountsByCampaign.set(v.campaignId, entry)
+  }
 
   async function handleSave(c: VoucherCampaign) {
     setSaving(true)
@@ -302,10 +329,32 @@ function CampaignsTab({ campaigns: initial }: { campaigns: VoucherCampaign[] }) 
 
   async function handleCreate() {
     setSaving(true)
-    await adminCreateCampaign(newForm)
+    const created = await adminCreateCampaign(newForm)
+    if (created?.id && typeof bulkQuantity === "number" && bulkQuantity > 0) {
+      await adminGenerateBulkVouchers(created.id, bulkQuantity)
+    }
     setSaving(false)
     setShowNew(false)
     setNewForm({ name: "", description: "", discountPercent: 10, appliesTo: "monthly", expiryDays: 90, enabled: true })
+    setBulkQuantity(50)
+  }
+
+  async function handleGenerateMore(campaignId: number) {
+    const input = window.prompt(
+      `How many additional promo codes to generate (${MIN_BULK_CODES}-${MAX_BULK_CODES})?`,
+      "50",
+    )
+    if (!input) return
+    const quantity = Number(input)
+    setGeneratingId(campaignId)
+    setGenMessage(null)
+    const result = await adminGenerateBulkVouchers(campaignId, quantity)
+    setGeneratingId(null)
+    if ("error" in result) {
+      setGenMessage({ id: campaignId, text: result.error, isError: true })
+    } else {
+      setGenMessage({ id: campaignId, text: `${result.count} codes generated.`, isError: false })
+    }
   }
 
   return (
@@ -331,6 +380,27 @@ function CampaignsTab({ campaigns: initial }: { campaigns: VoucherCampaign[] }) 
             values={newForm}
             onChange={(patch) => setNewForm((f) => ({ ...f, ...patch }))}
           />
+          <label className="block max-w-xs">
+            <span className="text-xs font-semibold text-navy">
+              Promo codes to generate for this campaign (optional)
+            </span>
+            <input
+              type="number"
+              min={MIN_BULK_CODES}
+              max={MAX_BULK_CODES}
+              placeholder={`${MIN_BULK_CODES}-${MAX_BULK_CODES}, leave blank for none`}
+              value={bulkQuantity}
+              onChange={(e) =>
+                setBulkQuantity(e.target.value === "" ? "" : Number(e.target.value))
+              }
+              className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-lime"
+            />
+            <span className="mt-1 block text-xs text-muted-foreground">
+              Generates that many single-use codes for a school, event, or group — use the
+              name/description above to label who they&apos;re for. You can export them to Excel
+              afterwards.
+            </span>
+          </label>
           <div className="flex gap-2 pt-1">
             <button
               type="button"
@@ -401,6 +471,34 @@ function CampaignsTab({ campaigns: initial }: { campaigns: VoucherCampaign[] }) 
                     <span>Applies to: <strong className="text-navy capitalize">{c.appliesTo}</strong></span>
                     <span>Expiry: <strong className="text-navy">{c.expiryDays ? `${c.expiryDays} days` : "Never"}</strong></span>
                   </div>
+                  <div className="flex flex-wrap items-center gap-3 pt-2">
+                    <span className="text-xs text-muted-foreground">
+                      Promo codes:{" "}
+                      <strong className="text-navy">
+                        {voucherCountsByCampaign.get(c.id)?.used ?? 0} /{" "}
+                        {voucherCountsByCampaign.get(c.id)?.total ?? 0} used
+                      </strong>
+                    </span>
+                    <button
+                      type="button"
+                      disabled={generatingId === c.id}
+                      onClick={() => handleGenerateMore(c.id)}
+                      className="rounded-md border border-border px-2.5 py-1 text-xs font-semibold text-navy hover:bg-muted disabled:opacity-50"
+                    >
+                      {generatingId === c.id ? "Generating..." : "Generate More Codes"}
+                    </button>
+                    <a
+                      href={`/api/admin/campaigns/${c.id}/export`}
+                      className="rounded-md border border-border px-2.5 py-1 text-xs font-semibold text-navy hover:bg-muted"
+                    >
+                      Download Excel
+                    </a>
+                  </div>
+                  {genMessage?.id === c.id && (
+                    <p className={`text-xs ${genMessage.isError ? "text-red-600" : "text-lime-foreground font-semibold"}`}>
+                      {genMessage.text}
+                    </p>
+                  )}
                 </div>
                 <button
                   type="button"

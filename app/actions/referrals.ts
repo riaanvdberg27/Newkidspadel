@@ -283,7 +283,10 @@ export async function validateVoucherCode(
     .limit(1)
 
   if (!row) return { valid: false, error: "Voucher code not found." }
-  if (row.userId !== u.id) return { valid: false, error: "This voucher does not belong to your account." }
+  // Unassigned bulk/promo codes (row.userId === null) are open to any signed-in
+  // user. Codes already owned by another account remain locked to that owner.
+  if (row.userId != null && row.userId !== u.id)
+    return { valid: false, error: "This voucher does not belong to your account." }
   if (row.status !== "active") return { valid: false, error: "This voucher has already been used or expired." }
   if (!row.campaignEnabled) return { valid: false, error: "This voucher campaign is no longer active." }
   if (row.expiresAt && row.expiresAt < new Date()) return { valid: false, error: "This voucher has expired." }
@@ -304,12 +307,36 @@ export async function validateVoucherCode(
 }
 
 export async function redeemVoucher(voucherId: number, enrollmentId: number): Promise<void> {
+  // Bulk/promo codes have no owner until redeemed — stamp the redeeming
+  // enrollment's user onto the voucher so it becomes single-use permanently.
+  const [existing] = await db
+    .select({ userId: vouchers.userId })
+    .from(vouchers)
+    .where(eq(vouchers.id, voucherId))
+    .limit(1)
+
+  let ownerUserId: string | undefined
+  if (!existing?.userId) {
+    const [enrollment] = await db
+      .select({ userId: enrollments.userId })
+      .from(enrollments)
+      .where(eq(enrollments.id, enrollmentId))
+      .limit(1)
+    ownerUserId = enrollment?.userId
+  }
+
   await db
     .update(vouchers)
-    .set({ status: "used", usedAt: new Date(), redeemedOnEnrollmentId: enrollmentId })
+    .set({
+      status: "used",
+      usedAt: new Date(),
+      redeemedOnEnrollmentId: enrollmentId,
+      ...(ownerUserId ? { userId: ownerUserId } : {}),
+    })
     .where(eq(vouchers.id, voucherId))
 
   revalidatePath("/dashboard")
+  revalidatePath("/admin")
 }
 
 // ---------------------------------------------------------------------------
@@ -424,11 +451,12 @@ export async function adminGetAllReferrals(): Promise<AdminReferralRow[]> {
 export type AdminVoucherRow = {
   id: number
   code: string
+  campaignId: number
   discountPercent: number
   status: string
   campaignName: string
-  userName: string
-  userEmail: string
+  userName: string | null
+  userEmail: string | null
   expiresAt: Date | null
   usedAt: Date | null
   createdAt: Date
@@ -439,6 +467,7 @@ export async function adminGetAllVouchers(): Promise<AdminVoucherRow[]> {
     .select({
       id: vouchers.id,
       code: vouchers.code,
+      campaignId: vouchers.campaignId,
       discountPercent: vouchers.discountPercent,
       status: vouchers.status,
       campaignName: voucherCampaigns.name,
@@ -450,7 +479,7 @@ export async function adminGetAllVouchers(): Promise<AdminVoucherRow[]> {
     })
     .from(vouchers)
     .innerJoin(voucherCampaigns, eq(vouchers.campaignId, voucherCampaigns.id))
-    .innerJoin(user, eq(vouchers.userId, user.id))
+    .leftJoin(user, eq(vouchers.userId, user.id))
     .orderBy(desc(vouchers.createdAt))
 
   return rows
@@ -507,7 +536,101 @@ export async function adminCreateCampaign(data: {
   appliesTo: string
   expiryDays: number | null
   enabled: boolean
-}) {
-  await db.insert(voucherCampaigns).values({ ...data, type: "custom" })
+}): Promise<{ id: number }> {
+  const [created] = await db
+    .insert(voucherCampaigns)
+    .values({ ...data, type: "custom" })
+    .returning({ id: voucherCampaigns.id })
   revalidatePath("/admin")
+  return created
+}
+
+// ---------------------------------------------------------------------------
+// Admin: bulk-generate single-use promo codes for a campaign (school/event/group)
+// ---------------------------------------------------------------------------
+
+const MIN_BULK_VOUCHERS = 10
+const MAX_BULK_VOUCHERS = 1000
+const BULK_INSERT_CHUNK_SIZE = 200
+
+export async function adminGenerateBulkVouchers(
+  campaignId: number,
+  quantity: number,
+): Promise<{ count: number; codes: string[] } | { error: string }> {
+  if (!Number.isInteger(quantity) || quantity < MIN_BULK_VOUCHERS || quantity > MAX_BULK_VOUCHERS) {
+    return { error: `Quantity must be a whole number between ${MIN_BULK_VOUCHERS} and ${MAX_BULK_VOUCHERS}.` }
+  }
+
+  const [campaign] = await db
+    .select()
+    .from(voucherCampaigns)
+    .where(eq(voucherCampaigns.id, campaignId))
+    .limit(1)
+
+  if (!campaign) return { error: "Campaign not found." }
+
+  const expiresAt = campaign.expiryDays
+    ? new Date(Date.now() + campaign.expiryDays * 86_400_000)
+    : null
+
+  // Generate unique codes up front, retrying on any collision with existing codes.
+  const codes = new Set<string>()
+  while (codes.size < quantity) {
+    codes.add(generateVoucherCode())
+  }
+  const codeList = Array.from(codes)
+
+  const rowsToInsert = codeList.map((code) => ({
+    code,
+    campaignId: campaign.id,
+    userId: null,
+    discountPercent: campaign.discountPercent,
+    status: "active" as const,
+    expiresAt,
+  }))
+
+  const insertedCodes: string[] = []
+  for (let i = 0; i < rowsToInsert.length; i += BULK_INSERT_CHUNK_SIZE) {
+    const chunk = rowsToInsert.slice(i, i + BULK_INSERT_CHUNK_SIZE)
+    const inserted = await db.insert(vouchers).values(chunk).returning({ code: vouchers.code })
+    insertedCodes.push(...inserted.map((r) => r.code))
+  }
+
+  revalidatePath("/admin")
+  return { count: insertedCodes.length, codes: insertedCodes }
+}
+
+// ---------------------------------------------------------------------------
+// Admin: list all vouchers for a single campaign (for the export + code list)
+// ---------------------------------------------------------------------------
+
+export type AdminCampaignVoucherRow = {
+  id: number
+  code: string
+  discountPercent: number
+  status: string
+  userEmail: string | null
+  expiresAt: Date | null
+  usedAt: Date | null
+  createdAt: Date
+}
+
+export async function adminGetCampaignVouchers(campaignId: number): Promise<AdminCampaignVoucherRow[]> {
+  const rows = await db
+    .select({
+      id: vouchers.id,
+      code: vouchers.code,
+      discountPercent: vouchers.discountPercent,
+      status: vouchers.status,
+      userEmail: user.email,
+      expiresAt: vouchers.expiresAt,
+      usedAt: vouchers.usedAt,
+      createdAt: vouchers.createdAt,
+    })
+    .from(vouchers)
+    .leftJoin(user, eq(vouchers.userId, user.id))
+    .where(eq(vouchers.campaignId, campaignId))
+    .orderBy(desc(vouchers.createdAt))
+
+  return rows
 }
