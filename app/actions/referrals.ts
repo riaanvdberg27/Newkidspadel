@@ -263,7 +263,15 @@ export async function validateVoucherCode(
   code: string,
   packagePeriod: "monthly" | "once-off",
 ): Promise<VoucherValidationResult> {
-  const u = await getSessionUser()
+  // Never let this action throw — an unhandled rejection here leaves the
+  // "Apply" button stuck on "Checking..." forever on the client, since the
+  // onboarding wizard's onClick has no catch to recover from it.
+  let u: { id: string }
+  try {
+    u = await getSessionUser()
+  } catch {
+    return { valid: false, error: "Your session has expired. Please refresh the page and try again." }
+  }
 
   const [row] = await db
     .select({

@@ -388,13 +388,23 @@ export async function buildNetcashPaymentForEnrollment(input: {
 
   let orderId: number | undefined = existingOrderRows[0]?.id
 
+  // Netcash's p2 reference (m10/p2) may only ever be used ONCE. If a parent's
+  // first attempt fails, is cancelled, or the browser is refreshed and "Pay"
+  // is clicked again, reusing the same referenceNumber makes Netcash reject
+  // the new attempt with "transaction cannot be processed... payment has
+  // already been made". Give every attempt its own unique Netcash reference
+  // (still tied back to the same enrollment/order via Extra1 + netcashOrderId),
+  // while leaving the enrollment's permanent referenceNumber untouched.
+  const attemptSuffix = Date.now().toString(36).slice(-6).toUpperCase()
+  const netcashReference = `${input.referenceNumber}-P${attemptSuffix}`.slice(0, 25)
+
   if (orderId) {
     // Reset the existing order so it is ready for a fresh payment attempt
     await db
       .update(orders)
       .set({
         status: "awaiting_payment",
-        netcashOrderId: input.referenceNumber,
+        netcashOrderId: netcashReference,
         failureReason: null,
         updatedAt: new Date(),
       })
@@ -408,14 +418,14 @@ export async function buildNetcashPaymentForEnrollment(input: {
         packageType: input.paymentType,
         amount: Math.round(input.packagePrice * 100), // store in cents
         status: "awaiting_payment",
-        netcashOrderId: input.referenceNumber,
+        netcashOrderId: netcashReference,
       })
       .returning({ id: orders.id })
     orderId = orderRow?.id
   }
 
   const { netcashUrl, formFields } = await buildNetcashPayment({
-    referenceNumber: input.referenceNumber,
+    referenceNumber: netcashReference,
     enrollmentId: input.enrollmentId,
     parentName: input.parentName,
     parentEmail: input.parentEmail,
