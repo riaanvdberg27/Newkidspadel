@@ -8,11 +8,13 @@ import { eq, desc } from "drizzle-orm"
 import { getMyEnrollments } from "@/app/actions/enrollment"
 import { getReferralSummary } from "@/app/actions/referrals"
 import { getMyPayments, getMySubscriptions } from "@/app/actions/payments"
+import { getMyNotifications } from "@/app/actions/notifications"
 import { SignOutButton } from "@/components/sign-out-button"
 import { ChangeSlot } from "@/components/change-slot"
 import { EditProfile } from "@/components/edit-profile"
 import { ReferralPanel } from "@/components/referral-panel"
 import { ImpersonationBanner } from "@/components/impersonation-banner"
+import { NotificationsPanel } from "@/components/notifications-panel"
 import {
   CalendarDays, Mail, Phone, ShieldCheck, User,
   CreditCard, RefreshCw, CheckCircle2, XCircle, Clock,
@@ -80,12 +82,13 @@ export default async function DashboardPage() {
   }
 
   // Fetch data scoped to the correct userId (real or impersonated)
-  const [userEnrollments, allPayments, allSubscriptions, referralSummary] = await Promise.all([
+  const [userEnrollments, allPayments, allSubscriptions, referralSummary, myNotifications] = await Promise.all([
     db.select().from(enrollments).where(eq(enrollments.userId, userId)).orderBy(desc(enrollments.createdAt)),
     db.select().from(payments).where(eq(payments.userId, userId)).orderBy(desc(payments.createdAt)).catch(() => []),
     db.select().from(subscriptions).where(eq(subscriptions.userId, userId)).orderBy(desc(subscriptions.createdAt)).catch(() => []),
     // Referral summary — only available for real sessions (not during impersonation)
     isImpersonating ? Promise.resolve(null) : getReferralSummary().catch(() => null),
+    getMyNotifications().catch(() => []),
   ])
 
   const mobile = userEnrollments[0]?.parentMobile ?? ""
@@ -118,6 +121,13 @@ export default async function DashboardPage() {
       </section>
 
       <div className="mx-auto max-w-5xl px-4 py-8 space-y-10 sm:py-10 sm:space-y-12">
+        {/* Notifications — e.g. "we changed your child's time slot" */}
+        {myNotifications.length > 0 && (
+          <section>
+            <NotificationsPanel notifications={myNotifications} readOnly={viewOnly} />
+          </section>
+        )}
+
         {/* Profile */}
         <section>
           <h2 className="text-lg font-bold text-navy">My Profile</h2>

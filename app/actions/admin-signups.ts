@@ -7,6 +7,7 @@ import { requireAdmin } from "@/lib/admin-auth"
 import { generateContractPdf } from "@/lib/contract-pdf"
 import { sendWelcomeEmail } from "@/lib/email"
 import { formatSlot } from "@/lib/slots"
+import { notifyUser } from "@/app/actions/notifications"
 import { put } from "@vercel/blob"
 import { revalidatePath } from "next/cache"
 import { nanoid } from "nanoid"
@@ -125,6 +126,11 @@ export async function updateSignup(
 ): Promise<{ ok: boolean; error?: string }> {
   try {
     await requireAdmin()
+
+    const existingRows = await db.select().from(enrollments).where(eq(enrollments.id, id)).limit(1)
+    const existing = existingRows[0]
+    if (!existing) return { ok: false, error: "Enrollment not found" }
+
     await db
       .update(enrollments)
       .set({
@@ -150,11 +156,54 @@ export async function updateSignup(
         updatedAt: new Date(),
       })
       .where(eq(enrollments.id, id))
+
+    const slotChanged =
+      (input.slotWeekday != null && input.slotWeekday !== existing.slotWeekday) ||
+      (input.slotHour != null && String(input.slotHour) !== existing.slotHour) ||
+      (input.slotWeekday2 ?? null) !== existing.slotWeekday2 ||
+      (input.slotHour2 != null ? String(input.slotHour2) : null) !== existing.slotHour2
+
+    if (slotChanged) {
+      await notifySlotChange(existing, {
+        slotWeekday: input.slotWeekday ?? existing.slotWeekday,
+        slotHour: input.slotHour ?? (existing.slotHour != null ? parseFloat(existing.slotHour) : null),
+        slotWeekday2: input.slotWeekday2 ?? null,
+        slotHour2: input.slotHour2 ?? null,
+      })
+    }
+
     revalidatePath("/admin")
+    revalidatePath("/dashboard")
     return { ok: true }
   } catch (err) {
     console.log("[v0] updateSignup error:", err)
     return { ok: false, error: err instanceof Error ? err.message : "Update failed" }
+  }
+}
+
+/** Notifies the parent that we (the club) changed their child's time slot(s). Never throws. */
+async function notifySlotChange(
+  existing: { userId: string | null; id: number; childName: string },
+  next: { slotWeekday: number | null; slotHour: number | null; slotWeekday2?: number | null; slotHour2?: number | null },
+) {
+  if (!existing.userId) return
+  try {
+    const parts: string[] = []
+    if (next.slotWeekday != null && next.slotHour != null) {
+      parts.push(formatSlot(next.slotWeekday, next.slotHour))
+    }
+    if (next.slotWeekday2 != null && next.slotHour2 != null) {
+      parts.push(formatSlot(next.slotWeekday2, next.slotHour2))
+    }
+    const scheduleText = parts.length > 0 ? parts.join(" and ") : "a new time"
+    await notifyUser(
+      existing.userId,
+      "Time slot updated",
+      `${existing.childName}'s session has been moved by an admin to ${scheduleText}. Please contact us if this doesn't work for you.`,
+      existing.id,
+    )
+  } catch (err) {
+    console.log("[v0] notifySlotChange error:", err)
   }
 }
 
@@ -201,6 +250,12 @@ export async function updateClientTimeSlots(
       slotHour2 = input.slotHour2
     }
 
+    const slotChanged =
+      input.slotWeekday !== row.slotWeekday ||
+      String(input.slotHour) !== row.slotHour ||
+      slotWeekday2 !== row.slotWeekday2 ||
+      (slotHour2 != null ? String(slotHour2) : null) !== row.slotHour2
+
     await db
       .update(enrollments)
       .set({
@@ -213,7 +268,17 @@ export async function updateClientTimeSlots(
       })
       .where(eq(enrollments.id, id))
 
+    if (slotChanged) {
+      await notifySlotChange(row, {
+        slotWeekday: input.slotWeekday,
+        slotHour: input.slotHour,
+        slotWeekday2,
+        slotHour2,
+      })
+    }
+
     revalidatePath("/admin")
+    revalidatePath("/dashboard")
     return { ok: true }
   } catch (err) {
     console.log("[v0] updateClientTimeSlots error:", err)
