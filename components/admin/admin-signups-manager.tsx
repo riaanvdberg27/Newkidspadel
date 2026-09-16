@@ -2087,6 +2087,11 @@ function ProgrammeFields({
   allClubs: Club[]
   allCoaches: CoachRow[]
 }) {
+  // Admin override — lets an admin set any day/time directly, bypassing the
+  // configured package/club slot list. Needed when no slots have been set up
+  // yet for this package+club combo, or when a parent needs a one-off custom time.
+  const [manualOverride, setManualOverride] = useState(false)
+
   // Resolve whether the selected package uses custom slots
   const selectedPkg = allPackages.find((p) => p.name === packageName) ?? null
   const isCustom = selectedPkg?.slotType === "custom"
@@ -2163,53 +2168,106 @@ function ProgrammeFields({
       {isCustom && selectedPkg ? (
         /* Custom package — show the same slot picker customers see, filtered to this club */
         <div className="space-y-4">
-          <div>
-            <p className="mb-2 text-xs font-semibold text-navy">Session 1{isAdvanced ? " (first coaching session)" : ""}</p>
-            {!isAdvanced && (
-              <p className="mb-3 text-xs text-muted-foreground">
-                Only the slots configured for this package{clubId ? " at this venue" : ""} are shown. Select one to assign it.
-              </p>
-            )}
-            <PackageSlotPicker
-              packageId={selectedPkg.id}
-              packageName={selectedPkg.name}
-              ageGroup={ageGroup}
-              clubId={clubId}
-              selected={selectedSlot}
-              onSelect={handleSlotSelect}
+          <label className="flex items-center gap-2 text-xs font-medium text-navy">
+            <input
+              type="checkbox"
+              checked={manualOverride}
+              onChange={(e) => setManualOverride(e.target.checked)}
+              className="h-3.5 w-3.5 rounded border-border"
             />
-            {selectedSlot && (
-              <p className="mt-2 text-xs text-muted-foreground">
-                Selected: <span className="font-semibold text-navy">{formatSlot(selectedSlot.weekday, selectedSlot.hour)}</span>
-                {" · "}
-                <button type="button" onClick={() => { setSlotWeekday(""); setSlotHour("") }} className="text-destructive hover:underline">
-                  Clear
-                </button>
-              </p>
-            )}
-          </div>
+            Manually set a time (bypass configured slots)
+          </label>
+          {manualOverride && (
+            <p className="text-xs text-muted-foreground">
+              As an admin you can assign any day/time here, even if no slots have been configured for this package
+              at this venue yet. Use this when a parent asks you to move their child to a specific time.
+            </p>
+          )}
 
-          {isAdvanced && (
-            <div>
-              <p className="mb-2 text-xs font-semibold text-navy">Session 2 (second coaching session — different day)</p>
-              <PackageSlotPicker
-                packageId={selectedPkg.id}
-                packageName={selectedPkg.name}
-                ageGroup={ageGroup}
-                clubId={clubId}
-                selected={slotWeekday2 !== "" && slotHour2 !== "" ? { weekday: Number(slotWeekday2), hour: Number(slotHour2) } : null}
-                onSelect={(slot) => { setSlotWeekday2(String(slot.weekday)); setSlotHour2(String(slot.hour)) }}
-              />
-              {slotWeekday2 !== "" && slotHour2 !== "" && (
-                <p className="mt-2 text-xs text-muted-foreground">
-                  Selected: <span className="font-semibold text-navy">{formatSlot(Number(slotWeekday2), Number(slotHour2))}</span>
-                  {" · "}
-                  <button type="button" onClick={() => { setSlotWeekday2(""); setSlotHour2("") }} className="text-destructive hover:underline">
-                    Clear
-                  </button>
-                </p>
+          {manualOverride ? (
+            <div className="space-y-3">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field label={isAdvanced ? "Session 1 — day" : "Session day"}>
+                  <select value={slotWeekday} onChange={(e) => setSlotWeekday(e.target.value)} className={selectCls}>
+                    <option value="">— not set —</option>
+                    {WEEKDAYS.map((d, i) => <option key={i} value={i}>{d}</option>)}
+                  </select>
+                </Field>
+                <Field label={isAdvanced ? "Session 1 — time" : "Session time"}>
+                  <select value={slotHour} onChange={(e) => setSlotHour(e.target.value)} className={selectCls}>
+                    <option value="">— not set —</option>
+                    {HOURS.map((h) => <option key={h} value={h}>{String(h).padStart(2, "0")}:00</option>)}
+                  </select>
+                </Field>
+              </div>
+              {isAdvanced && (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Field label="Session 2 — day">
+                    <select value={slotWeekday2} onChange={(e) => setSlotWeekday2(e.target.value)} className={selectCls}>
+                      <option value="">— not set —</option>
+                      {WEEKDAYS.map((d, i) => <option key={i} value={i}>{d}</option>)}
+                    </select>
+                  </Field>
+                  <Field label="Session 2 — time">
+                    <select value={slotHour2} onChange={(e) => setSlotHour2(e.target.value)} className={selectCls}>
+                      <option value="">— not set —</option>
+                      {HOURS.map((h) => <option key={h} value={h}>{String(h).padStart(2, "0")}:00</option>)}
+                    </select>
+                  </Field>
+                </div>
               )}
             </div>
+          ) : (
+            <>
+              <div>
+                <p className="mb-2 text-xs font-semibold text-navy">Session 1{isAdvanced ? " (first coaching session)" : ""}</p>
+                {!isAdvanced && (
+                  <p className="mb-3 text-xs text-muted-foreground">
+                    Only the slots configured for this package{clubId ? " at this venue" : ""} are shown. Select one to assign it.
+                  </p>
+                )}
+                <PackageSlotPicker
+                  packageId={selectedPkg.id}
+                  packageName={selectedPkg.name}
+                  ageGroup={ageGroup}
+                  clubId={clubId}
+                  selected={selectedSlot}
+                  onSelect={handleSlotSelect}
+                />
+                {selectedSlot && (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Selected: <span className="font-semibold text-navy">{formatSlot(selectedSlot.weekday, selectedSlot.hour)}</span>
+                    {" · "}
+                    <button type="button" onClick={() => { setSlotWeekday(""); setSlotHour("") }} className="text-destructive hover:underline">
+                      Clear
+                    </button>
+                  </p>
+                )}
+              </div>
+
+              {isAdvanced && (
+                <div>
+                  <p className="mb-2 text-xs font-semibold text-navy">Session 2 (second coaching session — different day)</p>
+                  <PackageSlotPicker
+                    packageId={selectedPkg.id}
+                    packageName={selectedPkg.name}
+                    ageGroup={ageGroup}
+                    clubId={clubId}
+                    selected={slotWeekday2 !== "" && slotHour2 !== "" ? { weekday: Number(slotWeekday2), hour: Number(slotHour2) } : null}
+                    onSelect={(slot) => { setSlotWeekday2(String(slot.weekday)); setSlotHour2(String(slot.hour)) }}
+                  />
+                  {slotWeekday2 !== "" && slotHour2 !== "" && (
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      Selected: <span className="font-semibold text-navy">{formatSlot(Number(slotWeekday2), Number(slotHour2))}</span>
+                      {" · "}
+                      <button type="button" onClick={() => { setSlotWeekday2(""); setSlotHour2("") }} className="text-destructive hover:underline">
+                        Clear
+                      </button>
+                    </p>
+                  )}
+                </div>
+              )}
+            </>
           )}
         </div>
       ) : (

@@ -268,7 +268,7 @@ export const packageSlots = pgTable(
     weekday: integer("weekday").notNull(),
     // Start hour as decimal: 8 = 08:00, 8.5 = 08:30
     hour: numeric("hour", { precision: 4, scale: 1 }).notNull(),
-    capacity: integer("capacity").notNull().default(10),
+    capacity: integer("capacity").notNull().default(8),
     // Age group this package slot is available for
     ageGroup: text("ageGroup").notNull().default("4-8"),
     createdAt: timestamp("createdAt").notNull().defaultNow(),
@@ -278,11 +278,24 @@ export const packageSlots = pgTable(
   }),
 )
 
+// ---- Parent-facing notifications (e.g. "we changed your child's time slot") ----
+
+export const notifications = pgTable("notifications", {
+  id: serial("id").primaryKey(),
+  userId: text("userId").notNull(),
+  enrollmentId: integer("enrollmentId"),
+  title: text("title").notNull(),
+  message: text("message").notNull(),
+  read: boolean("read").notNull().default(false),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+})
+
 export type Enrollment = typeof enrollments.$inferSelect
 export type Club = typeof clubs.$inferSelect
 export type ClubSlot = typeof clubSlots.$inferSelect
 export type PackageRow = typeof packages.$inferSelect
 export type PackageSlot = typeof packageSlots.$inferSelect
+export type Notification = typeof notifications.$inferSelect
 
 // ---- Site settings (contact details, etc.) ----
 
