@@ -394,7 +394,7 @@ function PackageForm({
         if (isSchool) {
           for (const existingKey of Object.keys(next)) delete next[existingKey as SlotKey]
         }
-        next[k] = 10
+        next[k] = 8
       }
       return next
     })

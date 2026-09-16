@@ -268,7 +268,7 @@ export const packageSlots = pgTable(
     weekday: integer("weekday").notNull(),
     // Start hour as decimal: 8 = 08:00, 8.5 = 08:30
     hour: numeric("hour", { precision: 4, scale: 1 }).notNull(),
-    capacity: integer("capacity").notNull().default(10),
+    capacity: integer("capacity").notNull().default(8),
     // Age group this package slot is available for
     ageGroup: text("ageGroup").notNull().default("4-8"),
     createdAt: timestamp("createdAt").notNull().defaultNow(),
