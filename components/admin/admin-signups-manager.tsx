@@ -80,7 +80,9 @@ function ageGroupFromAge(age: number | string | null | undefined): string {
 }
 
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
-const HOURS = Array.from({ length: 11 }, (_, i) => i + 8)
+/** Admin manual day/time assignment is restricted to business days & hours: Monday–Saturday, 10:00–17:00. */
+const ASSIGNABLE_WEEKDAYS = [1, 2, 3, 4, 5, 6]
+const HOURS = Array.from({ length: 8 }, (_, i) => i + 10)
 const STATUS_OPTIONS = ["active", "pending", "cancelled", "on-hold", "inactive"]
 
 // ---------------------------------------------------------------------------
@@ -1213,7 +1215,7 @@ function CustomizeTimeSlotsModal({
                 <Field label="Day">
                   <select value={slotWeekday} onChange={(e) => setSlotWeekday(e.target.value)} className={selectCls}>
                     <option value="">— not set —</option>
-                    {WEEKDAYS.map((d, i) => <option key={i} value={i}>{d}</option>)}
+                    {ASSIGNABLE_WEEKDAYS.map((i) => <option key={i} value={i}>{WEEKDAYS[i]}</option>)}
                   </select>
                 </Field>
                 <Field label="Time">
@@ -1231,7 +1233,7 @@ function CustomizeTimeSlotsModal({
                   <Field label="Day">
                     <select value={slotWeekday2} onChange={(e) => setSlotWeekday2(e.target.value)} className={selectCls}>
                       <option value="">— not set —</option>
-                      {WEEKDAYS.map((d, i) => <option key={i} value={i}>{d}</option>)}
+                      {ASSIGNABLE_WEEKDAYS.map((i) => <option key={i} value={i}>{WEEKDAYS[i]}</option>)}
                     </select>
                   </Field>
                   <Field label="Time">
@@ -2190,7 +2192,7 @@ function ProgrammeFields({
                 <Field label={isAdvanced ? "Session 1 — day" : "Session day"}>
                   <select value={slotWeekday} onChange={(e) => setSlotWeekday(e.target.value)} className={selectCls}>
                     <option value="">— not set —</option>
-                    {WEEKDAYS.map((d, i) => <option key={i} value={i}>{d}</option>)}
+                    {ASSIGNABLE_WEEKDAYS.map((i) => <option key={i} value={i}>{WEEKDAYS[i]}</option>)}
                   </select>
                 </Field>
                 <Field label={isAdvanced ? "Session 1 — time" : "Session time"}>
@@ -2205,7 +2207,7 @@ function ProgrammeFields({
                   <Field label="Session 2 — day">
                     <select value={slotWeekday2} onChange={(e) => setSlotWeekday2(e.target.value)} className={selectCls}>
                       <option value="">— not set —</option>
-                      {WEEKDAYS.map((d, i) => <option key={i} value={i}>{d}</option>)}
+                      {ASSIGNABLE_WEEKDAYS.map((i) => <option key={i} value={i}>{WEEKDAYS[i]}</option>)}
                     </select>
                   </Field>
                   <Field label="Session 2 — time">
@@ -2277,7 +2279,7 @@ function ProgrammeFields({
             <Field label={isAdvanced ? "Session 1 — day" : "Session day"}>
               <select value={slotWeekday} onChange={(e) => setSlotWeekday(e.target.value)} className={selectCls}>
                 <option value="">— not set —</option>
-                {WEEKDAYS.map((d, i) => <option key={i} value={i}>{d}</option>)}
+                {ASSIGNABLE_WEEKDAYS.map((i) => <option key={i} value={i}>{WEEKDAYS[i]}</option>)}
               </select>
             </Field>
             <Field label={isAdvanced ? "Session 1 — time" : "Session time"}>
@@ -2292,7 +2294,7 @@ function ProgrammeFields({
               <Field label="Session 2 — day">
                 <select value={slotWeekday2} onChange={(e) => setSlotWeekday2(e.target.value)} className={selectCls}>
                   <option value="">— not set —</option>
-                  {WEEKDAYS.map((d, i) => <option key={i} value={i}>{d}</option>)}
+                  {ASSIGNABLE_WEEKDAYS.map((i) => <option key={i} value={i}>{WEEKDAYS[i]}</option>)}
                 </select>
               </Field>
               <Field label="Session 2 — time">
