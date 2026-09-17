@@ -543,7 +543,7 @@ export async function createCartEnrollments(input: {
         orderReference,                        // shared cart ref
         orderItems: input.cartItems,           // full cart stored for reference
         parentName,
-        parentEmail: input.parent.email,
+        parentEmail: input.parent.email.trim(),
         parentMobile: input.parent.mobile,
         childName: childFullName,
         childDob,
@@ -617,7 +617,7 @@ export async function createCartEnrollments(input: {
           : "To be confirmed"
 
       await sendWelcomeEmail({
-        to: input.parent.email,
+        to: input.parent.email.trim(),
         parentName,
         childName: `${firstItem.child.firstName} ${firstItem.child.lastName}`.trim(),
         packageName: firstItem.packageName,
@@ -642,7 +642,7 @@ export async function createCartEnrollments(input: {
           : "To be confirmed"
       await sendAdminNotificationEmail({
         parentName,
-        parentEmail: input.parent.email,
+        parentEmail: input.parent.email.trim(),
         parentMobile: input.parent.mobile,
         childName: input.cartItems.map((c) => `${c.child.firstName} ${c.child.lastName}`).join(", "),
         childAge: 0,
