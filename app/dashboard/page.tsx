@@ -9,6 +9,7 @@ import { getMyEnrollments } from "@/app/actions/enrollment"
 import { getReferralSummary } from "@/app/actions/referrals"
 import { getMyPayments, getMySubscriptions } from "@/app/actions/payments"
 import { getMyNotifications } from "@/app/actions/notifications"
+import { calculateAge } from "@/lib/slots"
 import { SignOutButton } from "@/components/sign-out-button"
 import { ChangeSlot } from "@/components/change-slot"
 import { EditProfile } from "@/components/edit-profile"
@@ -222,7 +223,7 @@ export default async function DashboardPage() {
                             packageName={e.packageName ?? null}
                           />
                         )}
-                        <Detail icon={User} label="Age" value={`${e.childAge} years`} />
+                        <Detail icon={User} label="Age" value={`${calculateAge(e.childDob) ?? e.childAge} years`} />
                         <Detail icon={Mail} label="Email" value={e.parentEmail} />
                         <Detail icon={Phone} label="Mobile" value={e.parentMobile} />
                         {e.emergencyContactName && (

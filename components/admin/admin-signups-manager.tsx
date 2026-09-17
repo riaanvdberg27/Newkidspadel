@@ -34,7 +34,7 @@ import { MONTH_NAMES } from "@/lib/billing-utils"
 import type { CoachRow } from "@/app/actions/coaches"
 import type { PublicPackage } from "@/app/actions/packages"
 import type { Club } from "@/lib/db/schema"
-import { formatSlot } from "@/lib/slots"
+import { formatSlot, calculateAge } from "@/lib/slots"
 import { PackageSlotPicker } from "@/components/package-slot-picker"
 import type { SelectedSlot } from "@/components/slot-picker"
 
@@ -634,15 +634,19 @@ export function AdminSignupsManager({
                   <td className="truncate px-3 py-2">
                     <span className="font-semibold text-navy">{s.childName}</span>
                   </td>
-                  {/* Age — own compact column */}
+                  {/* Age — own compact column. Computed live from DOB so it advances on each birthday
+                      without ever touching the stored slot assignment. */}
                   <td className="px-2 py-2 text-center">
-                    {s.childAge != null ? (
-                      <span className="inline-block rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
-                        {s.childAge}
-                      </span>
-                    ) : (
-                      <span className="text-muted-foreground">—</span>
-                    )}
+                    {(() => {
+                      const liveAge = calculateAge(s.childDob) ?? s.childAge
+                      return liveAge != null ? (
+                        <span className="inline-block rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                          {liveAge}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )
+                    })()}
                   </td>
                   {/* Parent name only */}
                   <td className="truncate px-3 py-2 text-navy">{s.parentName}</td>
@@ -1036,8 +1040,8 @@ function ViewModal({
             {/* Child */}
             <DetailSection title="Child">
               <DetailRow label="Name" value={s.childName} />
-              <DetailRow label="Age" value={s.childAge != null ? String(s.childAge) : "—"} />
-              <DetailRow label="DOB" value={s.childDob || "—"} />
+  <DetailRow label="Age" value={(() => { const a = calculateAge(s.childDob) ?? s.childAge; return a != null ? String(a) : "—" })()} />
+  <DetailRow label="DOB" value={s.childDob || "—"} />
             </DetailSection>
             {/* Parent */}
             <DetailSection title="Parent / Guardian">

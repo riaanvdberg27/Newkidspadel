@@ -1,6 +1,29 @@
 export const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"] as const
 
 /**
+ * Compute a child's current age from their date of birth. This is always derived live
+ * from `childDob`, so the displayed age advances automatically on each birthday —
+ * it never depends on (or mutates) the `childAge` value stored at signup time.
+ *
+ * Age changing here MUST NOT affect any assigned time slot: slot fields
+ * (slotWeekday/slotHour/slotAgeGroup, etc.) are stored independently on the
+ * enrollment and are only ever changed by an admin via the manual override.
+ */
+export function calculateAge(dob: string | Date | null | undefined): number | null {
+  if (!dob) return null
+  const birthDate = typeof dob === "string" ? new Date(dob) : dob
+  if (Number.isNaN(birthDate.getTime())) return null
+
+  const today = new Date()
+  let age = today.getFullYear() - birthDate.getFullYear()
+  const monthDiff = today.getMonth() - birthDate.getMonth()
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+    age--
+  }
+  return age
+}
+
+/**
  * All valid start hours offered, in half-hour increments from 08:00 to 18:00.
  * Stored as decimals: 8 = 08:00, 8.5 = 08:30, 13.5 = 13:30, etc.
  */
