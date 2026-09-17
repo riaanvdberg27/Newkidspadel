@@ -1,16 +1,20 @@
-// Next Gen Padel Academy EFT banking details — shown as a fallback whenever a
-// Netcash card payment fails, is declined, or the gateway is unreachable.
+// Next Gen Padel Academy EFT banking details — shown whenever a parent
+// chooses to pay via EFT at sign-up, or as a fallback if a Netcash card
+// payment fails, is declined, or the gateway is unreachable.
 export const NEXT_GEN_BANK_DETAILS = {
   accountName: "Next Gen Padel Academy",
-  bankName: "FNB",
   accountNumber: "63214278441",
+  accountType: "Business Cheque",
+  branchName: "Menlyn Maine",
   branchCode: "252445",
+  swiftCode: "FIRNZAJJ",
 }
 
 export function BankDetailsCard({
   amount,
   paymentReference,
   note,
+  title,
 }: {
   /** Amount owed, in Rands. Omit the row entirely if unknown. */
   amount?: number
@@ -18,29 +22,39 @@ export function BankDetailsCard({
   paymentReference?: string
   /** Optional extra note shown above the details, e.g. explaining why EFT is being offered. */
   note?: string
+  /** Optional heading override (defaults to "Pay via EFT Instead"). */
+  title?: string
 }) {
   return (
     <div className="rounded-card border border-border bg-card p-5 text-left shadow-sm">
-      <p className="text-sm font-bold text-navy">Pay via EFT Instead</p>
+      <p className="text-sm font-bold text-navy">{title ?? "Pay via EFT Instead"}</p>
       <p className="mt-1 text-xs text-muted-foreground">
         {note ?? "You can also complete your payment manually via EFT using the banking details below."}
       </p>
       <dl className="mt-4 space-y-2 text-sm">
         <div className="flex justify-between gap-4 border-b border-border pb-2">
-          <dt className="text-muted-foreground">Account Name</dt>
+          <dt className="text-muted-foreground">Account Holder</dt>
           <dd className="font-semibold text-navy">{NEXT_GEN_BANK_DETAILS.accountName}</dd>
-        </div>
-        <div className="flex justify-between gap-4 border-b border-border pb-2">
-          <dt className="text-muted-foreground">Bank</dt>
-          <dd className="font-semibold text-navy">{NEXT_GEN_BANK_DETAILS.bankName}</dd>
         </div>
         <div className="flex justify-between gap-4 border-b border-border pb-2">
           <dt className="text-muted-foreground">Account Number</dt>
           <dd className="font-semibold text-navy">{NEXT_GEN_BANK_DETAILS.accountNumber}</dd>
         </div>
         <div className="flex justify-between gap-4 border-b border-border pb-2">
+          <dt className="text-muted-foreground">Account Type</dt>
+          <dd className="font-semibold text-navy">{NEXT_GEN_BANK_DETAILS.accountType}</dd>
+        </div>
+        <div className="flex justify-between gap-4 border-b border-border pb-2">
+          <dt className="text-muted-foreground">Branch Name</dt>
+          <dd className="font-semibold text-navy">{NEXT_GEN_BANK_DETAILS.branchName}</dd>
+        </div>
+        <div className="flex justify-between gap-4 border-b border-border pb-2">
           <dt className="text-muted-foreground">Branch Code</dt>
           <dd className="font-semibold text-navy">{NEXT_GEN_BANK_DETAILS.branchCode}</dd>
+        </div>
+        <div className="flex justify-between gap-4 border-b border-border pb-2">
+          <dt className="text-muted-foreground">Swift Code</dt>
+          <dd className="font-semibold text-navy">{NEXT_GEN_BANK_DETAILS.swiftCode}</dd>
         </div>
         {amount !== undefined && (
           <div className="flex justify-between gap-4 border-b border-border pb-2">

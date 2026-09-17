@@ -127,6 +127,10 @@ export function OnboardingWizard({
     prefHolidayClinics: false,
   })
 
+  // Payment method — parent chooses between Netcash (online card/EFT via
+  // gateway) or manual EFT (bank details shown, no gateway redirect).
+  const [paymentMethod, setPaymentMethod] = useState<"netcash" | "eft">("netcash")
+
   // Voucher / referral
   const [voucherInput, setVoucherInput] = useState("")
   const [voucherValidating, setVoucherValidating] = useState(false)
@@ -179,7 +183,7 @@ export function OnboardingWizard({
     )
   }
 
-  // ─��� Package not yet selected ─────────────────────────────────────────────
+  // ─����� Package not yet selected ─────────────────────────────────────────────
   if (!selectedPackage) {
     return (
       <PackagePicker
@@ -206,7 +210,7 @@ export function OnboardingWizard({
       <Confirmation
         packageName={selectedPackage.name}
         reference={confirmedRef}
-        isEft={false}
+        isEft={paymentMethod === "eft"}
         childNames={children.map((c) => `${c.firstName} ${c.lastName}`.trim())}
         packagePrice={computeTotal()}
       />
@@ -304,6 +308,14 @@ export function OnboardingWizard({
       // Enrollment + order records now exist — remember them so the EFT
       // fallback can show the correct reference/amount if Netcash fails below.
       setPendingOrder({ reference: orderReference, amount: totalAmount })
+
+      // If the parent chose to pay via EFT, stop here — the enrollment/order
+      // is saved as pending and we show the confirmation screen with our
+      // banking details instead of redirecting to Netcash.
+      if (paymentMethod === "eft") {
+        setConfirmedRef(orderReference)
+        return
+      }
 
       // 4. Build Netcash cart payment via API route
       const payResponse = await fetch("/api/netcash/pay", {
@@ -1041,21 +1053,72 @@ export function OnboardingWizard({
           {voucherError && <p className="mt-2 text-xs text-red-600">{voucherError}</p>}
         </div>
 
-        {/* Payment method badge */}
-        <div className="mt-5 rounded-card border border-border bg-card p-4 shadow-sm">
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-lime/20">
-              <Check className="h-5 w-5 text-lime-foreground" />
-            </div>
-            <div>
-              <p className="font-bold text-navy">Netcash Pay Now — Secure Online Payment</p>
-              <p className="text-xs text-muted-foreground">
-                {isOnceOff
-                  ? "Pay securely via card or EFT. You will be redirected to Netcash after confirming."
-                  : "Set up your monthly subscription securely via Netcash. You will be redirected to complete payment."}
-              </p>
-            </div>
+        {/* Payment method choice */}
+        <div className="mt-5">
+          <p className="text-sm font-bold text-navy">How would you like to pay?</p>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <button
+              type="button"
+              onClick={() => setPaymentMethod("netcash")}
+              className={`flex items-start gap-3 rounded-card border-2 p-4 text-left transition-all ${
+                paymentMethod === "netcash"
+                  ? "border-lime bg-lime/10 shadow-sm"
+                  : "border-border bg-card hover:border-lime/50"
+              }`}
+            >
+              <div
+                className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${
+                  paymentMethod === "netcash" ? "bg-lime/20" : "bg-muted"
+                }`}
+              >
+                <Check
+                  className={`h-5 w-5 ${paymentMethod === "netcash" ? "text-lime-foreground" : "text-muted-foreground"}`}
+                />
+              </div>
+              <div>
+                <p className="font-bold text-navy">Pay Now via Netcash</p>
+                <p className="text-xs text-muted-foreground">
+                  {isOnceOff
+                    ? "Pay securely by card. You will be redirected to Netcash after confirming."
+                    : "Set up your monthly subscription securely via Netcash. You will be redirected to complete payment."}
+                </p>
+              </div>
+            </button>
+            <button
+              type="button"
+              onClick={() => setPaymentMethod("eft")}
+              className={`flex items-start gap-3 rounded-card border-2 p-4 text-left transition-all ${
+                paymentMethod === "eft"
+                  ? "border-lime bg-lime/10 shadow-sm"
+                  : "border-border bg-card hover:border-lime/50"
+              }`}
+            >
+              <div
+                className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${
+                  paymentMethod === "eft" ? "bg-lime/20" : "bg-muted"
+                }`}
+              >
+                <Check
+                  className={`h-5 w-5 ${paymentMethod === "eft" ? "text-lime-foreground" : "text-muted-foreground"}`}
+                />
+              </div>
+              <div>
+                <p className="font-bold text-navy">Pay via EFT</p>
+                <p className="text-xs text-muted-foreground">
+                  We&apos;ll reserve your spot and show you our banking details to pay manually.
+                </p>
+              </div>
+            </button>
           </div>
+          {paymentMethod === "eft" && (
+            <div className="mt-4">
+              <BankDetailsCard
+                amount={computeTotal()}
+                title="Our Banking Details"
+                note="Your spot will be reserved once you confirm below. Please use the reference number shown on the confirmation page for your payment."
+              />
+            </div>
+          )}
         </div>
 
         {/* Terms & consent */}
@@ -1132,7 +1195,13 @@ export function OnboardingWizard({
             disabled={submitting || !agreedTerms || !signatureData}
             className="rounded-2xl bg-lime px-6 py-3 font-black text-lime-foreground shadow-sm transition-all hover:scale-105 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-40 active:scale-95"
           >
-            {submitting ? "Redirecting to Netcash…" : "Create Account & Pay via Netcash"}
+            {submitting
+              ? paymentMethod === "eft"
+                ? "Saving your enrollment…"
+                : "Redirecting to Netcash…"
+              : paymentMethod === "eft"
+                ? "Create Account & Reserve Spot (Pay via EFT)"
+                : "Create Account & Pay via Netcash"}
           </button>
         </div>
         {(!agreedTerms || !signatureData) && (
