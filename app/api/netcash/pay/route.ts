@@ -13,8 +13,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { headers } from "next/headers"
-import { buildNetcashPaymentForEnrollment } from "@/app/actions/enrollment"
-import { NETCASH_PAY_NOW_URL, buildNetcashPayNowFields } from "@/lib/netcash"
+import { buildNetcashPaymentForEnrollment, buildNetcashPaymentForCartOrder } from "@/app/actions/enrollment"
 
 export async function POST(req: NextRequest) {
   // Require an authenticated session
@@ -54,26 +53,18 @@ export async function POST(req: NextRequest) {
     }
 
     try {
-      const childLabel = childCount > 1 ? `${childCount} children` : "1 child"
-
-      // p3 — description of goods, max 50 chars.
-      const itemDescription = `${orderReference} Cart (${childLabel})`.slice(0, 50)
-
-      // m10 — appended by Netcash as a querystring to the configured Accept/
-      // Decline URL, so the success page can read ?ref=...&name=...
-      const returnQueryParams = `ref=${encodeURIComponent(orderReference)}&name=${encodeURIComponent(parentName)}`
-
-      const formFields = buildNetcashPayNowFields({
-        serviceKey,
+      // Mints a fresh, never-reused Netcash reference for this attempt
+      // (see buildNetcashPaymentForCartOrder) so retried/re-clicked payments
+      // don't get rejected by Netcash with "transaction cannot be processed".
+      const { netcashUrl, formFields } = await buildNetcashPaymentForCartOrder({
         orderReference,
-        amount: totalAmount.toFixed(2),
-        itemDescription,
-        customerEmail: parentEmail,
+        parentName,
+        parentEmail,
         paymentType,
-        returnQueryParams,
+        childCount,
       })
 
-      return NextResponse.json({ netcashUrl: NETCASH_PAY_NOW_URL, formFields })
+      return NextResponse.json({ netcashUrl, formFields })
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       console.error("[netcash-pay] Cart payment build error:", message)

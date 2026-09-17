@@ -677,3 +677,70 @@ export async function getOrderAmountByReference(reference: string): Promise<numb
   const totalCents = rows.reduce((sum, r) => sum + r.amount, 0)
   return totalCents / 100
 }
+
+/**
+ * Build a Netcash Pay Now payment request for a cart checkout order.
+ *
+ * Netcash's p2 reference may only ever be used ONCE. The cart's shared
+ * `orderReference` is stored permanently on every enrollment row in the cart
+ * (used to activate siblings on payment), so it must NOT be sent to Netcash
+ * directly — if the parent's first attempt fails/cancels/times out and they
+ * click "Pay" again, reusing the same reference makes Netcash reject the
+ * retry with "transaction cannot be processed... payment has already been
+ * made". Instead, mint a fresh unique Netcash reference per attempt (still
+ * tied back to the order via the `orders.netcashOrderId` lookup + Extra1),
+ * while leaving the cart's permanent orderReference untouched.
+ */
+export async function buildNetcashPaymentForCartOrder(input: {
+  orderReference: string
+  parentName: string
+  parentEmail: string
+  paymentType: "once-off" | "monthly"
+  childCount: number
+}) {
+  const orderRows = await db
+    .select()
+    .from(orders)
+    .where(eq(orders.netcashOrderId, input.orderReference))
+    .limit(1)
+
+  const order = orderRows[0]
+  if (!order) {
+    throw new Error(`No order found for orderReference: ${input.orderReference}`)
+  }
+
+  const attemptSuffix = Date.now().toString(36).slice(-6).toUpperCase()
+  const netcashReference = `${input.orderReference}-P${attemptSuffix}`.slice(0, 25)
+
+  await db
+    .update(orders)
+    .set({
+      status: "awaiting_payment",
+      netcashOrderId: netcashReference,
+      failureReason: null,
+      updatedAt: new Date(),
+    })
+    .where(eq(orders.id, order.id))
+
+  const totalAmount = order.amount / 100 // cents -> Rands
+  const childLabel = input.childCount > 1 ? `${input.childCount} children` : "1 child"
+  const itemDescription = `${input.orderReference} Cart (${childLabel})`.slice(0, 50)
+  const returnQueryParams = `ref=${encodeURIComponent(input.orderReference)}&name=${encodeURIComponent(input.parentName)}`
+
+  const { buildNetcashPayNowFields } = await import("@/lib/netcash")
+  const serviceKey = process.env.NETCASH_SERVICE_KEY ?? ""
+
+  const formFields = buildNetcashPayNowFields({
+    serviceKey,
+    orderReference: netcashReference,
+    amount: totalAmount.toFixed(2),
+    itemDescription,
+    customerEmail: input.parentEmail,
+    paymentType: input.paymentType,
+    returnQueryParams,
+    extra1: order.enrollmentId ? String(order.enrollmentId) : undefined,
+  })
+
+  const { NETCASH_PAY_NOW_URL } = await import("@/lib/netcash")
+  return { netcashUrl: NETCASH_PAY_NOW_URL, formFields, totalAmount }
+}
