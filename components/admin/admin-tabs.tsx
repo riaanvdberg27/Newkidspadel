@@ -27,7 +27,7 @@ import { AdminBillingManager } from "@/components/admin/admin-billing-manager"
 import type { BillingLedgerEntry, OutstandingEntry, RevenueMonthSummary } from "@/app/actions/subscription-months"
 import { AdminShopManager } from "@/components/admin/admin-shop-manager"
 import type { ShopProductWithVariants } from "@/app/actions/shop"
-import type { ShopOrder } from "@/lib/db/schema"
+import type { ShopOrder, ShopCategory } from "@/lib/db/schema"
 
 type Tab = "clubs" | "schools" | "packages" | "signups" | "contact" | "coaches" | "coaching-portal" | "referrals" | "payments" | "billing" | "impersonate" | "moments" | "site-images" | "shop"
 
@@ -57,6 +57,7 @@ export function AdminTabs({
   billingRevenue,
   shopProducts,
   shopOrders,
+  shopCategories,
 }: {
   clubs: Club[]
   schools: School[]
@@ -83,6 +84,7 @@ export function AdminTabs({
   billingRevenue: RevenueMonthSummary[]
   shopProducts: ShopProductWithVariants[]
   shopOrders: ShopOrder[]
+  shopCategories: ShopCategory[]
 }) {
   const [tab, setTab] = useState<Tab>("clubs")
 
@@ -160,7 +162,9 @@ export function AdminTabs({
         {tab === "contact" && <AdminContactManager initialContacts={contacts} />}
         {tab === "moments" && <AdminMomentsManager initialMoments={moments} />}
         {tab === "site-images" && <AdminSiteImagesManager initialImages={siteImages} />}
-        {tab === "shop" && <AdminShopManager initialProducts={shopProducts} initialOrders={shopOrders} />}
+        {tab === "shop" && (
+          <AdminShopManager initialProducts={shopProducts} initialOrders={shopOrders} initialCategories={shopCategories} />
+        )}
         {tab === "impersonate" && <AdminImpersonationManager />}
       </div>
     </div>

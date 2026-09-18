@@ -721,6 +721,22 @@ export type SessionAttendance = typeof sessionAttendance.$inferSelect
 // ---- Online Shop (padel gear, apparel, caps) ----
 
 /**
+ * shop_categories — admin-managed categories that group shop products
+ * (e.g. "Padel Gear", "Apparel", "Caps"). Products are added under a category.
+ */
+export const shopCategories = pgTable("shop_categories", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  slug: text("slug").notNull().unique(),
+  sortOrder: integer("sortOrder").notNull().default(0),
+  published: boolean("published").notNull().default(true),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+  updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+})
+
+export type ShopCategory = typeof shopCategories.$inferSelect
+
+/**
  * shop_products — one row per item sold in the shop.
  * `price` is the base/default price in cents. If a product `hasVariants`,
  * each variant may override the price (e.g. larger sizes cost more).
@@ -730,8 +746,9 @@ export const shopProducts = pgTable("shop_products", {
   name: text("name").notNull(),
   slug: text("slug").notNull().unique(),
   description: text("description").notNull().default(""),
-  // 'padel-gear' | 'apparel' | 'caps' | 'other' (free text, admin can add new categories)
-  category: text("category").notNull().default("padel-gear"),
+  categoryId: integer("categoryId")
+    .notNull()
+    .references(() => shopCategories.id),
   price: integer("price").notNull().default(0), // cents
   images: jsonb("images").$type<string[]>().notNull().default([]), // array of blob URLs, first = primary
   hasVariants: boolean("hasVariants").notNull().default(false),
