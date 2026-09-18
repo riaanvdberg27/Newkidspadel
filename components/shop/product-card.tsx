@@ -17,7 +17,7 @@ export function ProductCard({ product }: { product: ShopProductWithVariants }) {
 
   return (
     <Link
-      href={`/shop/${product.slug}`}
+      href={`/shop/${encodeURIComponent(product.slug)}`}
       className="group flex flex-col overflow-hidden rounded-card border border-border bg-card shadow-sm transition-shadow hover:shadow-md"
     >
       <div className="relative aspect-square w-full overflow-hidden bg-muted">

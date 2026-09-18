@@ -45,6 +45,19 @@ function makeEmptyProduct(categoryId: number): ShopProductInput {
   }
 }
 
+/**
+ * Slugs are used directly in URLs (/shop/[slug]). Spaces or punctuation in a
+ * slug break links and page lookups, so every slug is sanitized to a clean,
+ * URL-safe, kebab-case value before it's ever saved or typed further.
+ */
+function slugify(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+}
+
 function formatCents(cents: number) {
   return `R${(cents / 100).toLocaleString("en-ZA", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
@@ -261,7 +274,7 @@ function CategoryForm({
 
   function submit(e: React.FormEvent) {
     e.preventDefault()
-    onSubmit({ name, slug, sortOrder: Number(sortOrder), published })
+    onSubmit({ name, slug: slugify(slug), sortOrder: Number(sortOrder), published })
   }
 
   return (
@@ -545,7 +558,7 @@ function ProductForm({
     e.preventDefault()
     onSubmit({
       name,
-      slug,
+      slug: slugify(slug),
       description,
       categoryId: Number(categoryId),
       price: Math.max(0, Number(price)),
