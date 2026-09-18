@@ -26,6 +26,7 @@ export function ProductCard({ product }: { product: ShopProductWithVariants }) {
             src={blobImage(image, 500) ?? "/placeholder.svg"}
             alt={product.name}
             fill
+            unoptimized
             crossOrigin="anonymous"
             className="object-cover transition-transform duration-300 group-hover:scale-105"
           />

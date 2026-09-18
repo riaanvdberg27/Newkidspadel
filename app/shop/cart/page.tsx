@@ -42,8 +42,9 @@ export default function CartPage() {
                     <Image
                       src={blobImage(line.image, 128) ?? "/placeholder.svg"}
                       alt={line.name}
-                      fill
-                      crossOrigin="anonymous"
+            fill
+            unoptimized
+            crossOrigin="anonymous"
                       className="object-cover"
                     />
                   ) : null}
