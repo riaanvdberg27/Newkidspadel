@@ -26,7 +26,7 @@ import type { ShopOrder, ShopCategory } from "@/lib/db/schema"
 import { blobImage } from "@/lib/blob"
 import { upload } from "@vercel/blob/client"
 
-const KIDS_SIZES = ["4-5", "5-6", "7-8", "9-10", "11-12", "13-14"]
+const KIDS_SIZES = ["5-6", "7-8", "9-10", "11-12", "13-14", "15-16", "17-18"]
 const ADULT_SIZES = ["S", "M", "L", "XL"]
 
 function makeEmptyProduct(categoryId: number): ShopProductInput {
