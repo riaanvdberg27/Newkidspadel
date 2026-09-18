@@ -39,7 +39,7 @@ export function ProductCard({ product }: { product: ShopProductWithVariants }) {
         )}
       </div>
       <div className="flex flex-1 flex-col gap-1 p-4">
-        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{product.category}</p>
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{product.categoryName}</p>
         <h3 className="text-base font-bold text-navy">{product.name}</h3>
         <p className="mt-auto text-sm font-bold text-navy">
           {minPrice === maxPrice ? `R${minPrice.toFixed(2)}` : `R${minPrice.toFixed(2)} – R${maxPrice.toFixed(2)}`}

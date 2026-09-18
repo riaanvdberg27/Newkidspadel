@@ -1,11 +1,14 @@
-import { getShopProducts } from "@/app/actions/shop"
+import { getShopProducts, getShopCategories } from "@/app/actions/shop"
 import { ProductCard } from "@/components/shop/product-card"
 import { ShoppingBag } from "lucide-react"
 
 export default async function ShopPage() {
-  const products = await getShopProducts()
+  const [products, allCategories] = await Promise.all([getShopProducts(), getShopCategories()])
 
-  const categories = [...new Set(products.map((p) => p.category))]
+  const categorySlugsWithProducts = new Set(products.map((p) => p.categorySlug))
+  const categories = allCategories
+    .filter((c) => categorySlugsWithProducts.has(c.slug))
+    .map((c) => [c.slug, c.name] as const)
 
   return (
     <main className="min-h-[70vh] bg-background">
@@ -30,11 +33,11 @@ export default async function ShopPage() {
           </div>
         ) : (
           <div className="space-y-10">
-            {categories.map((category) => (
-              <section key={category}>
-                <h2 className="mb-4 text-lg font-bold text-navy">{category}</h2>
+            {categories.map(([slug, name]) => (
+              <section key={slug}>
+                <h2 className="mb-4 text-lg font-bold text-navy">{name}</h2>
                 <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-                  {products.filter((p) => p.category === category).map((product) => (
+                  {products.filter((p) => p.categorySlug === slug).map((product) => (
                     <ProductCard key={product.id} product={product} />
                   ))}
                 </div>

@@ -4,39 +4,45 @@ import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import {
   Pencil, Plus, Trash2, X, Upload, ImageIcon, Eye, EyeOff, Clock, Package,
-  CheckCircle2, Truck, XCircle, RefreshCw,
+  CheckCircle2, Truck, XCircle, RefreshCw, Tag,
 } from "lucide-react"
 import {
   createShopProduct,
   updateShopProduct,
   deleteShopProduct,
   toggleShopProductPublished,
+  createShopCategory,
+  updateShopCategory,
+  deleteShopCategory,
   adminConfirmEftPayment,
   adminUpdateShopOrderFulfillment,
   adminCancelShopOrder,
   type ShopProductWithVariants,
   type ShopProductInput,
   type ShopVariantInput,
+  type ShopCategoryInput,
 } from "@/app/actions/shop"
-import type { ShopOrder } from "@/lib/db/schema"
+import type { ShopOrder, ShopCategory } from "@/lib/db/schema"
 import { blobImage } from "@/lib/blob"
+import { upload } from "@vercel/blob/client"
 
-const CATEGORIES = ["apparel", "gear", "accessories"]
 const KIDS_SIZES = ["4-5", "5-6", "7-8", "9-10", "11-12", "13-14"]
 const ADULT_SIZES = ["S", "M", "L", "XL"]
 
-const EMPTY: ShopProductInput = {
-  name: "",
-  slug: "",
-  description: "",
-  category: "apparel",
-  price: 0,
-  images: [],
-  hasVariants: false,
-  variants: [],
-  leadTimeDays: null,
-  published: true,
-  sortOrder: 0,
+function makeEmptyProduct(categoryId: number): ShopProductInput {
+  return {
+    name: "",
+    slug: "",
+    description: "",
+    categoryId,
+    price: 0,
+    images: [],
+    hasVariants: false,
+    variants: [],
+    leadTimeDays: null,
+    published: true,
+    sortOrder: 0,
+  }
 }
 
 function formatCents(cents: number) {
@@ -66,16 +72,24 @@ const PAYMENT_STYLES: Record<string, string> = {
 export function AdminShopManager({
   initialProducts,
   initialOrders,
+  initialCategories,
 }: {
   initialProducts: ShopProductWithVariants[]
   initialOrders: ShopOrder[]
+  initialCategories: ShopCategory[]
 }) {
-  const [section, setSection] = useState<"products" | "orders">("products")
+  const [section, setSection] = useState<"categories" | "products" | "orders">("products")
+
+  const labels: Record<typeof section, string> = {
+    categories: `Categories (${initialCategories.length})`,
+    products: `Products (${initialProducts.length})`,
+    orders: `Orders (${initialOrders.length})`,
+  }
 
   return (
     <div>
       <div className="flex gap-1 rounded-lg border border-border bg-muted/40 p-1 w-fit">
-        {(["products", "orders"] as const).map((s) => (
+        {(["categories", "products", "orders"] as const).map((s) => (
           <button
             key={s}
             onClick={() => setSection(s)}
@@ -83,19 +97,205 @@ export function AdminShopManager({
               section === s ? "bg-card text-navy shadow-sm" : "text-muted-foreground hover:text-navy"
             }`}
           >
-            {s === "products" ? `Products (${initialProducts.length})` : `Orders (${initialOrders.length})`}
+            {labels[s]}
           </button>
         ))}
       </div>
 
       <div className="mt-6">
-        {section === "products" ? (
-          <ShopProductsSection initialProducts={initialProducts} />
-        ) : (
-          <ShopOrdersSection initialOrders={initialOrders} />
+        {section === "categories" && <ShopCategoriesSection initialCategories={initialCategories} />}
+        {section === "products" && (
+          <ShopProductsSection initialProducts={initialProducts} categories={initialCategories} />
         )}
+        {section === "orders" && <ShopOrdersSection initialOrders={initialOrders} />}
       </div>
     </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Categories
+// ---------------------------------------------------------------------------
+
+const EMPTY_CATEGORY: ShopCategoryInput = { name: "", slug: "", sortOrder: 0, published: true }
+
+function ShopCategoriesSection({ initialCategories }: { initialCategories: ShopCategory[] }) {
+  const router = useRouter()
+  const [creating, setCreating] = useState(false)
+  const [editing, setEditing] = useState<ShopCategory | null>(null)
+  const [pending, startTransition] = useTransition()
+  const [confirmDelete, setConfirmDelete] = useState<{ id: number; name: string } | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  function handleSave(input: ShopCategoryInput) {
+    setError(null)
+    startTransition(async () => {
+      try {
+        if (editing) await updateShopCategory(editing.id, input)
+        else await createShopCategory(input)
+        setCreating(false)
+        setEditing(null)
+        router.refresh()
+      } catch (e: unknown) {
+        setError(e instanceof Error ? e.message : "Something went wrong")
+      }
+    })
+  }
+
+  function handleDelete(id: number) {
+    setError(null)
+    startTransition(async () => {
+      try {
+        await deleteShopCategory(id)
+        setConfirmDelete(null)
+        router.refresh()
+      } catch (e: unknown) {
+        setError(e instanceof Error ? e.message : "Could not delete category")
+        setConfirmDelete(null)
+      }
+    })
+  }
+
+  return (
+    <div>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-xl font-bold text-navy">Shop Categories</h2>
+        <button
+          onClick={() => { setCreating(true); setEditing(null); setError(null) }}
+          className="inline-flex items-center gap-2 rounded-md bg-lime px-4 py-2 text-sm font-bold text-lime-foreground transition-colors hover:bg-lime/90"
+        >
+          <Plus className="h-4 w-4" />
+          Add Category
+        </button>
+      </div>
+
+      {error && (
+        <div className="mt-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
+      )}
+
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {initialCategories.map((c) => (
+          <article key={c.id} className={`rounded-card border bg-card p-4 shadow-sm ${!c.published ? "border-dashed border-muted-foreground/30 opacity-80" : "border-border"}`}>
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Tag className="h-4 w-4 text-lime" />
+                <h3 className="font-bold text-navy">{c.name}</h3>
+              </div>
+              <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-bold ${c.published ? "bg-lime/20 text-navy" : "bg-muted-foreground/20 text-muted-foreground"}`}>
+                {c.published ? "Visible" : "Hidden"}
+              </span>
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">/shop · {c.slug}</p>
+
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                onClick={() => { setEditing(c); setCreating(false); setError(null) }}
+                disabled={pending}
+                className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-semibold text-navy transition-colors hover:bg-muted disabled:opacity-50"
+              >
+                <Pencil className="h-3.5 w-3.5 text-lime" />
+                Edit
+              </button>
+              <button
+                onClick={() => setConfirmDelete({ id: c.id, name: c.name })}
+                disabled={pending}
+                className="inline-flex items-center gap-1.5 rounded-md border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 transition-colors hover:bg-red-100 disabled:opacity-50"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Delete
+              </button>
+            </div>
+
+            {confirmDelete?.id === c.id && (
+              <div className="mt-3 rounded-md border border-red-200 bg-red-50 p-3">
+                <p className="text-xs font-semibold text-red-800">Delete <strong>{c.name}</strong>? This cannot be undone.</p>
+                <div className="mt-2 flex gap-2">
+                  <button onClick={() => handleDelete(c.id)} disabled={pending} className="rounded-md bg-red-600 px-3 py-1 text-xs font-bold text-white disabled:opacity-50 hover:bg-red-700">
+                    {pending ? "Deleting…" : "Delete"}
+                  </button>
+                  <button onClick={() => setConfirmDelete(null)} className="rounded-md border border-border px-3 py-1 text-xs font-semibold text-navy hover:bg-muted">
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+          </article>
+        ))}
+
+        {initialCategories.length === 0 && (
+          <p className="col-span-full rounded-card border border-dashed border-border bg-card p-8 text-center text-muted-foreground">
+            No categories yet. Click &quot;Add Category&quot; to create your first one (e.g. Apparel, Gear, Accessories).
+          </p>
+        )}
+      </div>
+
+      {(creating || editing) && (
+        <Modal title={editing ? `Edit ${editing.name}` : "Add New Category"} onClose={() => { setCreating(false); setEditing(null) }}>
+          <CategoryForm
+            category={editing}
+            pending={pending}
+            onSubmit={handleSave}
+            onCancel={() => { setCreating(false); setEditing(null) }}
+          />
+        </Modal>
+      )}
+    </div>
+  )
+}
+
+function CategoryForm({
+  category,
+  pending,
+  onSubmit,
+  onCancel,
+}: {
+  category: ShopCategory | null
+  pending: boolean
+  onSubmit: (input: ShopCategoryInput) => void
+  onCancel: () => void
+}) {
+  const [name, setName] = useState(category?.name ?? "")
+  const [slug, setSlug] = useState(category?.slug ?? "")
+  const [sortOrder, setSortOrder] = useState(String(category?.sortOrder ?? 0))
+  const [published, setPublished] = useState(category?.published ?? true)
+
+  function submit(e: React.FormEvent) {
+    e.preventDefault()
+    onSubmit({ name, slug, sortOrder: Number(sortOrder), published })
+  }
+
+  return (
+    <form onSubmit={submit} className="space-y-5">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="Name" required>
+          <input type="text" value={name} required onChange={(e) => setName(e.target.value)} className="mt-2 w-full rounded-md border border-border bg-background px-3 py-2 outline-none focus:border-lime" />
+        </Field>
+        <Field label="Slug (URL id)" required>
+          <input type="text" value={slug} required placeholder="apparel" onChange={(e) => setSlug(e.target.value)} className="mt-2 w-full rounded-md border border-border bg-background px-3 py-2 outline-none focus:border-lime" />
+        </Field>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="Sort Order">
+          <input type="number" value={sortOrder} onChange={(e) => setSortOrder(e.target.value)} className="mt-2 w-full rounded-md border border-border bg-background px-3 py-2 outline-none focus:border-lime" />
+        </Field>
+        <div className="flex items-end pb-2">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" checked={published} onChange={(e) => setPublished(e.target.checked)} className="h-4 w-4 accent-lime" />
+            <span className="text-sm font-semibold text-navy">Published (visible in shop)</span>
+          </label>
+        </div>
+      </div>
+
+      <div className="flex justify-end gap-2 pt-2">
+        <button type="button" onClick={onCancel} className="rounded-md border border-border px-4 py-2 text-sm font-semibold text-navy hover:bg-muted">
+          Cancel
+        </button>
+        <button type="submit" disabled={pending} className="rounded-md bg-lime px-5 py-2 text-sm font-bold text-lime-foreground disabled:opacity-50 hover:bg-lime/90">
+          {pending ? "Saving…" : category ? "Save Changes" : "Add Category"}
+        </button>
+      </div>
+    </form>
   )
 }
 
@@ -103,7 +303,13 @@ export function AdminShopManager({
 // Products
 // ---------------------------------------------------------------------------
 
-function ShopProductsSection({ initialProducts }: { initialProducts: ShopProductWithVariants[] }) {
+function ShopProductsSection({
+  initialProducts,
+  categories,
+}: {
+  initialProducts: ShopProductWithVariants[]
+  categories: ShopCategory[]
+}) {
   const router = useRouter()
   const [creating, setCreating] = useState(false)
   const [editing, setEditing] = useState<ShopProductWithVariants | null>(null)
@@ -169,7 +375,7 @@ function ShopProductsSection({ initialProducts }: { initialProducts: ShopProduct
               <div className="p-4">
                 <div className="flex items-start justify-between gap-2">
                   <h3 className="font-bold text-navy">{p.name}</h3>
-                  <span className="shrink-0 rounded-full border border-border px-2 py-0.5 text-xs capitalize text-muted-foreground">{p.category}</span>
+                  <span className="shrink-0 rounded-full border border-border px-2 py-0.5 text-xs capitalize text-muted-foreground">{p.categoryName}</span>
                 </div>
                 <p className="mt-1 text-sm font-semibold text-lime">{formatCents(p.price)}</p>
                 {p.leadTimeDays != null && (
@@ -237,6 +443,7 @@ function ShopProductsSection({ initialProducts }: { initialProducts: ShopProduct
         <Modal title={editing ? `Edit ${editing.name}` : "Add New Product"} onClose={() => { setCreating(false); setEditing(null) }}>
           <ProductForm
             product={editing}
+            categories={categories}
             pending={pending}
             onSubmit={handleSave}
             onCancel={() => { setCreating(false); setEditing(null) }}
@@ -249,11 +456,13 @@ function ShopProductsSection({ initialProducts }: { initialProducts: ShopProduct
 
 function ProductForm({
   product,
+  categories,
   pending,
   onSubmit,
   onCancel,
 }: {
   product: ShopProductWithVariants | null
+  categories: ShopCategory[]
   pending: boolean
   onSubmit: (input: ShopProductInput) => void
   onCancel: () => void
@@ -261,7 +470,7 @@ function ProductForm({
   const [name, setName] = useState(product?.name ?? "")
   const [slug, setSlug] = useState(product?.slug ?? "")
   const [description, setDescription] = useState(product?.description ?? "")
-  const [category, setCategory] = useState(product?.category ?? "apparel")
+  const [categoryId, setCategoryId] = useState(product?.categoryId ?? categories[0]?.id ?? 0)
   const [price, setPrice] = useState(String(product ? product.price / 100 : 0))
   const [images, setImages] = useState<string[]>(product?.images ?? [])
   const [hasVariants, setHasVariants] = useState(product?.hasVariants ?? false)
@@ -280,12 +489,13 @@ function ProductForm({
     setError(null)
     try {
       for (const file of Array.from(files)) {
-        const fd = new FormData()
-        fd.append("file", file)
-        const res = await fetch("/api/admin/upload-shop-image", { method: "POST", body: fd })
-        const json = await res.json()
-        if (!res.ok) throw new Error(json.error ?? "Upload failed")
-        setImages((prev) => [...prev, json.url])
+        const result = await upload(file.name, file, {
+          access: "private",
+          handleUploadUrl: "/api/admin/upload-shop-image",
+          contentType: file.type,
+          multipart: file.size > 5 * 1024 * 1024,
+        })
+        setImages((prev) => [...prev, result.url])
       }
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Upload failed")
@@ -318,7 +528,7 @@ function ProductForm({
       name,
       slug,
       description,
-      category,
+      categoryId: Number(categoryId),
       price: Math.max(0, Number(price)),
       images,
       hasVariants,
@@ -346,9 +556,10 @@ function ProductForm({
 
       <div className="grid gap-4 sm:grid-cols-3">
         <Field label="Category">
-          <select value={category} onChange={(e) => setCategory(e.target.value)} className="mt-2 w-full rounded-md border border-border bg-background px-3 py-2 capitalize outline-none focus:border-lime">
-            {CATEGORIES.map((c) => (
-              <option key={c} value={c} className="capitalize">{c}</option>
+          <select value={categoryId} onChange={(e) => setCategoryId(Number(e.target.value))} className="mt-2 w-full rounded-md border border-border bg-background px-3 py-2 outline-none focus:border-lime">
+            {categories.length === 0 && <option value={0}>Add a category first</option>}
+            {categories.map((c) => (
+              <option key={c.id} value={c.id}>{c.name}</option>
             ))}
           </select>
         </Field>

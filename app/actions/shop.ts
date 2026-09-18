@@ -6,11 +6,13 @@ import {
   shopProducts,
   shopProductVariants,
   shopOrders,
+  shopCategories,
   type ShopProduct,
   type ShopProductVariant,
   type ShopOrder,
+  type ShopCategory,
 } from "@/lib/db/schema"
-import { and, desc, eq, inArray } from "drizzle-orm"
+import { and, asc, desc, eq, inArray } from "drizzle-orm"
 import { headers } from "next/headers"
 import { revalidatePath } from "next/cache"
 import { requireAdmin } from "@/lib/admin-auth"
@@ -35,7 +37,7 @@ export type ShopProductInput = {
   name: string
   slug: string
   description: string
-  category: string
+  categoryId: number
   price: number // Rands
   images: string[] // blob pathnames
   hasVariants: boolean
@@ -45,7 +47,18 @@ export type ShopProductInput = {
   sortOrder: number
 }
 
-export type ShopProductWithVariants = ShopProduct & { variants: ShopProductVariant[] }
+export type ShopCategoryInput = {
+  name: string
+  slug: string
+  sortOrder: number
+  published: boolean
+}
+
+export type ShopProductWithVariants = ShopProduct & {
+  variants: ShopProductVariant[]
+  categoryName: string
+  categorySlug: string
+}
 
 function toRands(cents: number) {
   return cents / 100
@@ -58,12 +71,33 @@ function toCents(rands: number) {
 // Storefront reads (public)
 // ---------------------------------------------------------------------------
 
-export async function getShopProducts(): Promise<ShopProductWithVariants[]> {
-  const products = await db
-    .select()
+function attachVariants<T extends ShopProduct & { categoryName: string; categorySlug: string }>(
+  products: T[],
+  variants: ShopProductVariant[],
+): (T & { variants: ShopProductVariant[] })[] {
+  return products.map((p) => ({
+    ...p,
+    variants: variants.filter((v) => v.productId === p.id),
+  }))
+}
+
+async function fetchProductsWithCategory(where?: ReturnType<typeof eq>) {
+  const rows = await db
+    .select({
+      product: shopProducts,
+      categoryName: shopCategories.name,
+      categorySlug: shopCategories.slug,
+    })
     .from(shopProducts)
-    .where(eq(shopProducts.published, true))
+    .innerJoin(shopCategories, eq(shopProducts.categoryId, shopCategories.id))
+    .where(where)
     .orderBy(shopProducts.sortOrder, desc(shopProducts.createdAt))
+
+  return rows.map((r) => ({ ...r.product, categoryName: r.categoryName, categorySlug: r.categorySlug }))
+}
+
+export async function getShopProducts(): Promise<ShopProductWithVariants[]> {
+  const products = await fetchProductsWithCategory(eq(shopProducts.published, true))
 
   if (products.length === 0) return []
 
@@ -73,15 +107,12 @@ export async function getShopProducts(): Promise<ShopProductWithVariants[]> {
     .where(inArray(shopProductVariants.productId, products.map((p) => p.id)))
     .orderBy(shopProductVariants.sortOrder)
 
-  return products.map((p) => ({
-    ...p,
-    variants: variants.filter((v) => v.productId === p.id),
-  }))
+  return attachVariants(products, variants)
 }
 
 export async function getShopProduct(slug: string): Promise<ShopProductWithVariants | null> {
-  const rows = await db.select().from(shopProducts).where(eq(shopProducts.slug, slug)).limit(1)
-  const product = rows[0]
+  const products = await fetchProductsWithCategory(eq(shopProducts.slug, slug))
+  const product = products[0]
   if (!product || !product.published) return null
   const variants = await db
     .select()
@@ -97,17 +128,74 @@ export async function getShopProduct(slug: string): Promise<ShopProductWithVaria
 
 export async function adminGetShopProducts(): Promise<ShopProductWithVariants[]> {
   await requireAdmin()
-  const products = await db.select().from(shopProducts).orderBy(shopProducts.sortOrder, desc(shopProducts.createdAt))
+  const products = await fetchProductsWithCategory()
   if (products.length === 0) return []
   const variants = await db
     .select()
     .from(shopProductVariants)
     .where(inArray(shopProductVariants.productId, products.map((p) => p.id)))
     .orderBy(shopProductVariants.sortOrder)
-  return products.map((p) => ({
-    ...p,
-    variants: variants.filter((v) => v.productId === p.id),
-  }))
+  return attachVariants(products, variants)
+}
+
+// ---------------------------------------------------------------------------
+// Admin CRUD — categories
+// ---------------------------------------------------------------------------
+
+export async function getShopCategories(): Promise<ShopCategory[]> {
+  return db.select().from(shopCategories).where(eq(shopCategories.published, true)).orderBy(asc(shopCategories.sortOrder))
+}
+
+export async function adminGetShopCategories(): Promise<ShopCategory[]> {
+  await requireAdmin()
+  return db.select().from(shopCategories).orderBy(asc(shopCategories.sortOrder))
+}
+
+export async function createShopCategory(input: ShopCategoryInput) {
+  await requireAdmin()
+  const [category] = await db
+    .insert(shopCategories)
+    .values({
+      name: input.name.trim(),
+      slug: input.slug.trim(),
+      sortOrder: input.sortOrder,
+      published: input.published,
+    })
+    .returning()
+  revalidatePath("/admin")
+  revalidatePath("/shop")
+  return { ok: true, id: category.id }
+}
+
+export async function updateShopCategory(id: number, input: ShopCategoryInput) {
+  await requireAdmin()
+  await db
+    .update(shopCategories)
+    .set({
+      name: input.name.trim(),
+      slug: input.slug.trim(),
+      sortOrder: input.sortOrder,
+      published: input.published,
+      updatedAt: new Date(),
+    })
+    .where(eq(shopCategories.id, id))
+  revalidatePath("/admin")
+  revalidatePath("/shop")
+  return { ok: true }
+}
+
+export async function deleteShopCategory(id: number) {
+  await requireAdmin()
+  const existing = await db
+    .select({ id: shopProducts.id })
+    .from(shopProducts)
+    .where(eq(shopProducts.categoryId, id))
+    .limit(1)
+  if (existing.length > 0) throw new Error("Move or delete the products in this category first")
+  await db.delete(shopCategories).where(eq(shopCategories.id, id))
+  revalidatePath("/admin")
+  revalidatePath("/shop")
+  return { ok: true }
 }
 
 // ---------------------------------------------------------------------------
@@ -123,7 +211,7 @@ export async function createShopProduct(input: ShopProductInput) {
       name: input.name.trim(),
       slug: input.slug.trim(),
       description: input.description.trim(),
-      category: input.category,
+      categoryId: input.categoryId,
       price: toCents(input.price),
       images: input.images,
       hasVariants: input.hasVariants,
@@ -158,7 +246,7 @@ export async function updateShopProduct(id: number, input: ShopProductInput) {
       name: input.name.trim(),
       slug: input.slug.trim(),
       description: input.description.trim(),
-      category: input.category,
+      categoryId: input.categoryId,
       price: toCents(input.price),
       images: input.images,
       hasVariants: input.hasVariants,
