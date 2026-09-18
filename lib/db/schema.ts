@@ -692,6 +692,23 @@ export const siteImages = pgTable("site_images", {
 
 export type SiteImage = typeof siteImages.$inferSelect
 
+// ---- Sponsors (admin-managed logos shown in the site-wide sponsors section) ----
+
+export const sponsors = pgTable("sponsors", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  // Blob pathname for the sponsor's logo, proxied through /api/blob
+  logoUrl: text("logoUrl").notNull(),
+  // Optional link to the sponsor's website — logo becomes clickable when set
+  websiteUrl: text("websiteUrl"),
+  published: boolean("published").notNull().default(true),
+  sortOrder: integer("sortOrder").notNull().default(0),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+  updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+})
+
+export type Sponsor = typeof sponsors.$inferSelect
+
 // ---- Session Attendance (coaching portal) ----
 
 /**

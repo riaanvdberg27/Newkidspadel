@@ -28,8 +28,10 @@ import type { BillingLedgerEntry, OutstandingEntry, RevenueMonthSummary } from "
 import { AdminShopManager } from "@/components/admin/admin-shop-manager"
 import type { ShopProductWithVariants } from "@/app/actions/shop"
 import type { ShopOrder, ShopCategory } from "@/lib/db/schema"
+import { AdminSponsorsManager } from "@/components/admin/admin-sponsors-manager"
+import type { Sponsor } from "@/lib/db/schema"
 
-type Tab = "clubs" | "schools" | "packages" | "signups" | "contact" | "coaches" | "coaching-portal" | "referrals" | "payments" | "billing" | "impersonate" | "moments" | "site-images" | "shop"
+type Tab = "clubs" | "schools" | "packages" | "signups" | "contact" | "coaches" | "coaching-portal" | "referrals" | "payments" | "billing" | "impersonate" | "moments" | "site-images" | "shop" | "sponsors"
 
 export function AdminTabs({
   clubs,
@@ -58,6 +60,7 @@ export function AdminTabs({
   shopProducts,
   shopOrders,
   shopCategories,
+  sponsors,
 }: {
   clubs: Club[]
   schools: School[]
@@ -85,6 +88,7 @@ export function AdminTabs({
   shopProducts: ShopProductWithVariants[]
   shopOrders: ShopOrder[]
   shopCategories: ShopCategory[]
+  sponsors: Sponsor[]
 }) {
   const [tab, setTab] = useState<Tab>("clubs")
 
@@ -96,6 +100,7 @@ export function AdminTabs({
     { id: "coaches", label: "Coaches" },
     { id: "coaching-portal", label: "Coaching Portal" },
     { id: "shop", label: "Shop" },
+    { id: "sponsors", label: "Sponsors" },
     { id: "payments", label: "Payments" },
     { id: "billing", label: "Billing" },
     { id: "referrals", label: "Referrals & Vouchers" },
@@ -165,6 +170,7 @@ export function AdminTabs({
         {tab === "shop" && (
           <AdminShopManager initialProducts={shopProducts} initialOrders={shopOrders} initialCategories={shopCategories} />
         )}
+        {tab === "sponsors" && <AdminSponsorsManager initialSponsors={sponsors} />}
         {tab === "impersonate" && <AdminImpersonationManager />}
       </div>
     </div>
