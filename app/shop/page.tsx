@@ -2,6 +2,11 @@ import { getShopProducts, getShopCategories } from "@/app/actions/shop"
 import { ProductCard } from "@/components/shop/product-card"
 import { ShoppingBag } from "lucide-react"
 
+// Always read fresh from the database — this page has no dynamic APIs of its
+// own, so without this Next.js treats it as static and serves a cached copy
+// that only reflects whatever products existed at deploy/build time.
+export const dynamic = "force-dynamic"
+
 export default async function ShopPage() {
   const [products, allCategories] = await Promise.all([getShopProducts(), getShopCategories()])
 
