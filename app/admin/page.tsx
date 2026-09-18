@@ -13,6 +13,7 @@ import { getAllMoments } from "@/app/actions/moments"
 import { getAllSiteImages } from "@/app/actions/site-images"
 import { AdminTabs } from "@/components/admin/admin-tabs"
 import { getBillingLedger, getOutstandingReport, getRevenueReport, backfillAllEnrollments } from "@/app/actions/subscription-months"
+import { adminGetShopProducts, adminGetShopOrders } from "@/app/actions/shop"
 
 export const metadata = {
   title: "Admin Dashboard | Next Gen Padel",
@@ -26,7 +27,7 @@ export default async function AdminPage() {
   // Auto-backfill billing months for all active enrollments (idempotent)
   await backfillAllEnrollments().catch(() => {})
 
-  const [clubs, schools, schoolCoachAssignments, packages, signups, contacts, coaches, coachOptions, referrals, vouchers, campaigns, allPayments, allOrders, allSubscriptions, webhookLogs, moments, siteImages, billingLedger, billingOutstanding, billingRevenue] =
+  const [clubs, schools, schoolCoachAssignments, packages, signups, contacts, coaches, coachOptions, referrals, vouchers, campaigns, allPayments, allOrders, allSubscriptions, webhookLogs, moments, siteImages, billingLedger, billingOutstanding, billingRevenue, shopProducts, shopOrders] =
     await Promise.all([
       getAllClubsAdmin(),
       getAllSchoolsAdmin(),
@@ -48,6 +49,8 @@ export default async function AdminPage() {
       getBillingLedger().catch(() => []),
       getOutstandingReport().catch(() => []),
       getRevenueReport().catch(() => []),
+      adminGetShopProducts().catch(() => []),
+      adminGetShopOrders().catch(() => []),
     ])
 
   // Load initial coaching portal data for the first coach
@@ -105,6 +108,8 @@ export default async function AdminPage() {
           billingLedger={billingLedger}
           billingOutstanding={billingOutstanding}
           billingRevenue={billingRevenue}
+          shopProducts={shopProducts}
+          shopOrders={shopOrders}
         />
       </section>
     </main>

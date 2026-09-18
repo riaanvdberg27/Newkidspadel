@@ -239,8 +239,9 @@ export function OnboardingWizard({
 
     try {
       // 1. Auth — sign up or sign in
+      const email = parent.email.trim()
       const { error: signUpError } = await authClient.signUp.email({
-        email: parent.email,
+        email,
         password: parent.password,
         name: `${parent.firstName} ${parent.lastName}`.trim(),
       })
@@ -250,7 +251,7 @@ export function OnboardingWizard({
           (signUpError.message ?? "").toLowerCase().includes("already exists")
         if (isExisting) {
           const { error: signInError } = await authClient.signIn.email({
-            email: parent.email,
+            email,
             password: parent.password,
           })
           if (signInError) {
@@ -289,7 +290,7 @@ export function OnboardingWizard({
         parent: {
           firstName: parent.firstName,
           lastName: parent.lastName,
-          email: parent.email,
+          email,
           mobile: parent.mobile,
         },
         cartItems,
@@ -326,7 +327,7 @@ export function OnboardingWizard({
           totalAmount,
           childCount,
           parentName: `${parent.firstName} ${parent.lastName}`.trim(),
-          parentEmail: parent.email,
+          parentEmail: email,
           paymentType: isOnceOff ? "once-off" : "monthly",
         }),
       })
@@ -863,7 +864,7 @@ export function OnboardingWizard({
               label="Email"
               type="email"
               value={parent.email}
-              onChange={(v) => setParent({ ...parent, email: v })}
+              onChange={(v) => setParent({ ...parent, email: v.trim() })}
             />
             <div className="space-y-1">
               <Field

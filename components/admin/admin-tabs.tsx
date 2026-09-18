@@ -25,8 +25,11 @@ import { AdminSiteImagesManager } from "@/components/admin/admin-site-images-man
 import type { SiteImageRow } from "@/app/actions/site-images"
 import { AdminBillingManager } from "@/components/admin/admin-billing-manager"
 import type { BillingLedgerEntry, OutstandingEntry, RevenueMonthSummary } from "@/app/actions/subscription-months"
+import { AdminShopManager } from "@/components/admin/admin-shop-manager"
+import type { ShopProductWithVariants } from "@/app/actions/shop"
+import type { ShopOrder } from "@/lib/db/schema"
 
-type Tab = "clubs" | "schools" | "packages" | "signups" | "contact" | "coaches" | "coaching-portal" | "referrals" | "payments" | "billing" | "impersonate" | "moments" | "site-images"
+type Tab = "clubs" | "schools" | "packages" | "signups" | "contact" | "coaches" | "coaching-portal" | "referrals" | "payments" | "billing" | "impersonate" | "moments" | "site-images" | "shop"
 
 export function AdminTabs({
   clubs,
@@ -52,6 +55,8 @@ export function AdminTabs({
   billingLedger,
   billingOutstanding,
   billingRevenue,
+  shopProducts,
+  shopOrders,
 }: {
   clubs: Club[]
   schools: School[]
@@ -76,6 +81,8 @@ export function AdminTabs({
   billingLedger: BillingLedgerEntry[]
   billingOutstanding: OutstandingEntry[]
   billingRevenue: RevenueMonthSummary[]
+  shopProducts: ShopProductWithVariants[]
+  shopOrders: ShopOrder[]
 }) {
   const [tab, setTab] = useState<Tab>("clubs")
 
@@ -86,6 +93,7 @@ export function AdminTabs({
     { id: "signups", label: "Sign-ups" },
     { id: "coaches", label: "Coaches" },
     { id: "coaching-portal", label: "Coaching Portal" },
+    { id: "shop", label: "Shop" },
     { id: "payments", label: "Payments" },
     { id: "billing", label: "Billing" },
     { id: "referrals", label: "Referrals & Vouchers" },
@@ -152,6 +160,7 @@ export function AdminTabs({
         {tab === "contact" && <AdminContactManager initialContacts={contacts} />}
         {tab === "moments" && <AdminMomentsManager initialMoments={moments} />}
         {tab === "site-images" && <AdminSiteImagesManager initialImages={siteImages} />}
+        {tab === "shop" && <AdminShopManager initialProducts={shopProducts} initialOrders={shopOrders} />}
         {tab === "impersonate" && <AdminImpersonationManager />}
       </div>
     </div>
