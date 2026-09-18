@@ -13,6 +13,7 @@ import {
 } from "@/lib/admin-auth"
 import { SLOT_HOURS } from "@/lib/slots"
 import type { ClubSlot } from "@/lib/db/schema"
+import { toFriendlyDbError } from "@/lib/db-errors"
 
 async function requireAdmin() {
   if (!(await isAdminAuthenticated())) {
@@ -50,51 +51,64 @@ export type ClubInput = {
   published: boolean
 }
 
-export async function createClub(input: ClubInput) {
+export async function createClub(
+  input: ClubInput,
+): Promise<{ ok: true; id: number } | { ok: false; error: string }> {
   await requireAdmin()
-  const rows = await db
-    .insert(clubs)
-    .values({
-      name: input.name,
-      location: input.location,
-      description: input.description || null,
-      address: input.address,
-      phone: input.phone,
-      hours: input.hours,
-      features: input.features,
-      image: input.image || null,
-      imageUrl: input.imageUrl || null,
-      contactPerson: input.contactPerson || null,
-      contactEmail: input.contactEmail || null,
-      published: input.published,
-    })
-    .returning({ id: clubs.id })
-  revalidateClubPaths()
-  return { id: rows[0].id }
+  try {
+    const rows = await db
+      .insert(clubs)
+      .values({
+        name: input.name,
+        location: input.location,
+        description: input.description || null,
+        address: input.address,
+        phone: input.phone,
+        hours: input.hours,
+        features: input.features,
+        image: input.image || null,
+        imageUrl: input.imageUrl || null,
+        contactPerson: input.contactPerson || null,
+        contactEmail: input.contactEmail || null,
+        published: input.published,
+      })
+      .returning({ id: clubs.id })
+    revalidateClubPaths()
+    return { ok: true, id: rows[0].id }
+  } catch (error) {
+    return { ok: false, error: toFriendlyDbError(error, "Failed to create club. Please try again.") }
+  }
 }
 
-export async function updateClub(id: number, input: ClubInput) {
+export async function updateClub(
+  id: number,
+  input: ClubInput,
+): Promise<{ ok: true } | { ok: false; error: string }> {
   await requireAdmin()
-  await db
-    .update(clubs)
-    .set({
-      name: input.name,
-      location: input.location,
-      description: input.description || null,
-      address: input.address,
-      phone: input.phone,
-      hours: input.hours,
-      features: input.features,
-      image: input.image || null,
-      imageUrl: input.imageUrl || null,
-      contactPerson: input.contactPerson || null,
-      contactEmail: input.contactEmail || null,
-      published: input.published,
-      updatedAt: new Date(),
-    })
-    .where(eq(clubs.id, id))
-  revalidateClubPaths()
-  return { success: true }
+  try {
+    await db
+      .update(clubs)
+      .set({
+        name: input.name,
+        location: input.location,
+        description: input.description || null,
+        address: input.address,
+        phone: input.phone,
+        hours: input.hours,
+        features: input.features,
+        image: input.image || null,
+        imageUrl: input.imageUrl || null,
+        contactPerson: input.contactPerson || null,
+        contactEmail: input.contactEmail || null,
+        published: input.published,
+        updatedAt: new Date(),
+      })
+      .where(eq(clubs.id, id))
+    revalidateClubPaths()
+    return { ok: true }
+  } catch (error) {
+    return { ok: false, error: toFriendlyDbError(error, "Failed to update club. Please try again.") }
+  }
 }
 
 /**
