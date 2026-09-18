@@ -33,10 +33,21 @@ const nextConfig = {
     // deployment's own domain, so without this the optimizer rejects every
     // blob-backed image with INVALID_IMAGE_OPTIMIZE_REQUEST /
     // "not configured in images.localPatterns", crashing the whole page (500).
+    //
+    // IMPORTANT: once ANY localPatterns entry exists, Next.js treats it as a
+    // full allowlist for ALL local ("/"-prefixed) image sources — not just
+    // ones with a query string. We MUST also explicitly allow every static
+    // local asset directory used across the site (logo, hero photos, etc.),
+    // otherwise plain `/images/*.png` requests start failing with the same
+    // INVALID_IMAGE_OPTIMIZE_REQUEST error even though they have no query.
     localPatterns: [
       {
         pathname: "/api/blob",
         search: "**",
+      },
+      {
+        pathname: "/images/**",
+        search: "",
       },
     ],
     remotePatterns: [
