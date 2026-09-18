@@ -19,7 +19,7 @@ export async function SponsorsSection() {
           </p>
         </div>
 
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+        <div className="flex flex-wrap justify-center gap-4">
           {sponsors.map((sponsor) => {
             const logo = (
               // eslint-disable-next-line @next/next/no-img-element
@@ -27,14 +27,14 @@ export async function SponsorsSection() {
                 src={blobImage(sponsor.logoUrl, 320) ?? "/placeholder.svg"}
                 srcSet={blobSrcSet(sponsor.logoUrl)}
                 alt={sponsor.name}
-                className="max-h-16 w-full object-contain grayscale transition-all duration-300 group-hover:grayscale-0"
+                className="h-full w-full object-contain grayscale transition-all duration-300 group-hover:grayscale-0"
               />
             )
 
             return (
               <div
                 key={sponsor.id}
-                className="group flex aspect-[3/2] items-center justify-center rounded-2xl border border-border bg-card p-6 shadow-sm transition-shadow hover:shadow-md"
+                className="group flex h-40 w-48 items-center justify-center rounded-2xl border border-border bg-card p-5 shadow-sm transition-shadow hover:shadow-md"
               >
                 {sponsor.websiteUrl ? (
                   <a
