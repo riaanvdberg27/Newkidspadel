@@ -27,6 +27,18 @@ const nextConfig = {
     qualities: [72, 75, 80],
     // Keep optimised images in the cache for 7 days before re-optimising.
     minimumCacheTTL: 60 * 60 * 24 * 7,
+    // Next.js 16 requires SAME-ORIGIN image sources with a query string to be
+    // explicitly allowlisted here, separately from remotePatterns. Our proxy
+    // (/api/blob?p=...) is same-origin when IMAGE_ORIGIN resolves to this
+    // deployment's own domain, so without this the optimizer rejects every
+    // blob-backed image with INVALID_IMAGE_OPTIMIZE_REQUEST /
+    // "not configured in images.localPatterns", crashing the whole page (500).
+    localPatterns: [
+      {
+        pathname: "/api/blob",
+        search: "**",
+      },
+    ],
     remotePatterns: [
       // Vercel Blob public store URLs (legacy / existing data)
       {
