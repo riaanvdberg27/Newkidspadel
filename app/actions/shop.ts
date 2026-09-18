@@ -221,15 +221,33 @@ function friendlyShopSaveError(e: unknown): string {
   return "Something went wrong saving the product. Please try again."
 }
 
+/**
+ * Slugs must be unique, but admins shouldn't have to guess a free one by
+ * hand (that's what kept causing "Something went wrong saving the product"
+ * after the first item). This finds a free slug by appending "-2", "-3", etc.
+ * to the requested base, skipping `excludeId` (the product being edited).
+ */
+async function findAvailableSlug(baseSlug: string, excludeId?: number): Promise<string> {
+  const base = baseSlug.trim() || "product"
+  const existing = await db.select({ slug: shopProducts.slug, id: shopProducts.id }).from(shopProducts)
+  const taken = new Set(existing.filter((p) => p.id !== excludeId).map((p) => p.slug))
+
+  if (!taken.has(base)) return base
+  let n = 2
+  while (taken.has(`${base}-${n}`)) n++
+  return `${base}-${n}`
+}
+
 export async function createShopProduct(input: ShopProductInput): Promise<{ ok: true; id: number } | { ok: false; error: string }> {
   await requireAdmin()
 
   try {
+    const slug = await findAvailableSlug(input.slug.trim())
     const [product] = await db
       .insert(shopProducts)
       .values({
         name: input.name.trim(),
-        slug: input.slug.trim(),
+        slug,
         description: input.description.trim(),
         categoryId: input.categoryId,
         price: toCents(input.price),
@@ -264,11 +282,12 @@ export async function updateShopProduct(id: number, input: ShopProductInput): Pr
   await requireAdmin()
 
   try {
+    const slug = await findAvailableSlug(input.slug.trim(), id)
     await db
       .update(shopProducts)
       .set({
         name: input.name.trim(),
-        slug: input.slug.trim(),
+        slug,
         description: input.description.trim(),
         categoryId: input.categoryId,
         price: toCents(input.price),

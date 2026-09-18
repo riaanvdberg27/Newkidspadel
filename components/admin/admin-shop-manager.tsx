@@ -501,6 +501,10 @@ function ProductForm({
 }) {
   const [name, setName] = useState(product?.name ?? "")
   const [slug, setSlug] = useState(product?.slug ?? "")
+  // The slug is derived from the name automatically so admins never have to
+  // hand-type a URL-safe, unique value. Editing the name keeps regenerating
+  // the slug until the admin explicitly overrides it via "Edit URL slug".
+  const [slugEditedManually, setSlugEditedManually] = useState(false)
   const [description, setDescription] = useState(product?.description ?? "")
   const [categoryId, setCategoryId] = useState(product?.categoryId ?? categories[0]?.id ?? 0)
   const [price, setPrice] = useState(String(product ? product.price / 100 : 0))
@@ -579,10 +583,46 @@ function ProductForm({
 
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Name" required>
-          <input type="text" value={name} required onChange={(e) => setName(e.target.value)} className="mt-2 w-full rounded-md border border-border bg-background px-3 py-2 outline-none focus:border-lime" />
+          <input
+            type="text"
+            value={name}
+            required
+            autoComplete="off"
+            onChange={(e) => {
+              const nextName = e.target.value
+              setName(nextName)
+              // Keep the URL slug in sync with the name unless the admin
+              // has deliberately chosen to type a custom one below.
+              if (!slugEditedManually) setSlug(slugify(nextName))
+            }}
+            className="mt-2 w-full rounded-md border border-border bg-background px-3 py-2 outline-none focus:border-lime"
+          />
         </Field>
-        <Field label="Slug (URL id)" required>
-          <input type="text" value={slug} required placeholder="padel-tshirt" onChange={(e) => setSlug(e.target.value)} className="mt-2 w-full rounded-md border border-border bg-background px-3 py-2 outline-none focus:border-lime" />
+        <Field label="URL (auto-generated)">
+          {slugEditedManually ? (
+            <input
+              type="text"
+              value={slug}
+              required
+              autoComplete="off"
+              placeholder="padel-tshirt"
+              onChange={(e) => setSlug(e.target.value)}
+              className="mt-2 w-full rounded-md border border-border bg-background px-3 py-2 outline-none focus:border-lime"
+            />
+          ) : (
+            <div className="mt-2 flex items-center justify-between gap-2 rounded-md border border-dashed border-border bg-muted/40 px-3 py-2">
+              <span className="truncate text-sm text-muted-foreground">/shop/{slug || "…"}</span>
+              <button
+                type="button"
+                onClick={() => setSlugEditedManually(true)}
+                className="shrink-0 text-xs font-semibold text-lime hover:underline"
+              >
+                Edit
+              </button>
+            </div>
+          )}
+          {/* Every product's slug must be unique — if it collides with an existing one, the
+              server automatically appends "-2", "-3", etc. so saving never fails. */}
         </Field>
       </div>
 
