@@ -38,6 +38,7 @@ import {
 import { completeReferralForEnrollment } from "@/app/actions/referrals"
 import { autoMarkMonthPaidFromWebhook } from "@/app/actions/subscription-months"
 import { revalidatePath } from "next/cache"
+import { shopOrders } from "@/lib/db/schema"
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -106,6 +107,58 @@ export async function POST(req: NextRequest) {
     logId = logRow?.id
   } catch (err) {
     console.error("[netcash-itn] could not write webhook log:", err)
+  }
+
+  // ------------------------------------------------------------------
+  // Shop orders — a separate table from enrollments, tagged via Extra2="shop"
+  // (see buildNetcashPaymentForShopOrder). Handle and return before falling
+  // into the enrollment-oriented logic below.
+  // ------------------------------------------------------------------
+  if (payload.Extra2 === "shop") {
+    const itn = parseNetcashItn(payload)
+    const shopRows = await db.select().from(shopOrders).where(eq(shopOrders.orderReference, reference)).limit(1)
+    const shopOrder = shopRows[0]
+
+    if (!shopOrder) {
+      const msg = `Shop order not found for Reference: ${reference}`
+      if (logId) await db.update(webhookLogs).set({ processingError: msg }).where(eq(webhookLogs.id, logId))
+      return ack(msg)
+    }
+
+    const postedAmountRands = parseFloat(postedAmount || "0")
+    if (postedAmount && !amountMatchesExpected(postedAmountRands, shopOrder.totalAmount)) {
+      const msg = `Shop order amount mismatch. Posted: ${postedAmount}, Expected: ${(shopOrder.totalAmount / 100).toFixed(2)}`
+      if (logId) await db.update(webhookLogs).set({ processingError: msg }).where(eq(webhookLogs.id, logId))
+      return ack(msg)
+    }
+
+    try {
+      if (itn.accepted) {
+        await db
+          .update(shopOrders)
+          .set({ paymentStatus: "paid", paidAt: new Date(), updatedAt: new Date() })
+          .where(eq(shopOrders.id, shopOrder.id))
+      } else if (itn.declined) {
+        await db
+          .update(shopOrders)
+          .set({ paymentStatus: "failed", updatedAt: new Date() })
+          .where(eq(shopOrders.id, shopOrder.id))
+      } else {
+        await db
+          .update(shopOrders)
+          .set({ paymentStatus: "cancelled", updatedAt: new Date() })
+          .where(eq(shopOrders.id, shopOrder.id))
+      }
+      if (logId) await db.update(webhookLogs).set({ processed: true }).where(eq(webhookLogs.id, logId))
+      revalidatePath("/dashboard")
+      revalidatePath("/admin")
+    } catch (err) {
+      console.error("[netcash-itn] shop order processing error:", err)
+      if (logId) await db.update(webhookLogs).set({ processingError: String(err) }).where(eq(webhookLogs.id, logId))
+      return ack("Shop order processing error")
+    }
+
+    return ok()
   }
 
   // ------------------------------------------------------------------

@@ -717,3 +717,84 @@ export const sessionAttendance = pgTable("session_attendance", {
 })
 
 export type SessionAttendance = typeof sessionAttendance.$inferSelect
+
+// ---- Online Shop (padel gear, apparel, caps) ----
+
+/**
+ * shop_products — one row per item sold in the shop.
+ * `price` is the base/default price in cents. If a product `hasVariants`,
+ * each variant may override the price (e.g. larger sizes cost more).
+ */
+export const shopProducts = pgTable("shop_products", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  slug: text("slug").notNull().unique(),
+  description: text("description").notNull().default(""),
+  // 'padel-gear' | 'apparel' | 'caps' | 'other' (free text, admin can add new categories)
+  category: text("category").notNull().default("padel-gear"),
+  price: integer("price").notNull().default(0), // cents
+  images: jsonb("images").$type<string[]>().notNull().default([]), // array of blob URLs, first = primary
+  hasVariants: boolean("hasVariants").notNull().default(false),
+  // Days until the item can be delivered/collected. Null = in stock / no lead time.
+  leadTimeDays: integer("leadTimeDays"),
+  published: boolean("published").notNull().default(true),
+  sortOrder: integer("sortOrder").notNull().default(0),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+  updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+})
+
+export type ShopProduct = typeof shopProducts.$inferSelect
+
+/**
+ * shop_product_variants — sizes for a product (e.g. kids sizes 4-5 .. 13-14, S/M/L).
+ * `priceOverride` is null when the variant uses the parent product's base price.
+ */
+export const shopProductVariants = pgTable(
+  "shop_product_variants",
+  {
+    id: serial("id").primaryKey(),
+    productId: integer("productId")
+      .notNull()
+      .references(() => shopProducts.id, { onDelete: "cascade" }),
+    size: text("size").notNull(), // e.g. "4-5", "S", "M", "L"
+    priceOverride: integer("priceOverride"), // cents, null = use product.price
+    sortOrder: integer("sortOrder").notNull().default(0),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  (t) => ({
+    uniqueSize: unique("shop_product_variants_unique").on(t.productId, t.size),
+  }),
+)
+
+export type ShopProductVariant = typeof shopProductVariants.$inferSelect
+
+/**
+ * shop_orders — one row per shop checkout (can contain multiple products/sizes).
+ * Independent from the enrollment `orders` table above — this is merchandise,
+ * not program enrollment, so it is kept in its own simple flow.
+ */
+export const shopOrders = pgTable("shop_orders", {
+  id: serial("id").primaryKey(),
+  userId: text("userId").notNull(),
+  orderReference: text("orderReference").notNull().unique(),
+  parentName: text("parentName").notNull(),
+  parentEmail: text("parentEmail").notNull(),
+  parentMobile: text("parentMobile").notNull().default(""),
+  // [{ productId, name, size, quantity, unitPrice, leadTimeDays }]
+  items: jsonb("items").notNull().default([]),
+  totalAmount: integer("totalAmount").notNull().default(0), // cents
+  currency: text("currency").notNull().default("ZAR"),
+  // 'netcash' | 'eft'
+  paymentMethod: text("paymentMethod").notNull().default("netcash"),
+  // 'pending' | 'awaiting_payment' | 'paid' | 'failed' | 'cancelled'
+  paymentStatus: text("paymentStatus").notNull().default("pending"),
+  netcashOrderId: text("netcashOrderId"),
+  // 'processing' | 'ready' | 'shipped' | 'delivered' | 'cancelled'
+  fulfillmentStatus: text("fulfillmentStatus").notNull().default("processing"),
+  notes: text("notes"),
+  paidAt: timestamp("paidAt"),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+  updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+})
+
+export type ShopOrder = typeof shopOrders.$inferSelect

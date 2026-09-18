@@ -9,6 +9,8 @@ import { getMyEnrollments } from "@/app/actions/enrollment"
 import { getReferralSummary } from "@/app/actions/referrals"
 import { getMyPayments, getMySubscriptions } from "@/app/actions/payments"
 import { getMyNotifications } from "@/app/actions/notifications"
+import { getMyShopOrders } from "@/app/actions/shop"
+import { MyShopOrders } from "@/components/shop/my-shop-orders"
 import { calculateAge } from "@/lib/slots"
 import { SignOutButton } from "@/components/sign-out-button"
 import { ChangeSlot } from "@/components/change-slot"
@@ -83,13 +85,14 @@ export default async function DashboardPage() {
   }
 
   // Fetch data scoped to the correct userId (real or impersonated)
-  const [userEnrollments, allPayments, allSubscriptions, referralSummary, myNotifications] = await Promise.all([
+  const [userEnrollments, allPayments, allSubscriptions, referralSummary, myNotifications, myShopOrders] = await Promise.all([
     db.select().from(enrollments).where(eq(enrollments.userId, userId)).orderBy(desc(enrollments.createdAt)),
     db.select().from(payments).where(eq(payments.userId, userId)).orderBy(desc(payments.createdAt)).catch(() => []),
     db.select().from(subscriptions).where(eq(subscriptions.userId, userId)).orderBy(desc(subscriptions.createdAt)).catch(() => []),
     // Referral summary — only available for real sessions (not during impersonation)
     isImpersonating ? Promise.resolve(null) : getReferralSummary().catch(() => null),
     getMyNotifications().catch(() => []),
+    isImpersonating ? Promise.resolve([]) : getMyShopOrders().catch(() => []),
   ])
 
   const mobile = userEnrollments[0]?.parentMobile ?? ""
@@ -139,6 +142,22 @@ export default async function DashboardPage() {
         {referralSummary && (
           <section>
             <ReferralPanel summary={referralSummary} />
+          </section>
+        )}
+
+        {/* Shop Orders */}
+        {!isImpersonating && myShopOrders.length > 0 && (
+          <section>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h2 className="text-xl font-bold text-navy">My Shop Orders</h2>
+              <a
+                href="/shop"
+                className="rounded-md bg-lime px-4 py-2 text-sm font-bold text-lime-foreground transition-colors hover:bg-lime/90"
+              >
+                Visit Shop
+              </a>
+            </div>
+            <MyShopOrders orders={myShopOrders} />
           </section>
         )}
 
