@@ -321,18 +321,16 @@ function ShopProductsSection({
     setError(null)
     startTransition(async () => {
       try {
-        if (editing) await updateShopProduct(editing.id, input)
-        else await createShopProduct(input)
+        const result = editing ? await updateShopProduct(editing.id, input) : await createShopProduct(input)
+        if (!result.ok) {
+          setError(result.error)
+          return
+        }
         setCreating(false)
         setEditing(null)
         router.refresh()
       } catch (e: unknown) {
-        const message = e instanceof Error ? e.message : "Something went wrong"
-        setError(
-          /duplicate key|unique/i.test(message)
-            ? `A product with the slug "${input.slug}" already exists. Choose a different slug (e.g. add "-boys" or "-girls") and try again.`
-            : message,
-        )
+        setError(e instanceof Error ? e.message : "Something went wrong")
       }
     })
   }
