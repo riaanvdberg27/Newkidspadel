@@ -23,7 +23,7 @@ export default async function ShopPage() {
             <ShoppingBag className="h-5 w-5" />
             <span className="text-sm font-bold uppercase tracking-wide">Academy Shop</span>
           </div>
-          <h1 className="mt-2 text-2xl font-extrabold sm:text-4xl">Padel Gear, Kit &amp; Caps</h1>
+          <h1 className="mt-2 text-2xl font-extrabold sm:text-4xl">Padel Gear, Padel Accessories and Apparel</h1>
           <p className="mt-2 max-w-xl text-sm text-navy-foreground/80 sm:text-base">
             Order official Next Gen Padel Academy gear for your child. Pay by EFT or card, and track your order from
             your parent dashboard.
