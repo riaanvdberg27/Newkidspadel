@@ -24,6 +24,7 @@ import {
 } from "@/app/actions/shop"
 import type { ShopOrder, ShopCategory } from "@/lib/db/schema"
 import { blobImage } from "@/lib/blob"
+import { upload } from "@vercel/blob/client"
 
 const KIDS_SIZES = ["4-5", "5-6", "7-8", "9-10", "11-12", "13-14"]
 const ADULT_SIZES = ["S", "M", "L", "XL"]
@@ -488,12 +489,13 @@ function ProductForm({
     setError(null)
     try {
       for (const file of Array.from(files)) {
-        const fd = new FormData()
-        fd.append("file", file)
-        const res = await fetch("/api/admin/upload-shop-image", { method: "POST", body: fd })
-        const json = await res.json()
-        if (!res.ok) throw new Error(json.error ?? "Upload failed")
-        setImages((prev) => [...prev, json.url])
+        const result = await upload(file.name, file, {
+          access: "private",
+          handleUploadUrl: "/api/admin/upload-shop-image",
+          contentType: file.type,
+          multipart: file.size > 5 * 1024 * 1024,
+        })
+        setImages((prev) => [...prev, result.url])
       }
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Upload failed")
