@@ -315,22 +315,39 @@ function ShopProductsSection({
   const [editing, setEditing] = useState<ShopProductWithVariants | null>(null)
   const [pending, startTransition] = useTransition()
   const [confirmDelete, setConfirmDelete] = useState<{ id: number; name: string } | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   function handleSave(input: ShopProductInput) {
+    setError(null)
     startTransition(async () => {
-      if (editing) await updateShopProduct(editing.id, input)
-      else await createShopProduct(input)
-      setCreating(false)
-      setEditing(null)
-      router.refresh()
+      try {
+        if (editing) await updateShopProduct(editing.id, input)
+        else await createShopProduct(input)
+        setCreating(false)
+        setEditing(null)
+        router.refresh()
+      } catch (e: unknown) {
+        const message = e instanceof Error ? e.message : "Something went wrong"
+        setError(
+          /duplicate key|unique/i.test(message)
+            ? `A product with the slug "${input.slug}" already exists. Choose a different slug (e.g. add "-boys" or "-girls") and try again.`
+            : message,
+        )
+      }
     })
   }
 
   function handleDelete(id: number) {
+    setError(null)
     startTransition(async () => {
-      await deleteShopProduct(id)
-      setConfirmDelete(null)
-      router.refresh()
+      try {
+        await deleteShopProduct(id)
+        setConfirmDelete(null)
+        router.refresh()
+      } catch (e: unknown) {
+        setError(e instanceof Error ? e.message : "Could not delete product")
+        setConfirmDelete(null)
+      }
     })
   }
 
@@ -346,13 +363,17 @@ function ShopProductsSection({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-xl font-bold text-navy">Shop Products</h2>
         <button
-          onClick={() => { setCreating(true); setEditing(null) }}
+          onClick={() => { setCreating(true); setEditing(null); setError(null) }}
           className="inline-flex items-center gap-2 rounded-md bg-lime px-4 py-2 text-sm font-bold text-lime-foreground transition-colors hover:bg-lime/90"
         >
           <Plus className="h-4 w-4" />
           Add Product
         </button>
       </div>
+
+      {error && (
+        <div className="mt-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
+      )}
 
       <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {initialProducts.map((p) => {
