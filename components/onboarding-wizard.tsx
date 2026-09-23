@@ -149,6 +149,8 @@ export function OnboardingWizard({
 
   // ── Steps 3-5 ────────────────────────────────────────────────────────────
   const [parent, setParent] = useState({ firstName: "", lastName: "", email: "", mobile: "", password: "" })
+  // Second parent/guardian — optional household contact captured at signup
+  const [secondParent, setSecondParent] = useState({ firstName: "", lastName: "", mobile: "" })
   const [emergency, setEmergency] = useState({ name: "", phone: "" })
   const [prefs, setPrefs] = useState<Prefs>({
     prefEmail: true,
@@ -390,6 +392,14 @@ export function OnboardingWizard({
           email,
           mobile: parent.mobile,
         },
+        secondParent:
+          secondParent.firstName.trim() || secondParent.lastName.trim() || secondParent.mobile.trim()
+            ? {
+                firstName: secondParent.firstName.trim(),
+                lastName: secondParent.lastName.trim(),
+                mobile: secondParent.mobile.trim(),
+              }
+            : null,
         cartItems,
         prefs,
         emergencyContactName: emergency.name,
@@ -973,7 +983,9 @@ export function OnboardingWizard({
           <p className="mt-1 text-sm text-muted-foreground">
             We&apos;ll create your account so you can track sessions and manage your enrollment.
           </p>
-          <div className="mt-6 grid gap-4 sm:grid-cols-2">
+
+          <p className="mt-6 text-sm font-semibold text-navy">Parent 1 (account holder)</p>
+          <div className="mt-3 grid gap-4 sm:grid-cols-2">
             <Field
               label="First Name"
               value={parent.firstName}
@@ -1032,6 +1044,47 @@ export function OnboardingWizard({
               )}
             </div>
           </div>
+
+          <div className="mt-6 rounded-card border border-border bg-muted/40 p-4">
+            <p className="text-sm font-semibold text-navy">Parent 2 (optional)</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Add a second parent or guardian&apos;s details if you&apos;d like us to have them on file.
+            </p>
+            <div className="mt-3 grid gap-4 sm:grid-cols-2">
+              <Field
+                label="First Name"
+                value={secondParent.firstName}
+                onChange={(v) => setSecondParent({ ...secondParent, firstName: v })}
+                placeholder="First name"
+              />
+              <Field
+                label="Last Name / Surname"
+                value={secondParent.lastName}
+                onChange={(v) => setSecondParent({ ...secondParent, lastName: v })}
+                placeholder="Last name"
+              />
+              <div className="flex flex-col gap-1 sm:col-span-2 sm:max-w-[calc(50%-0.5rem)]">
+                <Field
+                  label="Mobile Number"
+                  type="tel"
+                  value={secondParent.mobile}
+                  onChange={(v) => setSecondParent({ ...secondParent, mobile: v.replace(/[^\d]/g, "") })}
+                  placeholder="0812345678"
+                />
+                {secondParent.mobile.length > 0 && !/^0\d{9}$/.test(secondParent.mobile) && (
+                  <p className="text-xs font-semibold text-destructive">
+                    {!secondParent.mobile.startsWith("0")
+                      ? "Must start with 0 — e.g. 0812345678"
+                      : `Must be exactly 10 digits (${secondParent.mobile.length}/10)`}
+                  </p>
+                )}
+                {/^0\d{9}$/.test(secondParent.mobile) && (
+                  <p className="text-xs font-semibold text-lime-600">Looks good</p>
+                )}
+              </div>
+            </div>
+          </div>
+
           <div className="mt-6 rounded-card border border-border bg-muted/40 p-4">
             <p className="text-sm font-semibold text-navy">Emergency Contact</p>
             <div className="mt-3 grid gap-4 sm:grid-cols-2">
@@ -1142,9 +1195,18 @@ export function OnboardingWizard({
             )
           })}
 
-          <Row label="Parent" value={`${parent.firstName} ${parent.lastName}`.trim()} />
+          <Row label="Parent 1" value={`${parent.firstName} ${parent.lastName}`.trim()} />
           <Row label="Email" value={parent.email} />
           <Row label="Mobile" value={parent.mobile} />
+          {(secondParent.firstName.trim() || secondParent.lastName.trim() || secondParent.mobile.trim()) && (
+            <>
+              <Row
+                label="Parent 2"
+                value={`${secondParent.firstName} ${secondParent.lastName}`.trim() || "—"}
+              />
+              <Row label="Parent 2 Mobile" value={secondParent.mobile || "—"} />
+            </>
+          )}
           <Row label="Emergency Contact" value={`${emergency.name} — ${emergency.phone}`} />
         </dl>
 

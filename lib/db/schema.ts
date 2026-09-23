@@ -192,6 +192,10 @@ export const enrollments = pgTable("enrollments", {
   parentName: text("parentName").notNull(),
   parentEmail: text("parentEmail").notNull(),
   parentMobile: text("parentMobile").notNull(),
+  // Second parent/guardian's contact details, captured at signup (optional household contact,
+  // distinct from parent2Enrolled/parent2Name below which is about a parent joining sessions)
+  secondParentName: text("secondParentName"),
+  secondParentMobile: text("secondParentMobile"),
   // Child
   childName: text("childName").notNull(),
   childDob: text("childDob").notNull(),
