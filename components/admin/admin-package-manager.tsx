@@ -495,23 +495,6 @@ function PackageForm({
         </Field>
       </div>
 
-      {!isSchool && (
-        <Field label="Parent add-on price (R) — leave blank to disable">
-          <input
-            type="number"
-            min={0}
-            value={parentPrice}
-            placeholder={`e.g. ${price || 0}`}
-            onChange={(e) => setParentPrice(e.target.value)}
-            className="mt-2 w-full rounded-md border border-border bg-background px-3 py-2 outline-none focus:border-lime"
-          />
-          <p className="mt-1 text-xs text-muted-foreground">
-            When set, parents can enroll themselves alongside their child in this package at the same time
-            slot, for this much extra per month. Leave blank to hide the parent add-on for this package.
-          </p>
-        </Field>
-      )}
-
       <Field label="Tagline">
         <input
           type="text"
