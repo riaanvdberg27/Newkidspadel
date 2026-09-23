@@ -460,6 +460,9 @@ export const voucherCampaigns = pgTable("voucher_campaigns", {
   discountRandCents: integer("discountRandCents").notNull().default(0),
   // Which package periods this applies to: 'monthly' | 'once-off' | 'both'
   appliesTo: text("appliesTo").notNull().default("monthly"),
+  // 'once' — discount only applies to the first billing month after redemption.
+  // 'indefinite' — discount applies to every billing month until the signup is cancelled.
+  recurrence: text("recurrence").notNull().default("once"),
   // Configurable expiry relative to issuance (days); null = no expiry
   expiryDays: integer("expiryDays"),
   enabled: boolean("enabled").notNull().default(true),
@@ -485,6 +488,10 @@ export const vouchers = pgTable("vouchers", {
   discountPercent: integer("discountPercent").notNull(),
   // Fixed Rand discount in cents (e.g. 5000 = R50) — used when discountType = 'rand'
   discountRandCents: integer("discountRandCents").notNull().default(0),
+  // 'once' | 'indefinite' — copied from the campaign at issuance time; determines
+  // whether the discount applies to just the first billing month after redemption
+  // or every billing month until the signup is cancelled.
+  recurrence: text("recurrence").notNull().default("once"),
   // 'active' | 'used' | 'expired'
   status: text("status").notNull().default("active"),
   // Enrollment this voucher was redeemed against (set on redemption)
@@ -611,6 +618,9 @@ export const subscriptionMonths = pgTable(
     status: text("status").notNull().default("outstanding"),
     // Discount percentage applied to this month (0–100)
     discountPct: integer("discountPct").notNull().default(0),
+    // Fixed Rand discount in cents applied to this month, on top of discountPct
+    // (e.g. 5000 = R50 off). Effective amount = amountCents*(1-discountPct/100) - discountRandCents.
+    discountRandCents: integer("discountRandCents").notNull().default(0),
     // Human-readable reason for the discount, e.g. "Sibling discount", "Bursary"
     discountReason: text("discountReason"),
     // For partial payments: amount actually received in cents

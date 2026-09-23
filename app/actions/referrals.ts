@@ -212,6 +212,7 @@ export async function completeReferralForEnrollment(enrollmentId: number): Promi
       discountType: campaign.discountType,
       discountPercent: campaign.discountPercent,
       discountRandCents: campaign.discountRandCents,
+      recurrence: campaign.recurrence,
       status: "active",
       referralId: referral.id,
       expiresAt,
@@ -432,6 +433,7 @@ export async function issueBootcampVoucher(
       discountType: campaign.discountType,
       discountPercent: campaign.discountPercent,
       discountRandCents: campaign.discountRandCents,
+      recurrence: campaign.recurrence,
       status: "active",
       expiresAt,
     })
@@ -536,6 +538,7 @@ export async function adminUpdateCampaign(
     discountPercent?: number
     discountRandCents?: number
     appliesTo?: string
+    recurrence?: string
     expiryDays?: number | null
     enabled?: boolean
   },
@@ -572,6 +575,7 @@ export async function adminCreateCampaign(data: {
   discountPercent: number
   discountRandCents: number
   appliesTo: string
+  recurrence: string
   expiryDays: number | null
   enabled: boolean
 }): Promise<{ id: number }> {
@@ -625,6 +629,7 @@ export async function adminGenerateBulkVouchers(
     discountType: campaign.discountType,
     discountPercent: campaign.discountPercent,
     discountRandCents: campaign.discountRandCents,
+    recurrence: campaign.recurrence,
     status: "active" as const,
     expiresAt,
   }))
@@ -677,4 +682,37 @@ export async function adminGetCampaignVouchers(campaignId: number): Promise<Admi
     .orderBy(desc(vouchers.createdAt))
 
   return rows
+}
+
+// ---------------------------------------------------------------------------
+// Look up the redeemed voucher (if any) that should auto-apply to an
+// enrollment's billing months. Used by subscription-months.ts so voucher
+// discounts "pull through" onto the billing ledger without manual re-entry.
+// ---------------------------------------------------------------------------
+
+export type EnrollmentVoucherDiscount = {
+  code: string
+  discountType: string
+  discountPercent: number
+  discountRandCents: number
+  recurrence: string // 'once' | 'indefinite'
+}
+
+export async function getEnrollmentVoucherDiscount(
+  enrollmentId: number,
+): Promise<EnrollmentVoucherDiscount | null> {
+  const [row] = await db
+    .select({
+      code: vouchers.code,
+      discountType: vouchers.discountType,
+      discountPercent: vouchers.discountPercent,
+      discountRandCents: vouchers.discountRandCents,
+      recurrence: vouchers.recurrence,
+    })
+    .from(vouchers)
+    .where(eq(vouchers.redeemedOnEnrollmentId, enrollmentId))
+    .orderBy(desc(vouchers.usedAt))
+    .limit(1)
+
+  return row ?? null
 }

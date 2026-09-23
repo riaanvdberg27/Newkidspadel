@@ -199,6 +199,7 @@ function LedgerView({
   // Per-month draft state — nothing commits until Save is clicked
   const [pendingStatus, setPendingStatus] = useState<Record<number, string>>({})
   const [discountInputs, setDiscountInputs] = useState<Record<number, string>>({})
+  const [discountRandInputs, setDiscountRandInputs] = useState<Record<number, string>>({})
   const [discountReasons, setDiscountReasons] = useState<Record<number, string>>({})
   const [partialInputs, setPartialInputs] = useState<Record<number, string>>({})
 
@@ -256,6 +257,9 @@ function LedgerView({
     const discountPct = discountInputs[rowId] !== undefined
       ? Math.min(100, Math.max(0, parseInt(discountInputs[rowId]) || 0))
       : (dbRow?.discountPct ?? 0)
+    const discountRandCents = discountRandInputs[rowId] !== undefined
+      ? Math.max(0, Math.round((parseFloat(discountRandInputs[rowId]) || 0) * 100))
+      : (dbRow?.discountRandCents ?? 0)
     const discountReason = discountReasons[rowId] !== undefined
       ? discountReasons[rowId].trim() || undefined
       : (dbRow?.discountReason ?? undefined)
@@ -266,18 +270,19 @@ function LedgerView({
 
     setUpdating(rowId)
     startTransition(async () => {
-      const res = await updateMonthStatus(rowId, newStatus, { discountPct, discountReason, paidCents })
+      const res = await updateMonthStatus(rowId, newStatus, { discountPct, discountRandCents, discountReason, paidCents })
       setUpdating(null)
       if (res.ok) {
         // Clear draft state — now committed to DB
         setPendingStatus((p) => { const n = { ...p }; delete n[rowId]; return n })
         setDiscountInputs((p) => { const n = { ...p }; delete n[rowId]; return n })
+        setDiscountRandInputs((p) => { const n = { ...p }; delete n[rowId]; return n })
         setDiscountReasons((p) => { const n = { ...p }; delete n[rowId]; return n })
         setPartialInputs((p) => { const n = { ...p }; delete n[rowId]; return n })
         onLedgerChange(
           ledger.map((r) =>
             r.id === rowId
-              ? { ...r, status: newStatus, discountPct, discountReason: discountReason ?? null, paidCents: paidCents ?? null, paidAt: newStatus === "paid" ? new Date() : null }
+              ? { ...r, status: newStatus, discountPct, discountRandCents, discountReason: discountReason ?? null, paidCents: paidCents ?? null, paidAt: newStatus === "paid" ? new Date() : null }
               : r,
           ),
         )
@@ -319,16 +324,12 @@ function LedgerView({
           const total = ledger.length
           const paid = ledger.filter((r) => r.status === "paid").length
           const outstanding = ledger.filter((r) => r.status === "outstanding" || r.status === "partial").length
-          const paidR = ledger.filter((r) => r.status === "paid").reduce((s, r) => {
-            const disc = Math.round(r.amountCents * (1 - (r.discountPct ?? 0) / 100))
-            return s + disc
-          }, 0)
+          const effCents = (r: BillingLedgerEntry) =>
+            Math.max(0, Math.round(r.amountCents * (1 - (r.discountPct ?? 0) / 100)) - (r.discountRandCents ?? 0))
+          const paidR = ledger.filter((r) => r.status === "paid").reduce((s, r) => s + effCents(r), 0)
           const outR = ledger.reduce((s, r) => {
-            if (r.status === "outstanding") return s + Math.round(r.amountCents * (1 - (r.discountPct ?? 0) / 100))
-            if (r.status === "partial") {
-              const disc = Math.round(r.amountCents * (1 - (r.discountPct ?? 0) / 100))
-              return s + Math.max(0, disc - (r.paidCents ?? 0))
-            }
+            if (r.status === "outstanding") return s + effCents(r)
+            if (r.status === "partial") return s + Math.max(0, effCents(r) - (r.paidCents ?? 0))
             return s
           }, 0)
           return (
@@ -406,14 +407,17 @@ function LedgerView({
                     const displayStatus = pendingStatus[m.id] ?? m.status
                     const discountVal = discountInputs[m.id] ?? String(m.discountPct ?? 0)
                     const discountNum = Math.min(100, Math.max(0, parseInt(discountVal) || 0))
+                    const discountRandVal = discountRandInputs[m.id] ?? (m.discountRandCents ? String((m.discountRandCents / 100).toFixed(2)) : "")
+                    const discountRandNum = Math.max(0, parseFloat(discountRandVal) || 0)
                     const reasonVal = discountReasons[m.id] ?? (m.discountReason ?? "")
-                    const effectiveCents = Math.round(m.amountCents * (1 - discountNum / 100))
+                    const effectiveCents = Math.max(0, Math.round(m.amountCents * (1 - discountNum / 100)) - Math.round(discountRandNum * 100))
                     const partialVal = partialInputs[m.id] ?? (m.paidCents != null ? String((m.paidCents / 100).toFixed(2)) : "")
                     const partialPaid = parseFloat(partialVal) || 0
                     const remainingCents = Math.max(0, effectiveCents - Math.round(partialPaid * 100))
                     const hasDraft =
                       (pendingStatus[m.id] !== undefined && pendingStatus[m.id] !== m.status) ||
                       discountInputs[m.id] !== undefined ||
+                      discountRandInputs[m.id] !== undefined ||
                       discountReasons[m.id] !== undefined ||
                       partialInputs[m.id] !== undefined
 
@@ -429,11 +433,14 @@ function LedgerView({
                           {flashState === "err" && <X className="h-3.5 w-3.5 text-red-500" />}
                         </div>
                         <p className="text-[10px] text-muted-foreground">
-                          {discountNum > 0 ? (
+                          {discountNum > 0 || discountRandNum > 0 ? (
                             <>
                               <span className="line-through">{ZAR(m.amountCents)}</span>{" "}
                               <span className="font-semibold text-navy">{ZAR(effectiveCents)}</span>
-                              <span className="ml-1 text-lime font-bold">-{discountNum}%</span>
+                              {discountNum > 0 && <span className="ml-1 text-lime font-bold">-{discountNum}%</span>}
+                              {discountRandNum > 0 && (
+                                <span className="ml-1 text-lime font-bold">-R{discountRandNum.toFixed(0)}</span>
+                              )}
                             </>
                           ) : ZAR(m.amountCents)}
                         </p>
@@ -469,8 +476,24 @@ function LedgerView({
                           />
                         </div>
 
+                        {/* Discount R value */}
+                        <div className="mt-1.5">
+                          <label className="block text-[9px] font-semibold uppercase tracking-wide text-muted-foreground mb-0.5">
+                            Discount (R)
+                          </label>
+                          <input
+                            type="number"
+                            min={0}
+                            step={0.01}
+                            value={discountRandVal}
+                            onChange={(e) => setDiscountRandInputs((p) => ({ ...p, [m.id]: e.target.value }))}
+                            placeholder="0.00"
+                            className="w-full rounded border border-border bg-background px-1.5 py-0.5 text-[10px] focus:outline-none focus:ring-1 focus:ring-navy/30"
+                          />
+                        </div>
+
                         {/* Discount reason — shown when discount > 0 */}
-                        {discountNum > 0 && (
+                        {(discountNum > 0 || discountRandNum > 0) && (
                           <div className="mt-1.5">
                             <label className="block text-[9px] font-semibold uppercase tracking-wide text-muted-foreground mb-0.5">
                               Reason
@@ -509,7 +532,7 @@ function LedgerView({
                         )}
 
                         {/* Saved discount reason shown when not editing */}
-                        {discountInputs[m.id] === undefined && !discountNum && m.discountReason && (
+                        {discountInputs[m.id] === undefined && discountRandInputs[m.id] === undefined && !discountNum && !discountRandNum && m.discountReason && (
                           <p className="mt-1 text-[9px] italic text-muted-foreground truncate" title={m.discountReason}>
                             {m.discountReason}
                           </p>

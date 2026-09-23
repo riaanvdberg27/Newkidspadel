@@ -303,6 +303,7 @@ function CampaignsTab({
     discountPercent: 10,
     discountRandCents: 0,
     appliesTo: "monthly",
+    recurrence: "once",
     expiryDays: 90 as number | null,
     enabled: true,
   })
@@ -326,6 +327,7 @@ function CampaignsTab({
       discountPercent: c.discountPercent,
       discountRandCents: c.discountRandCents,
       appliesTo: c.appliesTo,
+      recurrence: c.recurrence,
       expiryDays: c.expiryDays,
       enabled: c.enabled,
     })
@@ -348,6 +350,7 @@ function CampaignsTab({
       discountPercent: 10,
       discountRandCents: 0,
       appliesTo: "monthly",
+      recurrence: "once",
       expiryDays: 90,
       enabled: true,
     })
@@ -551,6 +554,7 @@ function CampaignFields({
     discountPercent: number
     discountRandCents: number
     appliesTo: string
+    recurrence: string
     expiryDays: number | null
     enabled: boolean
   }
@@ -623,6 +627,17 @@ function CampaignFields({
           <option value="monthly">Monthly subscriptions only</option>
           <option value="once-off">Once-off packages only</option>
           <option value="both">Both</option>
+        </select>
+      </label>
+      <label className="block">
+        <span className="text-xs font-semibold text-navy">Discount Duration</span>
+        <select
+          value={values.recurrence}
+          onChange={(e) => onChange({ recurrence: e.target.value })}
+          className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-lime"
+        >
+          <option value="once">Once-off (first billing month only)</option>
+          <option value="indefinite">Indefinite (every month until cancelled)</option>
         </select>
       </label>
       <label className="block">
