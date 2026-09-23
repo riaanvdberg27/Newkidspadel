@@ -437,8 +437,12 @@ export const voucherCampaigns = pgTable("voucher_campaigns", {
   type: text("type").notNull().default("custom"),
   name: text("name").notNull(),
   description: text("description").notNull().default(""),
-  // Discount percent (e.g. 20 = 20%)
+  // 'percent' | 'rand' — which of the two discount fields below is used
+  discountType: text("discountType").notNull().default("percent"),
+  // Discount percent (e.g. 20 = 20%) — used when discountType = 'percent'
   discountPercent: integer("discountPercent").notNull().default(20),
+  // Fixed Rand discount in cents (e.g. 5000 = R50) — used when discountType = 'rand'
+  discountRandCents: integer("discountRandCents").notNull().default(0),
   // Which package periods this applies to: 'monthly' | 'once-off' | 'both'
   appliesTo: text("appliesTo").notNull().default("monthly"),
   // Configurable expiry relative to issuance (days); null = no expiry
@@ -461,7 +465,11 @@ export const vouchers = pgTable("vouchers", {
   // The parent who owns this voucher. Null for bulk/pre-generated codes
   // (e.g. school or event promo codes) that have not yet been redeemed.
   userId: text("userId").references(() => user.id, { onDelete: "cascade" }),
+  // 'percent' | 'rand' — which of the two discount fields below is used
+  discountType: text("discountType").notNull().default("percent"),
   discountPercent: integer("discountPercent").notNull(),
+  // Fixed Rand discount in cents (e.g. 5000 = R50) — used when discountType = 'rand'
+  discountRandCents: integer("discountRandCents").notNull().default(0),
   // 'active' | 'used' | 'expired'
   status: text("status").notNull().default("active"),
   // Enrollment this voucher was redeemed against (set on redemption)

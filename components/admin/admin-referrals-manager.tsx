@@ -254,7 +254,9 @@ function VouchersTab({
                   )}
                 </td>
                 <td className="px-4 py-3 text-muted-foreground">{v.campaignName}</td>
-                <td className="px-4 py-3 font-bold text-lime-foreground">{v.discountPercent}%</td>
+                <td className="px-4 py-3 font-bold text-lime-foreground">
+                  {formatDiscount(v.discountType, v.discountPercent, v.discountRandCents)}
+                </td>
                 <td className="px-4 py-3">
                   <StatusBadge status={v.status} />
                 </td>
@@ -297,7 +299,9 @@ function CampaignsTab({
   const [newForm, setNewForm] = useState({
     name: "",
     description: "",
+    discountType: "percent",
     discountPercent: 10,
+    discountRandCents: 0,
     appliesTo: "monthly",
     expiryDays: 90 as number | null,
     enabled: true,
@@ -318,7 +322,9 @@ function CampaignsTab({
     await adminUpdateCampaign(c.id, {
       name: c.name,
       description: c.description,
+      discountType: c.discountType,
       discountPercent: c.discountPercent,
+      discountRandCents: c.discountRandCents,
       appliesTo: c.appliesTo,
       expiryDays: c.expiryDays,
       enabled: c.enabled,
@@ -335,7 +341,16 @@ function CampaignsTab({
     }
     setSaving(false)
     setShowNew(false)
-    setNewForm({ name: "", description: "", discountPercent: 10, appliesTo: "monthly", expiryDays: 90, enabled: true })
+    setNewForm({
+      name: "",
+      description: "",
+      discountType: "percent",
+      discountPercent: 10,
+      discountRandCents: 0,
+      appliesTo: "monthly",
+      expiryDays: 90,
+      enabled: true,
+    })
     setBulkQuantity(50)
   }
 
@@ -467,7 +482,12 @@ function CampaignsTab({
                   </div>
                   <p className="text-xs text-muted-foreground">{c.description}</p>
                   <div className="flex flex-wrap gap-3 pt-1 text-xs text-muted-foreground">
-                    <span><strong className="text-navy">{c.discountPercent}%</strong> discount</span>
+                    <span>
+                      <strong className="text-navy">
+                        {formatDiscount(c.discountType, c.discountPercent, c.discountRandCents)}
+                      </strong>{" "}
+                      discount
+                    </span>
                     <span>Applies to: <strong className="text-navy capitalize">{c.appliesTo}</strong></span>
                     <span>Expiry: <strong className="text-navy">{c.expiryDays ? `${c.expiryDays} days` : "Never"}</strong></span>
                   </div>
@@ -527,13 +547,16 @@ function CampaignFields({
   values: {
     name: string
     description: string
+    discountType: string
     discountPercent: number
+    discountRandCents: number
     appliesTo: string
     expiryDays: number | null
     enabled: boolean
   }
   onChange: (patch: Partial<typeof values>) => void
 }) {
+  const isRand = values.discountType === "rand"
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
       <label className="col-span-full block">
@@ -553,16 +576,43 @@ function CampaignFields({
         />
       </label>
       <label className="block">
-        <span className="text-xs font-semibold text-navy">Discount %</span>
-        <input
-          type="number"
-          min={1}
-          max={100}
-          value={values.discountPercent}
-          onChange={(e) => onChange({ discountPercent: Number(e.target.value) })}
+        <span className="text-xs font-semibold text-navy">Discount Type</span>
+        <select
+          value={values.discountType}
+          onChange={(e) => onChange({ discountType: e.target.value })}
           className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-lime"
-        />
+        >
+          <option value="percent">Percentage (%)</option>
+          <option value="rand">Fixed Amount (R)</option>
+        </select>
       </label>
+      {isRand ? (
+        <label className="block">
+          <span className="text-xs font-semibold text-navy">Discount (R)</span>
+          <input
+            type="number"
+            min={1}
+            step="0.01"
+            value={values.discountRandCents / 100}
+            onChange={(e) =>
+              onChange({ discountRandCents: Math.round(Number(e.target.value) * 100) })
+            }
+            className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-lime"
+          />
+        </label>
+      ) : (
+        <label className="block">
+          <span className="text-xs font-semibold text-navy">Discount %</span>
+          <input
+            type="number"
+            min={1}
+            max={100}
+            value={values.discountPercent}
+            onChange={(e) => onChange({ discountPercent: Number(e.target.value) })}
+            className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-lime"
+          />
+        </label>
+      )}
       <label className="block">
         <span className="text-xs font-semibold text-navy">Applies To</span>
         <select
@@ -623,6 +673,12 @@ function StatusBadge({ status }: { status: string }) {
       {status}
     </span>
   )
+}
+
+function formatDiscount(discountType: string, discountPercent: number, discountRandCents: number) {
+  return discountType === "rand"
+    ? `R${(discountRandCents / 100).toLocaleString("en-ZA")}`
+    : `${discountPercent}%`
 }
 
 function formatDate(d: Date) {

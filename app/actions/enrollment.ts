@@ -454,7 +454,9 @@ export type CartItem = {
   slotWeekday: number | null
   slotHour: number | null
   ageGroup: string | null
+  discountType?: string
   discountPercent?: number
+  discountRandCents?: number
   voucherId?: number | null
 }
 
@@ -490,7 +492,9 @@ export async function createCartEnrollments(input: {
   signedName: string
   referralCode: string | null
   voucherId: number | null
+  discountType?: string
   discountPercent: number | undefined
+  discountRandCents?: number
 }): Promise<{ orderReference: string; totalAmount: number; enrollmentIds: number[] }> {
   const userId = await getUserId()
   const signedAt = new Date()
@@ -502,8 +506,13 @@ export async function createCartEnrollments(input: {
 
   // Compute total with discount
   const subtotal = input.cartItems.reduce((sum, item) => sum + item.packagePrice, 0)
-  const disc = input.discountPercent ?? 0
-  const totalAmount = disc > 0 ? subtotal * (1 - disc / 100) : subtotal
+  let totalAmount = subtotal
+  if (input.discountType === "rand" && (input.discountRandCents ?? 0) > 0) {
+    totalAmount = Math.max(0, subtotal - input.discountRandCents! / 100)
+  } else {
+    const disc = input.discountPercent ?? 0
+    totalAmount = disc > 0 ? subtotal * (1 - disc / 100) : subtotal
+  }
 
   const isOnceOff = input.cartItems.every((item) => item.packagePeriod === "once-off")
 

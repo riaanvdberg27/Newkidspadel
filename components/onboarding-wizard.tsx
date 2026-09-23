@@ -136,7 +136,12 @@ export function OnboardingWizard({
   const [voucherValidating, setVoucherValidating] = useState(false)
   const [voucherError, setVoucherError] = useState<string | null>(null)
   const [appliedVoucher, setAppliedVoucher] = useState<{
-    id: number; code: string; discountPercent: number; campaignName: string
+    id: number
+    code: string
+    discountType: string
+    discountPercent: number
+    discountRandCents: number
+    campaignName: string
   } | null>(null)
 
   // Terms, consent & signature
@@ -221,8 +226,11 @@ export function OnboardingWizard({
   // Cart total
   // ---------------------------------------------------------------------------
   function computeTotal(): number {
-    const disc = appliedVoucher?.discountPercent ?? 0
     const base = (selectedPackage?.price ?? 0) * childCount
+    if (appliedVoucher?.discountType === "rand" && appliedVoucher.discountRandCents > 0) {
+      return Math.max(0, base - appliedVoucher.discountRandCents / 100)
+    }
+    const disc = appliedVoucher?.discountPercent ?? 0
     return disc > 0 ? base * (1 - disc / 100) : base
   }
 
@@ -282,6 +290,9 @@ export function OnboardingWizard({
           slotWeekday: isSchoolPkg ? null : (sched.slot?.weekday ?? null),
           slotHour: isSchoolPkg ? null : (sched.slot?.hour ?? null),
           ageGroup: isSchoolPkg ? null : (sched.ageGroup ?? null),
+          discountType: appliedVoucher?.discountType,
+          discountPercent: appliedVoucher?.discountPercent,
+          discountRandCents: appliedVoucher?.discountRandCents,
         }
       })
 
@@ -303,7 +314,9 @@ export function OnboardingWizard({
         signedName: `${parent.firstName} ${parent.lastName}`.trim(),
         referralCode: initialRefCode ?? null,
         voucherId: appliedVoucher?.id ?? null,
+        discountType: appliedVoucher?.discountType,
         discountPercent: appliedVoucher?.discountPercent ?? undefined,
+        discountRandCents: appliedVoucher?.discountRandCents,
       })
 
       // Enrollment + order records now exist — remember them so the EFT
@@ -1000,7 +1013,11 @@ export function OnboardingWizard({
               <div>
                 <p className="text-sm font-bold text-navy">{appliedVoucher.code}</p>
                 <p className="text-xs text-muted-foreground">
-                  {appliedVoucher.campaignName} — {appliedVoucher.discountPercent}% off applied
+                  {appliedVoucher.campaignName} —{" "}
+                  {appliedVoucher.discountType === "rand"
+                    ? `R${(appliedVoucher.discountRandCents / 100).toLocaleString("en-ZA")} off`
+                    : `${appliedVoucher.discountPercent}% off`}{" "}
+                  applied
                 </p>
               </div>
               <button
