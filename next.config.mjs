@@ -27,6 +27,15 @@ const nextConfig = {
     qualities: [72, 75, 80],
     // Keep optimised images in the cache for 7 days before re-optimising.
     minimumCacheTTL: 60 * 60 * 24 * 7,
+    // The /api/blob proxy is same-origin on the custom production domain, so
+    // Next.js treats it as a LOCAL image path. Local paths with a query
+    // string require an explicit localPatterns entry (Next.js 16).
+    localPatterns: [
+      {
+        pathname: "/api/blob",
+        search: "**",
+      },
+    ],
     remotePatterns: [
       // Vercel Blob public store URLs (legacy / existing data)
       {
