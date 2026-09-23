@@ -20,6 +20,7 @@ import type { CartItem } from "@/app/actions/enrollment"
 import { blobUrl } from "@/lib/blob"
 import { validateVoucherCode } from "@/app/actions/referrals"
 import { BankDetailsCard } from "@/components/bank-details-card"
+import { isParentEnrollmentEnabled } from "@/app/actions/clubs"
 
 // ---------------------------------------------------------------------------
 // Step labels
@@ -43,6 +44,20 @@ type ChildSchedule = {
   ageGroup: AgeGroup | null
   slot: SelectedSlot | null
   slot2: SelectedSlot | null   // Advanced second session
+  parent1: boolean            // Parent 1 joins the same session (Beginner/Advanced only)
+  parent2: boolean            // Parent 2 joins the same session
+  parent2Name: string         // Required once parent2 is checked
+}
+
+const EMPTY_SCHEDULE: ChildSchedule = {
+  clubId: null,
+  schoolId: null,
+  ageGroup: null,
+  slot: null,
+  slot2: null,
+  parent1: false,
+  parent2: false,
+  parent2Name: "",
 }
 
 // ---------------------------------------------------------------------------
@@ -72,6 +87,15 @@ export function OnboardingWizard({
     (selectedPackage?.slug?.toLowerCase().includes("school") ?? false)
   const STEPS = isSchoolPkg ? SCHOOL_STEPS : CLUB_STEPS
 
+  // Parents may enroll themselves alongside their child (same club + time slot),
+  // but only on the Beginner/Advanced club packages, and only when the package
+  // has a parent add-on price configured by admin.
+  const isParentEligible =
+    !isSchoolPkg &&
+    (selectedPackage?.slug === "beginner" || selectedPackage?.slug === "advanced") &&
+    selectedPackage?.parentPrice != null
+  const parentAddOnPrice = selectedPackage?.parentPrice ?? 0
+
   const availableClubs =
     selectedPackage && selectedPackage.clubIds.length > 0
       ? clubs.filter((c) => selectedPackage.clubIds.includes(c.id))
@@ -87,20 +111,18 @@ export function OnboardingWizard({
 
   // ── Step 2: Per-child club/school + schedule ─────────────────────────────
   // One ChildSchedule per child — indexed by child position.
-  const [schedules, setSchedules] = useState<ChildSchedule[]>(
-    [{ clubId: null, schoolId: null, ageGroup: null, slot: null, slot2: null }],
-  )
+  const [schedules, setSchedules] = useState<ChildSchedule[]>([EMPTY_SCHEDULE])
   // Which child is currently being configured in step 2
   const [scheduleChildIdx, setScheduleChildIdx] = useState(0)
 
   function currentSchedule(): ChildSchedule {
-    return schedules[scheduleChildIdx] ?? { clubId: null, schoolId: null, ageGroup: null, slot: null, slot2: null }
+    return schedules[scheduleChildIdx] ?? EMPTY_SCHEDULE
   }
 
   function updateSchedule(idx: number, patch: Partial<ChildSchedule>) {
     setSchedules((prev) => {
       const next = [...prev]
-      next[idx] = { ...(next[idx] ?? { clubId: null, schoolId: null, ageGroup: null, slot: null, slot2: null }), ...patch }
+      next[idx] = { ...(next[idx] ?? EMPTY_SCHEDULE), ...patch }
       return next
     })
   }
@@ -178,6 +200,42 @@ export function OnboardingWizard({
     }
   }, [cancelledRef])
 
+  // ── Parent add-on availability for the current child's chosen slot(s) ───
+  // Admin can enable/disable parent enrollment per slot. For Advanced (two
+  // sessions), both sessions must allow it since the parent joins every
+  // session their child attends.
+  const [parentSlotsEnabled, setParentSlotsEnabled] = useState(false)
+  useEffect(() => {
+    const sched = schedules[scheduleChildIdx]
+    if (!isParentEligible || !sched?.clubId || !sched?.ageGroup || !sched?.slot) {
+      setParentSlotsEnabled(false)
+      return
+    }
+    let active = true
+    const checks = [isParentEnrollmentEnabled(sched.clubId, sched.ageGroup, sched.slot.weekday, sched.slot.hour)]
+    if (isAdvanced && sched.slot2) {
+      checks.push(isParentEnrollmentEnabled(sched.clubId, sched.ageGroup, sched.slot2.weekday, sched.slot2.hour))
+    } else if (isAdvanced) {
+      checks.push(Promise.resolve(false))
+    }
+    Promise.all(checks).then((results) => {
+      if (active) setParentSlotsEnabled(results.every(Boolean))
+    })
+    return () => {
+      active = false
+    }
+  }, [
+    isParentEligible,
+    isAdvanced,
+    scheduleChildIdx,
+    schedules[scheduleChildIdx]?.clubId,
+    schedules[scheduleChildIdx]?.ageGroup,
+    schedules[scheduleChildIdx]?.slot?.weekday,
+    schedules[scheduleChildIdx]?.slot?.hour,
+    schedules[scheduleChildIdx]?.slot2?.weekday,
+    schedules[scheduleChildIdx]?.slot2?.hour,
+  ])
+
   // ── Returned from a declined / cancelled Netcash payment ────────────────
   if (cancelledRef) {
     return (
@@ -226,7 +284,16 @@ export function OnboardingWizard({
   // Cart total
   // ---------------------------------------------------------------------------
   function computeTotal(): number {
-    const base = (selectedPackage?.price ?? 0) * childCount
+    const childrenBase = (selectedPackage?.price ?? 0) * childCount
+    // Each child's parent add-on(s) are additive — Parent 1 and/or Parent 2
+    // joining that child's exact session, at the package's parent add-on price.
+    const parentAddOns = isParentEligible
+      ? Array.from({ length: childCount }, (_, i) => schedules[i] ?? EMPTY_SCHEDULE).reduce(
+          (sum, s) => sum + (s.parent1 ? parentAddOnPrice : 0) + (s.parent2 ? parentAddOnPrice : 0),
+          0,
+        )
+      : 0
+    const base = childrenBase + parentAddOns
     if (appliedVoucher?.discountType === "rand" && appliedVoucher.discountRandCents > 0) {
       return Math.max(0, base - appliedVoucher.discountRandCents / 100)
     }
@@ -274,14 +341,18 @@ export function OnboardingWizard({
 
       // 2. Build CartItems — one per child
       const cartItems: CartItem[] = children.map((child, idx) => {
-        const sched = schedules[idx] ?? { clubId: null, schoolId: null, ageGroup: null, slot: null, slot2: null }
+        const sched = schedules[idx] ?? EMPTY_SCHEDULE
         const clubObj = clubs.find((c) => c.id === sched.clubId) ?? null
         const schoolObj = schools.find((s) => s.id === sched.schoolId) ?? null
+        const parent1Enrolled = isParentEligible && sched.parent1
+        const parent2Enrolled = isParentEligible && sched.parent2
+        const parentAddOnAmount =
+          (parent1Enrolled ? parentAddOnPrice : 0) + (parent2Enrolled ? parentAddOnPrice : 0)
         return {
           child: { firstName: child.firstName, lastName: child.lastName, dob: child.dob },
           packageId: selectedPackage.id,
           packageName: selectedPackage.name,
-          packagePrice: selectedPackage.price,
+          packagePrice: selectedPackage.price + parentAddOnAmount,
           packagePeriod: selectedPackage.period,
           clubId: isSchoolPkg ? null : (sched.clubId ?? null),
           clubName: isSchoolPkg ? (schoolObj?.name ?? "") : (clubObj?.name ?? ""),
@@ -293,6 +364,10 @@ export function OnboardingWizard({
           discountType: appliedVoucher?.discountType,
           discountPercent: appliedVoucher?.discountPercent,
           discountRandCents: appliedVoucher?.discountRandCents,
+          parent1Enrolled,
+          parent2Enrolled,
+          parent2Name: parent2Enrolled ? sched.parent2Name.trim() : undefined,
+          parentAddOnAmount,
         }
       })
 
@@ -472,7 +547,7 @@ export function OnboardingWizard({
                   setSchedules((prev) => {
                     const updated = [...prev]
                     while (updated.length < n)
-                      updated.push({ clubId: null, schoolId: null, ageGroup: null, slot: null, slot2: null })
+                      updated.push(EMPTY_SCHEDULE)
                     return updated.slice(0, n)
                   })
                 }}
@@ -791,6 +866,47 @@ export function OnboardingWizard({
                   )}
                 </div>
               )}
+
+              {/* Parent add-on — enroll Parent 1 and/or Parent 2 in the same session */}
+              {parentSlotsEnabled && (
+                <div className="mt-6 rounded-card border-2 border-lime/40 bg-lime/5 p-4">
+                  <p className="text-sm font-semibold text-navy">Add a Parent to This Session</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    Parents can join {childName ? `${childName}'s` : "their child's"} exact time slot for{" "}
+                    <strong className="text-navy">R{parentAddOnPrice}/month</strong> each. Optional.
+                  </p>
+                  <div className="mt-3 space-y-3">
+                    <label className="flex items-center gap-3 rounded-2xl border border-border bg-card p-3">
+                      <input
+                        type="checkbox"
+                        checked={sched.parent1}
+                        onChange={(e) => updateSchedule(scheduleChildIdx, { parent1: e.target.checked })}
+                        className="h-5 w-5 rounded accent-lime"
+                      />
+                      <span className="text-sm font-semibold text-navy">
+                        Parent 1 ({parent.firstName || "you"}) — joins this session
+                      </span>
+                    </label>
+                    <label className="flex items-center gap-3 rounded-2xl border border-border bg-card p-3">
+                      <input
+                        type="checkbox"
+                        checked={sched.parent2}
+                        onChange={(e) => updateSchedule(scheduleChildIdx, { parent2: e.target.checked })}
+                        className="h-5 w-5 rounded accent-lime"
+                      />
+                      <span className="text-sm font-semibold text-navy">Parent 2 — joins this session</span>
+                    </label>
+                    {sched.parent2 && (
+                      <Field
+                        label="Parent 2 Full Name"
+                        value={sched.parent2Name}
+                        onChange={(v) => updateSchedule(scheduleChildIdx, { parent2Name: v })}
+                        placeholder="Full name"
+                      />
+                    )}
+                  </div>
+                </div>
+              )}
             </>
           )}
 
@@ -989,6 +1105,17 @@ export function OnboardingWizard({
                     />
                     {isAdvanced && sched?.slot2 && (
                       <Row label="Second Session" value={formatSlot(sched.slot2.weekday, sched.slot2.hour)} />
+                    )}
+                    {isParentEligible && (sched?.parent1 || sched?.parent2) && (
+                      <Row
+                        label="Parents Joining"
+                        value={[
+                          sched?.parent1 ? `${parent.firstName} ${parent.lastName}`.trim() || "Parent 1" : null,
+                          sched?.parent2 ? sched?.parent2Name.trim() || "Parent 2" : null,
+                        ]
+                          .filter(Boolean)
+                          .join(" & ")}
+                      />
                     )}
                   </>
                 )}

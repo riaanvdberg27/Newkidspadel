@@ -342,6 +342,9 @@ function PackageForm({
   const [slug, setSlug] = useState(pkg?.slug ?? "")
   const [name, setName] = useState(pkg?.name ?? "")
   const [price, setPrice] = useState(String(pkg?.price ?? 0))
+  const [parentPrice, setParentPrice] = useState(
+    pkg?.parentPrice != null ? String(pkg.parentPrice) : "",
+  )
   const [period, setPeriod] = useState(pkg?.period ?? "monthly")
   const [tagline, setTagline] = useState(pkg?.tagline ?? "")
   const [features, setFeatures] = useState<FeatureItem[]>(pkg?.features ?? [])
@@ -429,6 +432,7 @@ function PackageForm({
       slug,
       name,
       price: Math.max(0, Number(price)),
+      parentPrice: parentPrice.trim() === "" ? null : Math.max(0, Number(parentPrice)),
       period,
       tagline,
       features,
@@ -490,6 +494,23 @@ function PackageForm({
           </select>
         </Field>
       </div>
+
+      {!isSchool && (
+        <Field label="Parent add-on price (R) — leave blank to disable">
+          <input
+            type="number"
+            min={0}
+            value={parentPrice}
+            placeholder={`e.g. ${price || 0}`}
+            onChange={(e) => setParentPrice(e.target.value)}
+            className="mt-2 w-full rounded-md border border-border bg-background px-3 py-2 outline-none focus:border-lime"
+          />
+          <p className="mt-1 text-xs text-muted-foreground">
+            When set, parents can enroll themselves alongside their child in this package at the same time
+            slot, for this much extra per month. Leave blank to hide the parent add-on for this package.
+          </p>
+        </Field>
+      )}
 
       <Field label="Tagline">
         <input

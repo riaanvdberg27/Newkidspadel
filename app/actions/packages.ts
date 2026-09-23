@@ -14,6 +14,8 @@ export type PublicPackage = {
   slug: string
   name: string
   price: number
+  /** Price for a parent joining the same session as their child. Null = parent add-on not offered. */
+  parentPrice: number | null
   period: string
   tagline: string
   features: FeatureItem[]
@@ -52,6 +54,7 @@ function toPublic(row: typeof packages.$inferSelect, clubIds: number[] = []): Pu
     slug: row.slug,
     name: row.name,
     price: row.price,
+    parentPrice: row.parentPrice ?? null,
     period: row.period,
     tagline: row.tagline,
     features,
@@ -230,6 +233,8 @@ export type PackageInput = {
   slug: string
   name: string
   price: number
+  /** Price for a parent joining the same session as their child. Null/undefined = feature off. */
+  parentPrice?: number | null
   period: string
   tagline: string
   features: FeatureItem[]
@@ -256,6 +261,8 @@ function clean(input: PackageInput) {
       .replace(/^-+|-+$/g, ""),
     name: input.name.trim(),
     price: Math.max(0, Math.round(input.price)),
+    parentPrice:
+      input.parentPrice == null ? null : Math.max(0, Math.round(input.parentPrice)),
     period: input.period || "monthly",
     tagline: input.tagline.trim(),
     features: input.features.map((f) => ({ type: f.type, text: f.text.trim() })).filter((f) => f.text),

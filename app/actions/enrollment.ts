@@ -458,6 +458,12 @@ export type CartItem = {
   discountPercent?: number
   discountRandCents?: number
   voucherId?: number | null
+  // Parent self-enrollment add-on (Beginner & Advanced packages only)
+  parent1Enrolled?: boolean
+  parent2Enrolled?: boolean
+  parent2Name?: string
+  /** Rands added to packagePrice for the enrolled parent(s) — already reflected in packagePrice, stored separately for billing history. */
+  parentAddOnAmount?: number
 }
 
 type CartPrefs = {
@@ -504,8 +510,14 @@ export async function createCartEnrollments(input: {
 
   const parentName = `${input.parent.firstName} ${input.parent.lastName}`.trim()
 
-  // Compute total with discount
-  const subtotal = input.cartItems.reduce((sum, item) => sum + item.packagePrice, 0)
+  // Compute total with discount. packagePrice already reflects any parent
+  // add-on the wizard computed (add-on is per-child, folded into the price),
+  // but parentAddOnAmount is also summed here as a defensive fallback in case
+  // a caller sends the base price with the add-on tracked separately.
+  const subtotal = input.cartItems.reduce(
+    (sum, item) => sum + item.packagePrice + (item.parentAddOnAmount ?? 0),
+    0,
+  )
   let totalAmount = subtotal
   if (input.discountType === "rand" && (input.discountRandCents ?? 0) > 0) {
     totalAmount = Math.max(0, subtotal - input.discountRandCents! / 100)
@@ -586,6 +598,10 @@ export async function createCartEnrollments(input: {
         coachId: resolvedCoachId ?? undefined,
         coachName: resolvedCoachName ?? undefined,
         pendingVoucherId: input.voucherId ?? undefined,
+        parent1Enrolled: item.parent1Enrolled ?? false,
+        parent2Enrolled: item.parent2Enrolled ?? false,
+        parent2Name: item.parent2Enrolled ? item.parent2Name ?? undefined : undefined,
+        parentAddOnAmount: item.parentAddOnAmount ?? 0,
       })
       .returning({ id: enrollments.id })
 

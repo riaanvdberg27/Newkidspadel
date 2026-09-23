@@ -215,3 +215,42 @@ export async function setSlotCapacity(input: {
   revalidatePath("/admin")
   return { success: true }
 }
+
+/**
+ * Toggle whether a parent may enroll alongside their child in this exact
+ * club/age-group/weekday/hour slot. Does not create a slot row if one doesn't
+ * exist yet — there's nothing to attach the flag to until a capacity > 0 slot
+ * exists.
+ */
+export async function setSlotParentEnrollment(input: {
+  clubId: number
+  weekday: number
+  hour: number
+  ageGroup: AgeGroup
+  enabled: boolean
+}) {
+  await requireAdmin()
+  const hour = Math.round(input.hour * 2) / 2
+
+  if (!(SLOT_HOURS as readonly number[]).includes(hour)) {
+    throw new Error("Invalid hour")
+  }
+  if (!AGE_GROUPS.includes(input.ageGroup as AgeGroup)) {
+    throw new Error("Invalid age group")
+  }
+
+  await db
+    .update(clubSlots)
+    .set({ parentEnrollmentEnabled: input.enabled, updatedAt: new Date() })
+    .where(
+      and(
+        eq(clubSlots.clubId, input.clubId),
+        eq(clubSlots.weekday, input.weekday),
+        eq(clubSlots.hour, String(hour)),
+        eq(clubSlots.ageGroup, input.ageGroup),
+      ),
+    )
+
+  revalidatePath("/admin")
+  return { success: true }
+}

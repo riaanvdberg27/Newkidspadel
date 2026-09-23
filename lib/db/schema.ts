@@ -70,6 +70,9 @@ export const packages = pgTable("packages", {
   slug: text("slug").notNull().unique(),
   name: text("name").notNull(),
   price: integer("price").notNull(),
+  // Price for a parent joining the same session as their child (null = parent
+  // add-on not offered for this package, e.g. school/once-off packages)
+  parentPrice: integer("parentPrice"),
   // 'monthly' | 'once-off'
   period: text("period").notNull().default("monthly"),
   tagline: text("tagline").notNull().default(""),
@@ -138,6 +141,9 @@ export const clubSlots = pgTable(
     capacity: integer("capacity").notNull().default(0),
     // Age group this slot is available for
     ageGroup: text("ageGroup").notNull().default("4-8"),
+    // Whether a parent may enroll alongside the child in this exact slot
+    // (same weekday/hour/ageGroup, no separate capacity pool)
+    parentEnrollmentEnabled: boolean("parentEnrollmentEnabled").notNull().default(true),
     createdAt: timestamp("createdAt").notNull().defaultNow(),
     updatedAt: timestamp("updatedAt").notNull().defaultNow(),
   },
@@ -200,6 +206,15 @@ export const enrollments = pgTable("enrollments", {
   slotAgeGroup2: text("slotAgeGroup2"),
   // True once an admin has manually customized this client's time slot(s) away from the default
   scheduleCustomized: boolean("scheduleCustomized").notNull().default(false),
+  // Parent self-enrollment add-on — parent(s) attend the exact same slot(s) as the
+  // child above (Beginner/Advanced packages only)
+  parent1Enrolled: boolean("parent1Enrolled").notNull().default(false),
+  parent2Enrolled: boolean("parent2Enrolled").notNull().default(false),
+  // Parent 2's name (Parent 1 reuses parentName, the account holder)
+  parent2Name: text("parent2Name"),
+  // Rands added to this enrollment's price for parent participation, captured at
+  // enrollment time so later price changes don't retroactively change history
+  parentAddOnAmount: integer("parentAddOnAmount").notNull().default(0),
   // Debit order
   debitAccountHolder: text("debitAccountHolder"),
   debitBankName: text("debitBankName"),

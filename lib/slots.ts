@@ -78,4 +78,5 @@ export type SlotAvailability = {
   capacity: number
   booked: number
   remaining: number
+  parentEnrollmentEnabled: boolean
 }
