@@ -342,6 +342,9 @@ function PackageForm({
   const [slug, setSlug] = useState(pkg?.slug ?? "")
   const [name, setName] = useState(pkg?.name ?? "")
   const [price, setPrice] = useState(String(pkg?.price ?? 0))
+  const [parentPrice, setParentPrice] = useState(
+    pkg?.parentPrice != null ? String(pkg.parentPrice) : "",
+  )
   const [period, setPeriod] = useState(pkg?.period ?? "monthly")
   const [tagline, setTagline] = useState(pkg?.tagline ?? "")
   const [features, setFeatures] = useState<FeatureItem[]>(pkg?.features ?? [])
@@ -349,6 +352,8 @@ function PackageForm({
   const [popular, setPopular] = useState(pkg?.popular ?? false)
   const [published, setPublished] = useState(pkg?.published ?? true)
   const [isSchool, setIsSchool] = useState(pkg?.isSchool ?? false)
+  const [isHidden, setIsHidden] = useState((pkg?.visibility ?? "public") === "hidden")
+  const [isFamily, setIsFamily] = useState(pkg?.isFamily ?? false)
   const [slotType, setSlotType] = useState(pkg?.slotType ?? "standard")
   const [sortOrder, setSortOrder] = useState(String(pkg?.sortOrder ?? 0))
   const [activeAgeGroup, setActiveAgeGroup] = useState<AgeGroup>("4-8")
@@ -429,6 +434,7 @@ function PackageForm({
       slug,
       name,
       price: Math.max(0, Number(price)),
+      parentPrice: parentPrice.trim() === "" ? null : Math.max(0, Number(parentPrice)),
       period,
       tagline,
       features,
@@ -437,6 +443,8 @@ function PackageForm({
       published,
       slotType,
       isSchool,
+      visibility: isHidden ? "hidden" : "public",
+      isFamily,
       sortOrder: Number(sortOrder),
       customSlots: slotType !== "custom" ? [] : customSlotList,
       clubIds: isSchool ? [] : selectedClubIds,
@@ -571,6 +579,42 @@ function PackageForm({
             {isSchool
               ? "This package is for schools — one coaching slot per week. Slot and coach settings apply."
               : "Tick this if the package is for schools, not clubs."}
+          </p>
+        </label>
+      </div>
+
+      {/* Hidden / group-code-only toggle */}
+      <div className={`flex items-center gap-3 rounded-md border px-4 py-3 ${isHidden ? "border-lime bg-lime/10" : "border-border bg-card"}`}>
+        <input
+          type="checkbox"
+          id="isHidden"
+          checked={isHidden}
+          onChange={(e) => setIsHidden(e.target.checked)}
+          className="h-5 w-5 accent-lime"
+        />
+        <label htmlFor="isHidden" className="cursor-pointer">
+          <p className="text-sm font-semibold text-navy">Hidden — only visible via group code</p>
+          <p className="text-xs text-muted-foreground">
+            {isHidden
+              ? "This package will never appear on the homepage or the default enrollment list. Create a Group Code for it in Referrals & Vouchers to let families unlock it."
+              : "Tick this to hide the package from the public site — it becomes enrollable only via a shared group code."}
+          </p>
+        </label>
+      </div>
+
+      {/* Family package toggle */}
+      <div className={`flex items-center gap-3 rounded-md border px-4 py-3 ${isFamily ? "border-lime bg-lime/10" : "border-border bg-card"}`}>
+        <input
+          type="checkbox"
+          id="isFamily"
+          checked={isFamily}
+          onChange={(e) => setIsFamily(e.target.checked)}
+          className="h-5 w-5 accent-lime"
+        />
+        <label htmlFor="isFamily" className="cursor-pointer">
+          <p className="text-sm font-semibold text-navy">Family package</p>
+          <p className="text-xs text-muted-foreground">
+            Price = per family member (parent or child) per month, capped at 3 children. Set a Parent Add-on Price above to let parents also enroll themselves.
           </p>
         </label>
       </div>

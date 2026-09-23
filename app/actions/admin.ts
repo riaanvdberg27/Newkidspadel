@@ -13,6 +13,7 @@ import {
 } from "@/lib/admin-auth"
 import { SLOT_HOURS } from "@/lib/slots"
 import type { ClubSlot } from "@/lib/db/schema"
+import { toFriendlyDbError } from "@/lib/db-errors"
 
 async function requireAdmin() {
   if (!(await isAdminAuthenticated())) {
@@ -50,51 +51,64 @@ export type ClubInput = {
   published: boolean
 }
 
-export async function createClub(input: ClubInput) {
+export async function createClub(
+  input: ClubInput,
+): Promise<{ ok: true; id: number } | { ok: false; error: string }> {
   await requireAdmin()
-  const rows = await db
-    .insert(clubs)
-    .values({
-      name: input.name,
-      location: input.location,
-      description: input.description || null,
-      address: input.address,
-      phone: input.phone,
-      hours: input.hours,
-      features: input.features,
-      image: input.image || null,
-      imageUrl: input.imageUrl || null,
-      contactPerson: input.contactPerson || null,
-      contactEmail: input.contactEmail || null,
-      published: input.published,
-    })
-    .returning({ id: clubs.id })
-  revalidateClubPaths()
-  return { id: rows[0].id }
+  try {
+    const rows = await db
+      .insert(clubs)
+      .values({
+        name: input.name,
+        location: input.location,
+        description: input.description || null,
+        address: input.address,
+        phone: input.phone,
+        hours: input.hours,
+        features: input.features,
+        image: input.image || null,
+        imageUrl: input.imageUrl || null,
+        contactPerson: input.contactPerson || null,
+        contactEmail: input.contactEmail || null,
+        published: input.published,
+      })
+      .returning({ id: clubs.id })
+    revalidateClubPaths()
+    return { ok: true, id: rows[0].id }
+  } catch (error) {
+    return { ok: false, error: toFriendlyDbError(error, "Failed to create club. Please try again.") }
+  }
 }
 
-export async function updateClub(id: number, input: ClubInput) {
+export async function updateClub(
+  id: number,
+  input: ClubInput,
+): Promise<{ ok: true } | { ok: false; error: string }> {
   await requireAdmin()
-  await db
-    .update(clubs)
-    .set({
-      name: input.name,
-      location: input.location,
-      description: input.description || null,
-      address: input.address,
-      phone: input.phone,
-      hours: input.hours,
-      features: input.features,
-      image: input.image || null,
-      imageUrl: input.imageUrl || null,
-      contactPerson: input.contactPerson || null,
-      contactEmail: input.contactEmail || null,
-      published: input.published,
-      updatedAt: new Date(),
-    })
-    .where(eq(clubs.id, id))
-  revalidateClubPaths()
-  return { success: true }
+  try {
+    await db
+      .update(clubs)
+      .set({
+        name: input.name,
+        location: input.location,
+        description: input.description || null,
+        address: input.address,
+        phone: input.phone,
+        hours: input.hours,
+        features: input.features,
+        image: input.image || null,
+        imageUrl: input.imageUrl || null,
+        contactPerson: input.contactPerson || null,
+        contactEmail: input.contactEmail || null,
+        published: input.published,
+        updatedAt: new Date(),
+      })
+      .where(eq(clubs.id, id))
+    revalidateClubPaths()
+    return { ok: true }
+  } catch (error) {
+    return { ok: false, error: toFriendlyDbError(error, "Failed to update club. Please try again.") }
+  }
 }
 
 /**
@@ -197,6 +211,45 @@ export async function setSlotCapacity(input: {
       ageGroup: input.ageGroup,
     })
   }
+
+  revalidatePath("/admin")
+  return { success: true }
+}
+
+/**
+ * Toggle whether a parent may enroll alongside their child in this exact
+ * club/age-group/weekday/hour slot. Does not create a slot row if one doesn't
+ * exist yet — there's nothing to attach the flag to until a capacity > 0 slot
+ * exists.
+ */
+export async function setSlotParentEnrollment(input: {
+  clubId: number
+  weekday: number
+  hour: number
+  ageGroup: AgeGroup
+  enabled: boolean
+}) {
+  await requireAdmin()
+  const hour = Math.round(input.hour * 2) / 2
+
+  if (!(SLOT_HOURS as readonly number[]).includes(hour)) {
+    throw new Error("Invalid hour")
+  }
+  if (!AGE_GROUPS.includes(input.ageGroup as AgeGroup)) {
+    throw new Error("Invalid age group")
+  }
+
+  await db
+    .update(clubSlots)
+    .set({ parentEnrollmentEnabled: input.enabled, updatedAt: new Date() })
+    .where(
+      and(
+        eq(clubSlots.clubId, input.clubId),
+        eq(clubSlots.weekday, input.weekday),
+        eq(clubSlots.hour, String(hour)),
+        eq(clubSlots.ageGroup, input.ageGroup),
+      ),
+    )
 
   revalidatePath("/admin")
   return { success: true }

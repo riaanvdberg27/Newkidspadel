@@ -15,13 +15,15 @@ export function AdminClubManager({ initialClubs }: { initialClubs: Club[] }) {
   const [filter, setFilter] = useState<"active" | "inactive" | "all">("active")
   const [confirmDeactivate, setConfirmDeactivate] = useState<{ id: number; name: string } | null>(null)
   const [confirmReactivate, setConfirmReactivate] = useState<{ id: number; name: string } | null>(null)
+  const [saveError, setSaveError] = useState<string | null>(null)
 
   function handleSave(input: ClubInput, id?: number) {
+    setSaveError(null)
     startTransition(async () => {
-      if (id) {
-        await updateClub(id, input)
-      } else {
-        await createClub(input)
+      const result = id ? await updateClub(id, input) : await createClub(input)
+      if (!result.ok) {
+        setSaveError(result.error)
+        return
       }
       setEditing(null)
       setCreating(false)
@@ -56,6 +58,7 @@ export function AdminClubManager({ initialClubs }: { initialClubs: Club[] }) {
         <h2 className="text-xl font-bold text-navy">Clubs</h2>
         <button
           onClick={() => {
+            setSaveError(null)
             setCreating(true)
             setEditing(null)
           }}
@@ -109,6 +112,7 @@ export function AdminClubManager({ initialClubs }: { initialClubs: Club[] }) {
               <div className="flex flex-wrap gap-2">
                 <button
                   onClick={() => {
+                    setSaveError(null)
                     setEditing(club)
                     setCreating(false)
                   }}
@@ -204,11 +208,17 @@ export function AdminClubManager({ initialClubs }: { initialClubs: Club[] }) {
             setEditing(null)
           }}
         >
+          {saveError && (
+            <div className="mb-4 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm font-semibold text-destructive">
+              {saveError}
+            </div>
+          )}
           <ClubForm
             club={editing}
             pending={pending}
             onSubmit={(input) => handleSave(input, editing?.id)}
             onCancel={() => {
+              setSaveError(null)
               setCreating(false)
               setEditing(null)
             }}
