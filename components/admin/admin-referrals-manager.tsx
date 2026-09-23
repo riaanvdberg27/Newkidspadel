@@ -582,9 +582,15 @@ function GroupCodesTab({ packages }: { packages: PublicPackage[] }) {
 
   async function refresh() {
     setLoading(true)
-    const data = await adminGetGroupAccessCodes()
-    setRows(data)
-    setLoading(false)
+    try {
+      const data = await adminGetGroupAccessCodes()
+      setRows(data)
+      setError(null)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load group codes.")
+    } finally {
+      setLoading(false)
+    }
   }
 
   useEffect(() => {
@@ -623,9 +629,14 @@ function GroupCodesTab({ packages }: { packages: PublicPackage[] }) {
 
   async function handleToggleEnabled(row: GroupAccessCodeRow) {
     setTogglingId(row.id)
-    await adminUpdateGroupAccessCode(row.id, { enabled: !row.enabled })
-    await refresh()
-    setTogglingId(null)
+    try {
+      await adminUpdateGroupAccessCode(row.id, { enabled: !row.enabled })
+      await refresh()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to update group code.")
+    } finally {
+      setTogglingId(null)
+    }
   }
 
   function handleCopy(row: GroupAccessCodeRow) {
@@ -764,7 +775,23 @@ function GroupCodesTab({ packages }: { packages: PublicPackage[] }) {
                 </td>
               </tr>
             )}
-            {!loading && (rows?.length ?? 0) === 0 && (
+            {!loading && rows === null && (
+              <tr>
+                <td colSpan={8} className="px-4 py-8 text-center">
+                  <p className="text-sm font-semibold text-red-600">
+                    {error ?? "Failed to load group codes."}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={refresh}
+                    className="mt-2 rounded-md border border-border px-3 py-1.5 text-xs font-semibold text-navy hover:bg-muted"
+                  >
+                    Retry
+                  </button>
+                </td>
+              </tr>
+            )}
+            {!loading && rows !== null && rows.length === 0 && (
               <tr>
                 <td colSpan={8} className="px-4 py-8 text-center text-muted-foreground">
                   No group codes yet. Click &quot;Create Group Code&quot; to unlock a hidden package for a group.
