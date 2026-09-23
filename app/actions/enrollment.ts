@@ -14,6 +14,7 @@ import { buildNetcashPayment } from "@/lib/netcash"
 import { orders } from "@/lib/db/schema"
 import { recordReferralOnEnrollment } from "@/app/actions/referrals"
 import { redeemVoucher } from "@/app/actions/referrals"
+import { redeemGroupAccessCode } from "@/app/actions/group-access-codes"
 
 async function getUserId() {
   const session = await auth.api.getSession({ headers: await headers() })
@@ -501,9 +502,22 @@ export async function createCartEnrollments(input: {
   discountType?: string
   discountPercent: number | undefined
   discountRandCents?: number
+  /** Group access code entered to unlock a hidden package (e.g. Family Package). */
+  groupAccessCode?: string | null
 }): Promise<{ orderReference: string; totalAmount: number; enrollmentIds: number[] }> {
   const userId = await getUserId()
   const signedAt = new Date()
+
+  // Re-validate the group access code server-side and reserve one redemption
+  // slot for this cart BEFORE creating any enrollment rows. This is the
+  // authoritative check — the wizard's earlier validateGroupAccessCode() call
+  // is only for UX and must not be trusted at checkout time.
+  let groupAccessCodeId: number | null = null
+  if (input.groupAccessCode) {
+    const firstItem = input.cartItems[0]
+    if (!firstItem) throw new Error("No items in cart")
+    groupAccessCodeId = await redeemGroupAccessCode(input.groupAccessCode, firstItem.packageId)
+  }
 
   // Cart-level shared reference — used as Netcash p3 and stored on each enrollment row
   const orderReference = generateReference()
@@ -602,6 +616,7 @@ export async function createCartEnrollments(input: {
         parent2Enrolled: item.parent2Enrolled ?? false,
         parent2Name: item.parent2Enrolled ? item.parent2Name ?? undefined : undefined,
         parentAddOnAmount: item.parentAddOnAmount ?? 0,
+        groupAccessCodeId: groupAccessCodeId ?? undefined,
       })
       .returning({ id: enrollments.id })
 

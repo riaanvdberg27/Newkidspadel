@@ -30,6 +30,10 @@ export type PublicPackage = {
   schoolIds: number[]
   /** If true, this is a school-based package — wizard shows school picker instead of club picker. */
   isSchool: boolean
+  /** 'public' | 'hidden' — hidden packages never appear on the homepage or default wizard list. */
+  visibility: string
+  /** Family packages are priced per family member per month and broaden parent-eligibility. */
+  isFamily: boolean
 }
 
 export type CustomSlot = Pick<PackageSlot, "id" | "packageId" | "clubId" | "weekday" | "hour" | "capacity" | "ageGroup">
@@ -66,6 +70,8 @@ function toPublic(row: typeof packages.$inferSelect, clubIds: number[] = []): Pu
     clubIds,
     schoolIds: [],
     isSchool: row.isSchool ?? false,
+    visibility: row.visibility ?? "public",
+    isFamily: row.isFamily ?? false,
   }
 }
 
@@ -110,14 +116,29 @@ export async function getPackageByName(
   return { id: rows[0].id, slotType: (rows[0].slotType ?? "standard") as "standard" | "custom" }
 }
 
-/** Published packages for the public site (homepage + enrollment). */
+/** Published, public-visibility packages for the homepage + default wizard package list. */
 export async function getPublishedPackages(): Promise<PublicPackage[]> {
   const rows = await db
     .select()
     .from(packages)
-    .where(eq(packages.published, true))
+    .where(and(eq(packages.published, true), eq(packages.visibility, "public")))
     .orderBy(asc(packages.sortOrder), asc(packages.id))
   return attachClubIds(rows)
+}
+
+/**
+ * Fetch a single published package by id regardless of visibility.
+ * Used after a group access code has been validated to unlock a hidden package.
+ */
+export async function getPackageForAccessCode(packageId: number): Promise<PublicPackage | null> {
+  const rows = await db
+    .select()
+    .from(packages)
+    .where(and(eq(packages.id, packageId), eq(packages.published, true)))
+    .limit(1)
+  if (!rows[0]) return null
+  const [pkg] = await attachClubIds(rows)
+  return pkg
 }
 
 export type CustomSlotWithAvailability = CustomSlot & { booked: number; remaining: number }
@@ -250,6 +271,10 @@ export type PackageInput = {
   schoolIds?: number[]
   /** If true, wizard shows school picker instead of club picker. */
   isSchool?: boolean
+  /** 'public' | 'hidden' — hidden packages never appear on the homepage or default wizard list. */
+  visibility?: string
+  /** Family packages are priced per family member per month and broaden parent-eligibility. */
+  isFamily?: boolean
 }
 
 function clean(input: PackageInput) {
@@ -272,6 +297,8 @@ function clean(input: PackageInput) {
     slotType: input.slotType === "custom" ? "custom" : "standard",
     sortOrder: Math.round(input.sortOrder),
     isSchool: input.isSchool ?? false,
+    visibility: input.visibility === "hidden" ? "hidden" : "public",
+    isFamily: input.isFamily ?? false,
   }
 }
 

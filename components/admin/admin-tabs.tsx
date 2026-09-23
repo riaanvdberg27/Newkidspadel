@@ -163,7 +163,9 @@ export function AdminTabs({
             initialRevenue={billingRevenue}
           />
         )}
-        {tab === "referrals" && <AdminReferralsManager referrals={referrals} vouchers={vouchers} campaigns={campaigns} />}
+        {tab === "referrals" && (
+          <AdminReferralsManager referrals={referrals} vouchers={vouchers} campaigns={campaigns} packages={packages} />
+        )}
         {tab === "contact" && <AdminContactManager initialContacts={contacts} />}
         {tab === "moments" && <AdminMomentsManager initialMoments={moments} />}
         {tab === "site-images" && <AdminSiteImagesManager initialImages={siteImages} />}

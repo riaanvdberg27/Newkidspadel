@@ -21,6 +21,7 @@ import { blobUrl } from "@/lib/blob"
 import { validateVoucherCode } from "@/app/actions/referrals"
 import { BankDetailsCard } from "@/components/bank-details-card"
 import { isParentEnrollmentEnabled } from "@/app/actions/clubs"
+import { validateGroupAccessCode } from "@/app/actions/group-access-codes"
 
 // ---------------------------------------------------------------------------
 // Step labels
@@ -86,15 +87,24 @@ export function OnboardingWizard({
     selectedPackage?.isSchool === true ||
     (selectedPackage?.slug?.toLowerCase().includes("school") ?? false)
   const STEPS = isSchoolPkg ? SCHOOL_STEPS : CLUB_STEPS
+  const isFamilyPkg = selectedPackage?.isFamily === true
 
   // Parents may enroll themselves alongside their child (same club + time slot),
-  // but only on the Beginner/Advanced club packages, and only when the package
-  // has a parent add-on price configured by admin.
+  // but only on the Beginner/Advanced club packages (or any Family package),
+  // and only when the package has a parent add-on price configured by admin.
   const isParentEligible =
     !isSchoolPkg &&
-    (selectedPackage?.slug === "beginner" || selectedPackage?.slug === "advanced") &&
+    (selectedPackage?.slug === "beginner" || selectedPackage?.slug === "advanced" || isFamilyPkg) &&
     selectedPackage?.parentPrice != null
   const parentAddOnPrice = selectedPackage?.parentPrice ?? 0
+
+  // Group access code used to unlock a hidden package (e.g. Family Package).
+  // Cleared whenever the parent changes package.
+  const [unlockedGroupCode, setUnlockedGroupCode] = useState<string | null>(null)
+
+  // Family packages cover 1 parent + up to 3 children (or 2 parents + up to
+  // 3 children) — cap the "how many children" selector accordingly.
+  const CHILD_COUNT_OPTIONS = isFamilyPkg ? [1, 2, 3] : [1, 2, 3, 4, 5]
 
   const availableClubs =
     selectedPackage && selectedPackage.clubIds.length > 0
@@ -251,8 +261,9 @@ export function OnboardingWizard({
     return (
       <PackagePicker
         packages={packages}
-        onSelect={(pkg) => {
+        onSelect={(pkg, groupCode) => {
           setSelectedPackage(pkg)
+          setUnlockedGroupCode(groupCode ?? null)
           if (pkg.clubIds.length > 0) {
             setSchedules((prev) =>
               prev.map((s) =>
@@ -392,6 +403,7 @@ export function OnboardingWizard({
         discountType: appliedVoucher?.discountType,
         discountPercent: appliedVoucher?.discountPercent ?? undefined,
         discountRandCents: appliedVoucher?.discountRandCents,
+        groupAccessCode: unlockedGroupCode,
       })
 
       // Enrollment + order records now exist — remember them so the EFT
@@ -477,7 +489,7 @@ export function OnboardingWizard({
           <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Selected Package</p>
           <p className="font-bold text-navy">
             {selectedPackage.name} — R{selectedPackage.price.toLocaleString()}
-            {isOnceOff ? " (once off)" : "/month"} per child
+            {isOnceOff ? " (once off)" : "/month"} per {isFamilyPkg ? "family member" : "child"}
             {childCount > 1 && (
               <span className="ml-2 text-lime-foreground">
                 = R{computeTotal().toLocaleString()} total
@@ -485,9 +497,14 @@ export function OnboardingWizard({
               </span>
             )}
           </p>
+          {unlockedGroupCode && (
+            <span className="mt-1 inline-block rounded-full bg-lime/20 px-2.5 py-0.5 text-xs font-bold text-lime-foreground">
+              Unlocked with code: {unlockedGroupCode}
+            </span>
+          )}
         </div>
         <button
-          onClick={() => { setSelectedPackage(null); setStep(0) }}
+          onClick={() => { setSelectedPackage(null); setUnlockedGroupCode(null); setStep(0) }}
           className="rounded-2xl border border-border px-4 py-2 text-sm font-bold text-navy transition-colors hover:bg-muted"
         >
           Change Package
@@ -530,10 +547,12 @@ export function OnboardingWizard({
         <div>
           <h2 className="text-xl font-bold text-navy">How many children are you enrolling?</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            You can enroll up to 5 children in one go. Each child picks their own club and schedule.
+            {isFamilyPkg
+              ? "The Family Package covers up to 3 children. Each child picks their own club and schedule."
+              : "You can enroll up to 5 children in one go. Each child picks their own club and schedule."}
           </p>
-          <div className="mt-6 grid grid-cols-5 gap-3">
-            {[1, 2, 3, 4, 5].map((n) => (
+          <div className={`mt-6 grid gap-3 ${isFamilyPkg ? "grid-cols-3" : "grid-cols-5"}`}>
+            {CHILD_COUNT_OPTIONS.map((n) => (
               <button
                 key={n}
                 type="button"
@@ -1374,7 +1393,7 @@ function PackagePicker({
   onSelect,
 }: {
   packages: PublicPackage[]
-  onSelect: (p: PublicPackage) => void
+  onSelect: (p: PublicPackage, groupCode?: string) => void
 }) {
   const CARD_COLORS = [
     "from-navy to-[#0d3070]",
@@ -1382,19 +1401,83 @@ function PackagePicker({
     "from-[#3a1a5c] to-[#5a2d8c]",
     "from-[#1a3a4a] to-[#0a2a3a]",
   ]
+
+  const [groupCodeInput, setGroupCodeInput] = useState("")
+  const [groupCodeChecking, setGroupCodeChecking] = useState(false)
+  const [groupCodeError, setGroupCodeError] = useState<string | null>(null)
+  const [unlockedPackage, setUnlockedPackage] = useState<{ pkg: PublicPackage; code: string } | null>(null)
+
+  const visiblePackages = packages.filter((p) => p.visibility !== "hidden")
+  const displayedPackages =
+    unlockedPackage && !visiblePackages.some((p) => p.id === unlockedPackage.pkg.id)
+      ? [...visiblePackages, unlockedPackage.pkg]
+      : visiblePackages
+
+  async function handleUnlock() {
+    const code = groupCodeInput.trim()
+    if (!code) return
+    setGroupCodeChecking(true)
+    setGroupCodeError(null)
+    try {
+      const result = await validateGroupAccessCode(code)
+      if (!result.valid) {
+        setGroupCodeError(result.error)
+        return
+      }
+      setUnlockedPackage({ pkg: result.package, code })
+      setGroupCodeInput("")
+    } finally {
+      setGroupCodeChecking(false)
+    }
+  }
+
   return (
     <section className="mx-auto max-w-3xl px-4 py-12">
       <h2 className="text-center text-2xl font-black text-navy">Choose Your Package</h2>
       <p className="mt-2 text-center text-sm text-muted-foreground">
         Pick the plan that suits your child — swipe or scroll to explore
       </p>
+
+      {/* Group access code unlock */}
+      <div className="mx-auto mt-6 max-w-md rounded-2xl border border-border bg-card p-4 shadow-sm">
+        <p className="text-sm font-semibold text-navy">Have a group access code?</p>
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          Some packages, like the Family Package, are only available with a code from your school or
+          group organizer.
+        </p>
+        <div className="mt-3 flex gap-2">
+          <input
+            value={groupCodeInput}
+            onChange={(e) => setGroupCodeInput(e.target.value.toUpperCase())}
+            placeholder="Enter code"
+            className="flex-1 rounded-md border border-border bg-background px-3 py-2 text-sm font-mono outline-none focus:border-lime"
+          />
+          <button
+            type="button"
+            disabled={groupCodeChecking || !groupCodeInput.trim()}
+            onClick={handleUnlock}
+            className="rounded-md bg-navy px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+          >
+            {groupCodeChecking ? "Checking..." : "Unlock"}
+          </button>
+        </div>
+        {groupCodeError && <p className="mt-2 text-xs font-semibold text-red-600">{groupCodeError}</p>}
+        {unlockedPackage && (
+          <p className="mt-2 text-xs font-semibold text-lime-foreground">
+            {unlockedPackage.pkg.name} unlocked below!
+          </p>
+        )}
+      </div>
+
       <div className="mt-8 grid gap-5 sm:grid-cols-2">
-        {packages.map((pkg, i) => {
+        {displayedPackages.map((pkg, i) => {
           const gradient = CARD_COLORS[i % CARD_COLORS.length]
           return (
             <button
               key={pkg.id}
-              onClick={() => onSelect(pkg)}
+              onClick={() =>
+                onSelect(pkg, unlockedPackage?.pkg.id === pkg.id ? unlockedPackage.code : undefined)
+              }
               className="group block w-full overflow-hidden rounded-2xl text-left shadow-xl transition-all duration-300 hover:-translate-y-2 hover:shadow-2xl"
             >
               <div className={`relative overflow-hidden bg-gradient-to-br ${gradient} p-5 text-white`}>

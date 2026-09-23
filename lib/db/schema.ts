@@ -85,6 +85,12 @@ export const packages = pgTable("packages", {
   sortOrder: integer("sortOrder").notNull().default(0),
   // If true, this package is for school programs — wizard shows school picker instead of club picker
   isSchool: boolean("isSchool").notNull().default(false),
+  // 'public' | 'hidden' — hidden packages never appear on the homepage or the
+  // default wizard package list; they only become reachable via a group access code.
+  visibility: text("visibility").notNull().default("public"),
+  // Family packages are priced per family member (parent or child) per month,
+  // broaden parent-eligibility, and cap the wizard's child count at 3.
+  isFamily: boolean("isFamily").notNull().default(false),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
   updatedAt: timestamp("updatedAt").notNull().defaultNow(),
 })
@@ -264,6 +270,10 @@ export const enrollments = pgTable("enrollments", {
   // FK to vouchers(id) ON DELETE SET NULL — expressed in DB but not in Drizzle
   // schema to avoid a circular reference (vouchers is declared after enrollments).
   pendingVoucherId: integer("pending_voucher_id"),
+  // Group access code used to unlock a hidden family package for this enrollment (if any).
+  // FK to group_access_codes(id) ON DELETE SET NULL — expressed in DB but not in Drizzle
+  // schema to avoid a circular reference (groupAccessCodes is declared after enrollments).
+  groupAccessCodeId: integer("groupAccessCodeId"),
   // Multi-child cart checkout: all sibling enrollments share the same orderReference.
   // This is the p3 reference sent to Netcash and stored on the orders.netcashOrderId column.
   orderReference: text("orderReference"),
@@ -506,6 +516,31 @@ export const vouchers = pgTable("vouchers", {
 })
 
 export type Voucher = typeof vouchers.$inferSelect
+
+// ---- Group access codes (unlock hidden packages, e.g. Family Package) ----
+
+/**
+ * group_access_codes — a single shared code, redeemable by many families up to
+ * an admin-set cap. Distinct from `vouchers` (single-use, models discounts, not
+ * visibility). Entering a valid code unlocks a hidden package in the wizard.
+ */
+export const groupAccessCodes = pgTable("group_access_codes", {
+  id: serial("id").primaryKey(),
+  code: text("code").notNull().unique(),
+  label: text("label").notNull().default(""),
+  packageId: integer("packageId")
+    .notNull()
+    .references(() => packages.id, { onDelete: "cascade" }),
+  maxRedemptions: integer("maxRedemptions").notNull().default(100),
+  // Incremented once per family enrollment (cart), not per child.
+  redemptionCount: integer("redemptionCount").notNull().default(0),
+  enabled: boolean("enabled").notNull().default(true),
+  expiresAt: timestamp("expiresAt"),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+  updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+})
+
+export type GroupAccessCode = typeof groupAccessCodes.$inferSelect
 
 // ---- Netcash payment tables ----
 
