@@ -489,6 +489,7 @@ type CartPrefs = {
  */
 export async function createCartEnrollments(input: {
   parent: { firstName: string; lastName: string; email: string; mobile: string }
+  secondParent?: { firstName: string; lastName: string; mobile: string } | null
   cartItems: CartItem[]
   prefs: CartPrefs
   emergencyContactName: string
@@ -523,6 +524,10 @@ export async function createCartEnrollments(input: {
   const orderReference = generateReference()
 
   const parentName = `${input.parent.firstName} ${input.parent.lastName}`.trim()
+  const secondParentName = input.secondParent
+    ? `${input.secondParent.firstName} ${input.secondParent.lastName}`.trim()
+    : ""
+  const secondParentMobile = input.secondParent?.mobile.trim() ?? ""
 
   // Compute total with discount. packagePrice already reflects any parent
   // add-on the wizard computed (add-on is per-child, folded into the price),
@@ -580,6 +585,8 @@ export async function createCartEnrollments(input: {
         parentName,
         parentEmail: input.parent.email.trim(),
         parentMobile: input.parent.mobile,
+        secondParentName: secondParentName || undefined,
+        secondParentMobile: secondParentMobile || undefined,
         childName: childFullName,
         childDob,
         childAge,
