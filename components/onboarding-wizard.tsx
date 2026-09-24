@@ -5,7 +5,7 @@ import Link from "next/link"
 import { useEffect, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Check, ChevronRight, Tag, X } from "lucide-react"
-import { formatSlot } from "@/lib/slots"
+import { formatSlot, formatHour, WEEKDAYS } from "@/lib/slots"
 import type { Club, School } from "@/lib/db/schema"
 import type { AgeGroup } from "@/lib/db/schema"
 import type { PublicPackage } from "@/app/actions/packages"
@@ -156,6 +156,16 @@ export function OnboardingWizard({
   // "parent joins this session" add-on used by Beginner/Advanced packages.
   const [familyParent1Enrolled, setFamilyParent1Enrolled] = useState(false)
   const [familyParent2Enrolled, setFamilyParent2Enrolled] = useState(false)
+  // Family Package only: each enrolled parent picks a coaching time slot — either
+  // joining one of their children's sessions, or choosing their own separate slot.
+  const [parent1SlotMode, setParent1SlotMode] = useState<"join" | "own">("join")
+  const [parent1JoinChildIdx, setParent1JoinChildIdx] = useState(0)
+  const [parent1ClubId, setParent1ClubId] = useState<number | null>(null)
+  const [parent1Slot, setParent1Slot] = useState<SelectedSlot | null>(null)
+  const [parent2SlotMode, setParent2SlotMode] = useState<"join" | "own">("join")
+  const [parent2JoinChildIdx, setParent2JoinChildIdx] = useState(0)
+  const [parent2ClubId, setParent2ClubId] = useState<number | null>(null)
+  const [parent2Slot, setParent2Slot] = useState<SelectedSlot | null>(null)
   const [emergency, setEmergency] = useState({ name: "", phone: "" })
   const [prefs, setPrefs] = useState<Prefs>({
     prefEmail: true,
@@ -374,6 +384,18 @@ export function OnboardingWizard({
         const parent2Enrolled = isParentEligible && (isFamilyPkg ? idx === 0 && familyParent2Enrolled : sched.parent2)
         const parentAddOnAmount =
           (parent1Enrolled ? parentAddOnPrice : 0) + (parent2Enrolled ? parentAddOnPrice : 0)
+        const namedChildren = children.filter((c) => c.firstName.trim().length > 0)
+        const describeParentSlot = (mode: "join" | "own", joinIdx: number, ownClubId: number | null, ownSlot: SelectedSlot | null) => {
+          if (mode === "join") {
+            const joinChild = namedChildren[joinIdx] ?? namedChildren[0]
+            return joinChild ? `Joins ${joinChild.firstName}'s session` : undefined
+          }
+          if (ownClubId && ownSlot) {
+            const clubObjForSlot = clubs.find((c) => c.id === ownClubId)
+            return `Own slot — ${clubObjForSlot?.name ?? "club"}, ${WEEKDAYS[ownSlot.weekday]} ${formatHour(ownSlot.hour)}`
+          }
+          return undefined
+        }
         return {
           child: { firstName: child.firstName, lastName: child.lastName, dob: child.dob },
           packageId: selectedPackage.id,
@@ -397,6 +419,12 @@ export function OnboardingWizard({
               undefined
             : undefined,
           parentAddOnAmount,
+          parent1SlotLabel: parent1Enrolled
+            ? describeParentSlot(parent1SlotMode, parent1JoinChildIdx, parent1ClubId, parent1Slot)
+            : undefined,
+          parent2SlotLabel: parent2Enrolled
+            ? describeParentSlot(parent2SlotMode, parent2JoinChildIdx, parent2ClubId, parent2Slot)
+            : undefined,
         }
       })
 
@@ -1178,6 +1206,46 @@ export function OnboardingWizard({
                     </div>
                   </div>
                 )}
+                {familyParent1Enrolled && (
+                  <ParentSlotChoice
+                    label={`${parent.firstName} ${parent.lastName}`.trim() || "Parent 1"}
+                    children={children.slice(0, childCount)}
+                    mode={parent1SlotMode}
+                    onModeChange={setParent1SlotMode}
+                    joinChildIdx={parent1JoinChildIdx}
+                    onJoinChildIdxChange={setParent1JoinChildIdx}
+                    clubs={availableClubs}
+                    clubId={parent1ClubId}
+                    onClubIdChange={(id) => {
+                      setParent1ClubId(id)
+                      setParent1Slot(null)
+                    }}
+                    packageId={selectedPackage!.id}
+                    packageName={selectedPackage!.name}
+                    slot={parent1Slot}
+                    onSlotChange={setParent1Slot}
+                  />
+                )}
+                {familyParent2Enrolled && (
+                  <ParentSlotChoice
+                    label={`${secondParent.firstName} ${secondParent.lastName}`.trim() || "Parent 2"}
+                    children={children.slice(0, childCount)}
+                    mode={parent2SlotMode}
+                    onModeChange={setParent2SlotMode}
+                    joinChildIdx={parent2JoinChildIdx}
+                    onJoinChildIdxChange={setParent2JoinChildIdx}
+                    clubs={availableClubs}
+                    clubId={parent2ClubId}
+                    onClubIdChange={(id) => {
+                      setParent2ClubId(id)
+                      setParent2Slot(null)
+                    }}
+                    packageId={selectedPackage!.id}
+                    packageName={selectedPackage!.name}
+                    slot={parent2Slot}
+                    onSlotChange={setParent2Slot}
+                  />
+                )}
               </div>
             </div>
           )}
@@ -1296,19 +1364,43 @@ export function OnboardingWizard({
             <div className="mt-3 border-t border-border pt-3">
               <p className="text-sm font-semibold text-navy">Family Package — Billed Members</p>
               {familyParent1Enrolled && (
-                <Row
-                  label="Parent 1 Enrollment/Signup"
-                  value={`${parent.firstName} ${parent.lastName}`.trim() + ` — R${parentAddOnPrice}/month`}
-                />
+                <>
+                  <Row
+                    label="Parent 1 Enrollment/Signup"
+                    value={`${parent.firstName} ${parent.lastName}`.trim() + ` — R${parentAddOnPrice}/month`}
+                  />
+                  <Row
+                    label="Parent 1 Time Slot"
+                    value={
+                      parent1SlotMode === "join"
+                        ? `Joins ${children[parent1JoinChildIdx]?.firstName || "child"}'s session`
+                        : parent1Slot
+                          ? `${clubs.find((c) => c.id === parent1ClubId)?.name ?? "Club"}, ${WEEKDAYS[parent1Slot.weekday]} ${formatHour(parent1Slot.hour)}`
+                          : "—"
+                    }
+                  />
+                </>
               )}
               {familyParent2Enrolled && (
-                <Row
-                  label="Parent 2 Enrollment/Signup"
-                  value={
-                    (`${secondParent.firstName} ${secondParent.lastName}`.trim() || "Parent 2") +
-                    ` — R${parentAddOnPrice}/month`
-                  }
-                />
+                <>
+                  <Row
+                    label="Parent 2 Enrollment/Signup"
+                    value={
+                      (`${secondParent.firstName} ${secondParent.lastName}`.trim() || "Parent 2") +
+                      ` — R${parentAddOnPrice}/month`
+                    }
+                  />
+                  <Row
+                    label="Parent 2 Time Slot"
+                    value={
+                      parent2SlotMode === "join"
+                        ? `Joins ${children[parent2JoinChildIdx]?.firstName || "child"}'s session`
+                        : parent2Slot
+                          ? `${clubs.find((c) => c.id === parent2ClubId)?.name ?? "Club"}, ${WEEKDAYS[parent2Slot.weekday]} ${formatHour(parent2Slot.hour)}`
+                          : "—"
+                    }
+                  />
+                </>
               )}
             </div>
           )}
@@ -1740,6 +1832,138 @@ function StepNav({
       >
         {nextLabel}
       </button>
+    </div>
+  )
+}
+
+/**
+ * ParentSlotChoice — Family Package only. Lets an enrolled parent pick a
+ * coaching time slot: either join one of their children's sessions (free,
+ * no separate slot needed), or pick their own club + time like a child would.
+ */
+function ParentSlotChoice({
+  label,
+  children,
+  mode,
+  onModeChange,
+  joinChildIdx,
+  onJoinChildIdxChange,
+  clubs,
+  clubId,
+  onClubIdChange,
+  packageId,
+  packageName,
+  slot,
+  onSlotChange,
+}: {
+  label: string
+  children: Array<{ firstName: string; lastName: string; dob: string }>
+  mode: "join" | "own"
+  onModeChange: (mode: "join" | "own") => void
+  joinChildIdx: number
+  onJoinChildIdxChange: (idx: number) => void
+  clubs: Array<{ id: number; name: string; location: string }>
+  clubId: number | null
+  onClubIdChange: (id: number) => void
+  packageId: number
+  packageName: string
+  slot: SelectedSlot | null
+  onSlotChange: (slot: SelectedSlot) => void
+}) {
+  const namedChildren = children.filter((c) => c.firstName.trim().length > 0)
+
+  return (
+    <div className="rounded-2xl border border-border bg-card p-3">
+      <p className="text-sm font-semibold text-navy">{label}&apos;s Time Slot</p>
+      <p className="mt-0.5 text-xs text-muted-foreground">
+        Choose whether {label.split(" ")[0] || "this parent"} joins a child&apos;s session or coaches at their own
+        separate time.
+      </p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={() => onModeChange("join")}
+          className={`rounded-full border px-4 py-2 text-sm font-semibold transition-colors ${
+            mode === "join"
+              ? "border-lime bg-lime/15 text-navy"
+              : "border-border bg-background text-muted-foreground hover:border-lime/60"
+          }`}
+        >
+          Join a child&apos;s session
+        </button>
+        <button
+          type="button"
+          onClick={() => onModeChange("own")}
+          className={`rounded-full border px-4 py-2 text-sm font-semibold transition-colors ${
+            mode === "own"
+              ? "border-lime bg-lime/15 text-navy"
+              : "border-border bg-background text-muted-foreground hover:border-lime/60"
+          }`}
+        >
+          Choose my own time
+        </button>
+      </div>
+
+      {mode === "join" && (
+        <div className="mt-3">
+          {namedChildren.length > 0 ? (
+            <div className="flex flex-wrap gap-2">
+              {namedChildren.map((c, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => onJoinChildIdxChange(i)}
+                  className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
+                    joinChildIdx === i
+                      ? "border-lime bg-lime/15 text-navy font-semibold"
+                      : "border-border bg-background text-muted-foreground hover:border-lime/60"
+                  }`}
+                >
+                  {c.firstName}&apos;s session
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              Add your child&apos;s name in the previous step and this parent will join their session.
+            </p>
+          )}
+        </div>
+      )}
+
+      {mode === "own" && (
+        <div className="mt-3">
+          <p className="text-xs font-semibold text-navy">Club</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {clubs.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => onClubIdChange(c.id)}
+                className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
+                  clubId === c.id
+                    ? "border-lime bg-lime/15 text-navy font-semibold"
+                    : "border-border bg-background text-muted-foreground hover:border-lime/60"
+                }`}
+              >
+                {c.name}
+              </button>
+            ))}
+          </div>
+          {clubId && (
+            <div className="mt-4">
+              <PackageSlotPicker
+                packageId={packageId}
+                packageName={packageName}
+                ageGroup="Adult"
+                clubId={clubId}
+                selected={slot}
+                onSelect={onSlotChange}
+              />
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
