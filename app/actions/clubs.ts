@@ -62,6 +62,34 @@ export async function getClubAvailability(clubId: number, ageGroup: AgeGroup): P
       capacity: s.capacity,
       booked,
       remaining: Math.max(0, s.capacity - booked),
+      parentEnrollmentEnabled: s.parentEnrollmentEnabled,
     }
   })
+}
+
+/**
+ * Whether a parent may enroll alongside their child in a specific
+ * club/age-group/weekday/hour slot. Used by the enrollment wizard once a
+ * child's slot (or slots, for Advanced) has been chosen.
+ */
+export async function isParentEnrollmentEnabled(
+  clubId: number,
+  ageGroup: AgeGroup,
+  weekday: number,
+  hour: number,
+): Promise<boolean> {
+  const normalizedHour = Math.round(hour * 2) / 2
+  const rows = await db
+    .select({ parentEnrollmentEnabled: clubSlots.parentEnrollmentEnabled })
+    .from(clubSlots)
+    .where(
+      and(
+        eq(clubSlots.clubId, clubId),
+        eq(clubSlots.ageGroup, ageGroup),
+        eq(clubSlots.weekday, weekday),
+        eq(clubSlots.hour, String(normalizedHour)),
+      ),
+    )
+    .limit(1)
+  return rows[0]?.parentEnrollmentEnabled ?? false
 }

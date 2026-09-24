@@ -14,6 +14,7 @@ import { buildNetcashPayment } from "@/lib/netcash"
 import { orders } from "@/lib/db/schema"
 import { recordReferralOnEnrollment } from "@/app/actions/referrals"
 import { redeemVoucher } from "@/app/actions/referrals"
+import { redeemGroupAccessCode } from "@/app/actions/group-access-codes"
 
 async function getUserId() {
   const session = await auth.api.getSession({ headers: await headers() })
@@ -454,8 +455,16 @@ export type CartItem = {
   slotWeekday: number | null
   slotHour: number | null
   ageGroup: string | null
+  discountType?: string
   discountPercent?: number
+  discountRandCents?: number
   voucherId?: number | null
+  // Parent self-enrollment add-on (Beginner & Advanced packages only)
+  parent1Enrolled?: boolean
+  parent2Enrolled?: boolean
+  parent2Name?: string
+  /** Rands added to packagePrice for the enrolled parent(s) — already reflected in packagePrice, stored separately for billing history. */
+  parentAddOnAmount?: number
 }
 
 type CartPrefs = {
@@ -480,6 +489,7 @@ type CartPrefs = {
  */
 export async function createCartEnrollments(input: {
   parent: { firstName: string; lastName: string; email: string; mobile: string }
+  secondParent?: { firstName: string; lastName: string; mobile: string } | null
   cartItems: CartItem[]
   prefs: CartPrefs
   emergencyContactName: string
@@ -490,20 +500,50 @@ export async function createCartEnrollments(input: {
   signedName: string
   referralCode: string | null
   voucherId: number | null
+  discountType?: string
   discountPercent: number | undefined
+  discountRandCents?: number
+  /** Group access code entered to unlock a hidden package (e.g. Family Package). */
+  groupAccessCode?: string | null
 }): Promise<{ orderReference: string; totalAmount: number; enrollmentIds: number[] }> {
   const userId = await getUserId()
   const signedAt = new Date()
+
+  // Re-validate the group access code server-side and reserve one redemption
+  // slot for this cart BEFORE creating any enrollment rows. This is the
+  // authoritative check — the wizard's earlier validateGroupAccessCode() call
+  // is only for UX and must not be trusted at checkout time.
+  let groupAccessCodeId: number | null = null
+  if (input.groupAccessCode) {
+    const firstItem = input.cartItems[0]
+    if (!firstItem) throw new Error("No items in cart")
+    groupAccessCodeId = await redeemGroupAccessCode(input.groupAccessCode, firstItem.packageId)
+  }
 
   // Cart-level shared reference — used as Netcash p3 and stored on each enrollment row
   const orderReference = generateReference()
 
   const parentName = `${input.parent.firstName} ${input.parent.lastName}`.trim()
+  const secondParentName = input.secondParent
+    ? `${input.secondParent.firstName} ${input.secondParent.lastName}`.trim()
+    : ""
+  const secondParentMobile = input.secondParent?.mobile.trim() ?? ""
 
-  // Compute total with discount
-  const subtotal = input.cartItems.reduce((sum, item) => sum + item.packagePrice, 0)
-  const disc = input.discountPercent ?? 0
-  const totalAmount = disc > 0 ? subtotal * (1 - disc / 100) : subtotal
+  // Compute total with discount. packagePrice already reflects any parent
+  // add-on the wizard computed (add-on is per-child, folded into the price),
+  // but parentAddOnAmount is also summed here as a defensive fallback in case
+  // a caller sends the base price with the add-on tracked separately.
+  const subtotal = input.cartItems.reduce(
+    (sum, item) => sum + item.packagePrice + (item.parentAddOnAmount ?? 0),
+    0,
+  )
+  let totalAmount = subtotal
+  if (input.discountType === "rand" && (input.discountRandCents ?? 0) > 0) {
+    totalAmount = Math.max(0, subtotal - input.discountRandCents! / 100)
+  } else {
+    const disc = input.discountPercent ?? 0
+    totalAmount = disc > 0 ? subtotal * (1 - disc / 100) : subtotal
+  }
 
   const isOnceOff = input.cartItems.every((item) => item.packagePeriod === "once-off")
 
@@ -545,6 +585,8 @@ export async function createCartEnrollments(input: {
         parentName,
         parentEmail: input.parent.email.trim(),
         parentMobile: input.parent.mobile,
+        secondParentName: secondParentName || undefined,
+        secondParentMobile: secondParentMobile || undefined,
         childName: childFullName,
         childDob,
         childAge,
@@ -577,6 +619,11 @@ export async function createCartEnrollments(input: {
         coachId: resolvedCoachId ?? undefined,
         coachName: resolvedCoachName ?? undefined,
         pendingVoucherId: input.voucherId ?? undefined,
+        parent1Enrolled: item.parent1Enrolled ?? false,
+        parent2Enrolled: item.parent2Enrolled ?? false,
+        parent2Name: item.parent2Enrolled ? item.parent2Name ?? undefined : undefined,
+        parentAddOnAmount: item.parentAddOnAmount ?? 0,
+        groupAccessCodeId: groupAccessCodeId ?? undefined,
       })
       .returning({ id: enrollments.id })
 

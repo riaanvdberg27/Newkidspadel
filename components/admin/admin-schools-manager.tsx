@@ -276,13 +276,15 @@ export function AdminSchoolsManager({
   const [filter, setFilter] = useState<"active" | "inactive" | "all">("active")
   const [confirmDeactivate, setConfirmDeactivate] = useState<{ id: number; name: string } | null>(null)
   const [confirmReactivate, setConfirmReactivate] = useState<{ id: number; name: string } | null>(null)
+  const [saveError, setSaveError] = useState<string | null>(null)
 
   function handleSave(input: SchoolInput, id?: number) {
+    setSaveError(null)
     startTransition(async () => {
-      if (id) {
-        await updateSchool(id, input)
-      } else {
-        await createSchool(input)
+      const result = id ? await updateSchool(id, input) : await createSchool(input)
+      if (!result.ok) {
+        setSaveError(result.error)
+        return
       }
       setEditing(null)
       setCreating(false)
@@ -316,7 +318,7 @@ export function AdminSchoolsManager({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-xl font-bold text-navy">Schools</h2>
         <button
-          onClick={() => { setCreating(true); setEditing(null) }}
+          onClick={() => { setSaveError(null); setCreating(true); setEditing(null) }}
           className="inline-flex items-center gap-2 rounded-md bg-lime px-4 py-2 text-sm font-bold text-lime-foreground transition-colors hover:bg-lime/90"
         >
           <Plus className="h-4 w-4" />
@@ -344,13 +346,18 @@ export function AdminSchoolsManager({
       {creating && (
         <div className="mt-6 rounded-card border border-lime/30 bg-lime/5 p-6">
           <h3 className="mb-4 text-base font-bold text-navy">New School</h3>
+          {saveError && (
+            <div className="mb-4 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm font-semibold text-destructive">
+              {saveError}
+            </div>
+          )}
           <SchoolForm
             school={null}
             coaches={coaches}
             assignedCoachIds={[]}
             pending={pending}
             onSubmit={(input) => handleSave(input)}
-            onCancel={() => setCreating(false)}
+            onCancel={() => { setSaveError(null); setCreating(false) }}
           />
         </div>
       )}
@@ -374,13 +381,18 @@ export function AdminSchoolsManager({
                       <X className="h-4 w-4" />
                     </button>
                   </div>
+                  {saveError && (
+                    <div className="mb-4 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm font-semibold text-destructive">
+                      {saveError}
+                    </div>
+                  )}
                   <SchoolForm
                     school={school}
                     coaches={coaches}
                     assignedCoachIds={coachAssignments[school.id] ?? []}
                     pending={pending}
                     onSubmit={(input) => handleSave(input, school.id)}
-                    onCancel={() => setEditing(null)}
+                    onCancel={() => { setSaveError(null); setEditing(null) }}
                   />
                 </>
               ) : (
@@ -388,6 +400,7 @@ export function AdminSchoolsManager({
                 <div className="flex flex-wrap items-start justify-between gap-4">
                   <div className="flex items-start gap-4">
                     {/* Logo */}
+
                     <div className="h-14 w-14 shrink-0 overflow-hidden rounded-xl border border-border bg-muted flex items-center justify-center">
                       {logo ? (
                         // eslint-disable-next-line @next/next/no-img-element

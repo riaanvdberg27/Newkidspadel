@@ -8,6 +8,7 @@ import { requireAdmin } from "@/lib/admin-auth"
 import type { School, SchoolSlot, AgeGroup } from "@/lib/db/schema"
 import { AGE_GROUPS } from "@/lib/db/schema"
 import { SLOT_HOURS } from "@/lib/slots"
+import { toFriendlyDbError } from "@/lib/db-errors"
 
 export type SchoolInput = {
   name: string
@@ -74,53 +75,66 @@ async function syncSchoolCoaches(schoolId: number, coachIds: number[]) {
 }
 
 /** Create a new school (admin only). */
-export async function createSchool(input: SchoolInput): Promise<School> {
+export async function createSchool(
+  input: SchoolInput,
+): Promise<{ ok: true; school: School } | { ok: false; error: string }> {
   await requireAdmin()
-  const [row] = await db
-    .insert(schools)
-    .values({
-      name: input.name,
-      location: input.location,
-      address: input.address,
-      phone: input.phone,
-      email: input.email,
-      website: input.website,
-      description: input.description,
-      logoUrl: input.logoUrl ?? null,
-      contactPerson: input.contactPerson,
-      published: input.published,
-    })
-    .returning()
-  await syncSchoolCoaches(row.id, input.coachIds ?? [])
-  revalidatePath("/schools")
-  revalidatePath("/admin")
-  return row
+  try {
+    const [row] = await db
+      .insert(schools)
+      .values({
+        name: input.name,
+        location: input.location,
+        address: input.address,
+        phone: input.phone,
+        email: input.email,
+        website: input.website,
+        description: input.description,
+        logoUrl: input.logoUrl ?? null,
+        contactPerson: input.contactPerson,
+        published: input.published,
+      })
+      .returning()
+    await syncSchoolCoaches(row.id, input.coachIds ?? [])
+    revalidatePath("/schools")
+    revalidatePath("/admin")
+    return { ok: true, school: row }
+  } catch (error) {
+    return { ok: false, error: toFriendlyDbError(error, "Failed to create school. Please try again.") }
+  }
 }
 
 /** Update an existing school (admin only). */
-export async function updateSchool(id: number, input: SchoolInput): Promise<School> {
+export async function updateSchool(
+  id: number,
+  input: SchoolInput,
+): Promise<{ ok: true; school: School } | { ok: false; error: string }> {
   await requireAdmin()
-  const [row] = await db
-    .update(schools)
-    .set({
-      name: input.name,
-      location: input.location,
-      address: input.address,
-      phone: input.phone,
-      email: input.email,
-      website: input.website,
-      description: input.description,
-      logoUrl: input.logoUrl ?? null,
-      contactPerson: input.contactPerson,
-      published: input.published,
-      updatedAt: new Date(),
-    })
-    .where(eq(schools.id, id))
-    .returning()
-  await syncSchoolCoaches(id, input.coachIds ?? [])
-  revalidatePath("/schools")
-  revalidatePath("/admin")
-  return row
+  try {
+    const [row] = await db
+      .update(schools)
+      .set({
+        name: input.name,
+        location: input.location,
+        address: input.address,
+        phone: input.phone,
+        email: input.email,
+        website: input.website,
+        description: input.description,
+        logoUrl: input.logoUrl ?? null,
+        contactPerson: input.contactPerson,
+        published: input.published,
+        updatedAt: new Date(),
+      })
+      .where(eq(schools.id, id))
+      .returning()
+    await syncSchoolCoaches(id, input.coachIds ?? [])
+    revalidatePath("/schools")
+    revalidatePath("/admin")
+    return { ok: true, school: row }
+  } catch (error) {
+    return { ok: false, error: toFriendlyDbError(error, "Failed to update school. Please try again.") }
+  }
 }
 
 /** Full slot grid (weekday x hour) for a school filtered by age group, including hours with 0 capacity. */

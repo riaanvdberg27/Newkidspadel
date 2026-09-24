@@ -12,7 +12,7 @@ export function ProductGallery({ images, name }: { images: string[]; name: strin
     <div>
       <div className="relative aspect-square w-full overflow-hidden rounded-card bg-muted">
         {image ? (
-          <Image src={blobImage(image, 800) ?? "/placeholder.svg"} alt={name} fill crossOrigin="anonymous" className="object-cover" priority />
+          <Image src={blobImage(image, 800) ?? "/placeholder.svg"} alt={name} fill unoptimized crossOrigin="anonymous" className="object-cover" priority />
         ) : (
           <div className="flex h-full items-center justify-center text-sm text-muted-foreground">No image</div>
         )}

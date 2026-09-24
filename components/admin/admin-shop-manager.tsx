@@ -26,7 +26,7 @@ import type { ShopOrder, ShopCategory } from "@/lib/db/schema"
 import { blobImage } from "@/lib/blob"
 import { upload } from "@vercel/blob/client"
 
-const KIDS_SIZES = ["4-5", "5-6", "7-8", "9-10", "11-12", "13-14"]
+const KIDS_SIZES = ["5-6", "7-8", "9-10", "11-12", "13-14", "15-16", "17-18"]
 const ADULT_SIZES = ["S", "M", "L", "XL"]
 
 function makeEmptyProduct(categoryId: number): ShopProductInput {
@@ -43,6 +43,19 @@ function makeEmptyProduct(categoryId: number): ShopProductInput {
     published: true,
     sortOrder: 0,
   }
+}
+
+/**
+ * Slugs are used directly in URLs (/shop/[slug]). Spaces or punctuation in a
+ * slug break links and page lookups, so every slug is sanitized to a clean,
+ * URL-safe, kebab-case value before it's ever saved or typed further.
+ */
+function slugify(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
 }
 
 function formatCents(cents: number) {
@@ -261,7 +274,7 @@ function CategoryForm({
 
   function submit(e: React.FormEvent) {
     e.preventDefault()
-    onSubmit({ name, slug, sortOrder: Number(sortOrder), published })
+    onSubmit({ name, slug: slugify(slug), sortOrder: Number(sortOrder), published })
   }
 
   return (
@@ -315,22 +328,37 @@ function ShopProductsSection({
   const [editing, setEditing] = useState<ShopProductWithVariants | null>(null)
   const [pending, startTransition] = useTransition()
   const [confirmDelete, setConfirmDelete] = useState<{ id: number; name: string } | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   function handleSave(input: ShopProductInput) {
+    setError(null)
     startTransition(async () => {
-      if (editing) await updateShopProduct(editing.id, input)
-      else await createShopProduct(input)
-      setCreating(false)
-      setEditing(null)
-      router.refresh()
+      try {
+        const result = editing ? await updateShopProduct(editing.id, input) : await createShopProduct(input)
+        if (!result.ok) {
+          setError(result.error)
+          return
+        }
+        setCreating(false)
+        setEditing(null)
+        router.refresh()
+      } catch (e: unknown) {
+        setError(e instanceof Error ? e.message : "Something went wrong")
+      }
     })
   }
 
   function handleDelete(id: number) {
+    setError(null)
     startTransition(async () => {
-      await deleteShopProduct(id)
-      setConfirmDelete(null)
-      router.refresh()
+      try {
+        await deleteShopProduct(id)
+        setConfirmDelete(null)
+        router.refresh()
+      } catch (e: unknown) {
+        setError(e instanceof Error ? e.message : "Could not delete product")
+        setConfirmDelete(null)
+      }
     })
   }
 
@@ -346,13 +374,17 @@ function ShopProductsSection({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-xl font-bold text-navy">Shop Products</h2>
         <button
-          onClick={() => { setCreating(true); setEditing(null) }}
+          onClick={() => { setCreating(true); setEditing(null); setError(null) }}
           className="inline-flex items-center gap-2 rounded-md bg-lime px-4 py-2 text-sm font-bold text-lime-foreground transition-colors hover:bg-lime/90"
         >
           <Plus className="h-4 w-4" />
           Add Product
         </button>
       </div>
+
+      {error && (
+        <div className="mt-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
+      )}
 
       <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {initialProducts.map((p) => {
@@ -469,6 +501,10 @@ function ProductForm({
 }) {
   const [name, setName] = useState(product?.name ?? "")
   const [slug, setSlug] = useState(product?.slug ?? "")
+  // The slug is derived from the name automatically so admins never have to
+  // hand-type a URL-safe, unique value. Editing the name keeps regenerating
+  // the slug until the admin explicitly overrides it via "Edit URL slug".
+  const [slugEditedManually, setSlugEditedManually] = useState(false)
   const [description, setDescription] = useState(product?.description ?? "")
   const [categoryId, setCategoryId] = useState(product?.categoryId ?? categories[0]?.id ?? 0)
   const [price, setPrice] = useState(String(product ? product.price / 100 : 0))
@@ -526,7 +562,7 @@ function ProductForm({
     e.preventDefault()
     onSubmit({
       name,
-      slug,
+      slug: slugify(slug),
       description,
       categoryId: Number(categoryId),
       price: Math.max(0, Number(price)),
@@ -547,10 +583,46 @@ function ProductForm({
 
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Name" required>
-          <input type="text" value={name} required onChange={(e) => setName(e.target.value)} className="mt-2 w-full rounded-md border border-border bg-background px-3 py-2 outline-none focus:border-lime" />
+          <input
+            type="text"
+            value={name}
+            required
+            autoComplete="off"
+            onChange={(e) => {
+              const nextName = e.target.value
+              setName(nextName)
+              // Keep the URL slug in sync with the name unless the admin
+              // has deliberately chosen to type a custom one below.
+              if (!slugEditedManually) setSlug(slugify(nextName))
+            }}
+            className="mt-2 w-full rounded-md border border-border bg-background px-3 py-2 outline-none focus:border-lime"
+          />
         </Field>
-        <Field label="Slug (URL id)" required>
-          <input type="text" value={slug} required placeholder="padel-tshirt" onChange={(e) => setSlug(e.target.value)} className="mt-2 w-full rounded-md border border-border bg-background px-3 py-2 outline-none focus:border-lime" />
+        <Field label="URL (auto-generated)">
+          {slugEditedManually ? (
+            <input
+              type="text"
+              value={slug}
+              required
+              autoComplete="off"
+              placeholder="padel-tshirt"
+              onChange={(e) => setSlug(e.target.value)}
+              className="mt-2 w-full rounded-md border border-border bg-background px-3 py-2 outline-none focus:border-lime"
+            />
+          ) : (
+            <div className="mt-2 flex items-center justify-between gap-2 rounded-md border border-dashed border-border bg-muted/40 px-3 py-2">
+              <span className="truncate text-sm text-muted-foreground">/shop/{slug || "…"}</span>
+              <button
+                type="button"
+                onClick={() => setSlugEditedManually(true)}
+                className="shrink-0 text-xs font-semibold text-lime hover:underline"
+              >
+                Edit
+              </button>
+            </div>
+          )}
+          {/* Every product's slug must be unique — if it collides with an existing one, the
+              server automatically appends "-2", "-3", etc. so saving never fails. */}
         </Field>
       </div>
 

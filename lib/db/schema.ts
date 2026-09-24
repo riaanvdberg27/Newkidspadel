@@ -70,6 +70,9 @@ export const packages = pgTable("packages", {
   slug: text("slug").notNull().unique(),
   name: text("name").notNull(),
   price: integer("price").notNull(),
+  // Price for a parent joining the same session as their child (null = parent
+  // add-on not offered for this package, e.g. school/once-off packages)
+  parentPrice: integer("parentPrice"),
   // 'monthly' | 'once-off'
   period: text("period").notNull().default("monthly"),
   tagline: text("tagline").notNull().default(""),
@@ -82,6 +85,12 @@ export const packages = pgTable("packages", {
   sortOrder: integer("sortOrder").notNull().default(0),
   // If true, this package is for school programs — wizard shows school picker instead of club picker
   isSchool: boolean("isSchool").notNull().default(false),
+  // 'public' | 'hidden' — hidden packages never appear on the homepage or the
+  // default wizard package list; they only become reachable via a group access code.
+  visibility: text("visibility").notNull().default("public"),
+  // Family packages are priced per family member (parent or child) per month,
+  // broaden parent-eligibility, and cap the wizard's child count at 3.
+  isFamily: boolean("isFamily").notNull().default(false),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
   updatedAt: timestamp("updatedAt").notNull().defaultNow(),
 })
@@ -138,6 +147,9 @@ export const clubSlots = pgTable(
     capacity: integer("capacity").notNull().default(0),
     // Age group this slot is available for
     ageGroup: text("ageGroup").notNull().default("4-8"),
+    // Whether a parent may enroll alongside the child in this exact slot
+    // (same weekday/hour/ageGroup, no separate capacity pool)
+    parentEnrollmentEnabled: boolean("parentEnrollmentEnabled").notNull().default(true),
     createdAt: timestamp("createdAt").notNull().defaultNow(),
     updatedAt: timestamp("updatedAt").notNull().defaultNow(),
   },
@@ -180,6 +192,10 @@ export const enrollments = pgTable("enrollments", {
   parentName: text("parentName").notNull(),
   parentEmail: text("parentEmail").notNull(),
   parentMobile: text("parentMobile").notNull(),
+  // Second parent/guardian's contact details, captured at signup (optional household contact,
+  // distinct from parent2Enrolled/parent2Name below which is about a parent joining sessions)
+  secondParentName: text("secondParentName"),
+  secondParentMobile: text("secondParentMobile"),
   // Child
   childName: text("childName").notNull(),
   childDob: text("childDob").notNull(),
@@ -200,6 +216,15 @@ export const enrollments = pgTable("enrollments", {
   slotAgeGroup2: text("slotAgeGroup2"),
   // True once an admin has manually customized this client's time slot(s) away from the default
   scheduleCustomized: boolean("scheduleCustomized").notNull().default(false),
+  // Parent self-enrollment add-on — parent(s) attend the exact same slot(s) as the
+  // child above (Beginner/Advanced packages only)
+  parent1Enrolled: boolean("parent1Enrolled").notNull().default(false),
+  parent2Enrolled: boolean("parent2Enrolled").notNull().default(false),
+  // Parent 2's name (Parent 1 reuses parentName, the account holder)
+  parent2Name: text("parent2Name"),
+  // Rands added to this enrollment's price for parent participation, captured at
+  // enrollment time so later price changes don't retroactively change history
+  parentAddOnAmount: integer("parentAddOnAmount").notNull().default(0),
   // Debit order
   debitAccountHolder: text("debitAccountHolder"),
   debitBankName: text("debitBankName"),
@@ -249,6 +274,10 @@ export const enrollments = pgTable("enrollments", {
   // FK to vouchers(id) ON DELETE SET NULL — expressed in DB but not in Drizzle
   // schema to avoid a circular reference (vouchers is declared after enrollments).
   pendingVoucherId: integer("pending_voucher_id"),
+  // Group access code used to unlock a hidden family package for this enrollment (if any).
+  // FK to group_access_codes(id) ON DELETE SET NULL — expressed in DB but not in Drizzle
+  // schema to avoid a circular reference (groupAccessCodes is declared after enrollments).
+  groupAccessCodeId: integer("groupAccessCodeId"),
   // Multi-child cart checkout: all sibling enrollments share the same orderReference.
   // This is the p3 reference sent to Netcash and stored on the orders.netcashOrderId column.
   orderReference: text("orderReference"),
@@ -437,10 +466,17 @@ export const voucherCampaigns = pgTable("voucher_campaigns", {
   type: text("type").notNull().default("custom"),
   name: text("name").notNull(),
   description: text("description").notNull().default(""),
-  // Discount percent (e.g. 20 = 20%)
+  // 'percent' | 'rand' — which of the two discount fields below is used
+  discountType: text("discountType").notNull().default("percent"),
+  // Discount percent (e.g. 20 = 20%) — used when discountType = 'percent'
   discountPercent: integer("discountPercent").notNull().default(20),
+  // Fixed Rand discount in cents (e.g. 5000 = R50) — used when discountType = 'rand'
+  discountRandCents: integer("discountRandCents").notNull().default(0),
   // Which package periods this applies to: 'monthly' | 'once-off' | 'both'
   appliesTo: text("appliesTo").notNull().default("monthly"),
+  // 'once' — discount only applies to the first billing month after redemption.
+  // 'indefinite' — discount applies to every billing month until the signup is cancelled.
+  recurrence: text("recurrence").notNull().default("once"),
   // Configurable expiry relative to issuance (days); null = no expiry
   expiryDays: integer("expiryDays"),
   enabled: boolean("enabled").notNull().default(true),
@@ -461,7 +497,15 @@ export const vouchers = pgTable("vouchers", {
   // The parent who owns this voucher. Null for bulk/pre-generated codes
   // (e.g. school or event promo codes) that have not yet been redeemed.
   userId: text("userId").references(() => user.id, { onDelete: "cascade" }),
+  // 'percent' | 'rand' — which of the two discount fields below is used
+  discountType: text("discountType").notNull().default("percent"),
   discountPercent: integer("discountPercent").notNull(),
+  // Fixed Rand discount in cents (e.g. 5000 = R50) — used when discountType = 'rand'
+  discountRandCents: integer("discountRandCents").notNull().default(0),
+  // 'once' | 'indefinite' — copied from the campaign at issuance time; determines
+  // whether the discount applies to just the first billing month after redemption
+  // or every billing month until the signup is cancelled.
+  recurrence: text("recurrence").notNull().default("once"),
   // 'active' | 'used' | 'expired'
   status: text("status").notNull().default("active"),
   // Enrollment this voucher was redeemed against (set on redemption)
@@ -476,6 +520,31 @@ export const vouchers = pgTable("vouchers", {
 })
 
 export type Voucher = typeof vouchers.$inferSelect
+
+// ---- Group access codes (unlock hidden packages, e.g. Family Package) ----
+
+/**
+ * group_access_codes — a single shared code, redeemable by many families up to
+ * an admin-set cap. Distinct from `vouchers` (single-use, models discounts, not
+ * visibility). Entering a valid code unlocks a hidden package in the wizard.
+ */
+export const groupAccessCodes = pgTable("group_access_codes", {
+  id: serial("id").primaryKey(),
+  code: text("code").notNull().unique(),
+  label: text("label").notNull().default(""),
+  packageId: integer("packageId")
+    .notNull()
+    .references(() => packages.id, { onDelete: "cascade" }),
+  maxRedemptions: integer("maxRedemptions").notNull().default(100),
+  // Incremented once per family enrollment (cart), not per child.
+  redemptionCount: integer("redemptionCount").notNull().default(0),
+  enabled: boolean("enabled").notNull().default(true),
+  expiresAt: timestamp("expiresAt"),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+  updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+})
+
+export type GroupAccessCode = typeof groupAccessCodes.$inferSelect
 
 // ---- Netcash payment tables ----
 
@@ -588,6 +657,9 @@ export const subscriptionMonths = pgTable(
     status: text("status").notNull().default("outstanding"),
     // Discount percentage applied to this month (0–100)
     discountPct: integer("discountPct").notNull().default(0),
+    // Fixed Rand discount in cents applied to this month, on top of discountPct
+    // (e.g. 5000 = R50 off). Effective amount = amountCents*(1-discountPct/100) - discountRandCents.
+    discountRandCents: integer("discountRandCents").notNull().default(0),
     // Human-readable reason for the discount, e.g. "Sibling discount", "Bursary"
     discountReason: text("discountReason"),
     // For partial payments: amount actually received in cents
@@ -691,6 +763,23 @@ export const siteImages = pgTable("site_images", {
 })
 
 export type SiteImage = typeof siteImages.$inferSelect
+
+// ---- Sponsors (admin-managed logos shown in the site-wide sponsors section) ----
+
+export const sponsors = pgTable("sponsors", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  // Blob pathname for the sponsor's logo, proxied through /api/blob
+  logoUrl: text("logoUrl").notNull(),
+  // Optional link to the sponsor's website — logo becomes clickable when set
+  websiteUrl: text("websiteUrl"),
+  published: boolean("published").notNull().default(true),
+  sortOrder: integer("sortOrder").notNull().default(0),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+  updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+})
+
+export type Sponsor = typeof sponsors.$inferSelect
 
 // ---- Session Attendance (coaching portal) ----
 

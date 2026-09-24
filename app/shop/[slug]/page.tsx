@@ -5,9 +5,13 @@ import { getShopProduct } from "@/app/actions/shop"
 import { ProductGallery } from "@/components/shop/product-gallery"
 import { AddToCartForm } from "@/components/shop/add-to-cart-form"
 
+// Always read fresh from the database so admin edits (price, images,
+// publish/unpublish) show up immediately instead of a cached snapshot.
+export const dynamic = "force-dynamic"
+
 export default async function ProductPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
-  const product = await getShopProduct(slug)
+  const product = await getShopProduct(decodeURIComponent(slug))
   if (!product) notFound()
 
   return (

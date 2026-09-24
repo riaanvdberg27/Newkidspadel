@@ -202,77 +202,123 @@ export async function deleteShopCategory(id: number) {
 // Admin CRUD — products & variants
 // ---------------------------------------------------------------------------
 
-export async function createShopProduct(input: ShopProductInput) {
-  await requireAdmin()
-
-  const [product] = await db
-    .insert(shopProducts)
-    .values({
-      name: input.name.trim(),
-      slug: input.slug.trim(),
-      description: input.description.trim(),
-      categoryId: input.categoryId,
-      price: toCents(input.price),
-      images: input.images,
-      hasVariants: input.hasVariants,
-      leadTimeDays: input.leadTimeDays,
-      published: input.published,
-      sortOrder: input.sortOrder,
-    })
-    .returning()
-
-  if (input.hasVariants && input.variants.length > 0) {
-    await db.insert(shopProductVariants).values(
-      input.variants.map((v, i) => ({
-        productId: product.id,
-        size: v.size,
-        priceOverride: v.priceOverride != null ? toCents(v.priceOverride) : null,
-        sortOrder: i,
-      })),
-    )
+/**
+ * Next.js redacts the real message of any error THROWN from a Server Action
+ * in production, replacing it with a generic, unhelpful digest string. So
+ * for expected, user-fixable failures (like a duplicate slug) we catch the
+ * real Postgres error here — where the real message is still available —
+ * and return { ok: false, error } instead of throwing, so the client
+ * actually sees a useful message.
+ */
+function friendlyShopSaveError(e: unknown): string {
+  const message = e instanceof Error ? e.message : String(e)
+  if (/duplicate key|unique constraint/i.test(message) && /slug/i.test(message)) {
+    return "A product with this slug already exists. Choose a different, unique slug (e.g. add \"-boys\" or \"-girls\") and try again."
   }
-
-  revalidatePath("/admin")
-  revalidatePath("/shop")
-  return { ok: true, id: product.id }
+  if (/duplicate key|unique constraint/i.test(message)) {
+    return "That value is already in use. Choose a different one and try again."
+  }
+  return "Something went wrong saving the product. Please try again."
 }
 
-export async function updateShopProduct(id: number, input: ShopProductInput) {
+/**
+ * Slugs must be unique, but admins shouldn't have to guess a free one by
+ * hand (that's what kept causing "Something went wrong saving the product"
+ * after the first item). This finds a free slug by appending "-2", "-3", etc.
+ * to the requested base, skipping `excludeId` (the product being edited).
+ */
+async function findAvailableSlug(baseSlug: string, excludeId?: number): Promise<string> {
+  const base = baseSlug.trim() || "product"
+  const existing = await db.select({ slug: shopProducts.slug, id: shopProducts.id }).from(shopProducts)
+  const taken = new Set(existing.filter((p) => p.id !== excludeId).map((p) => p.slug))
+
+  if (!taken.has(base)) return base
+  let n = 2
+  while (taken.has(`${base}-${n}`)) n++
+  return `${base}-${n}`
+}
+
+export async function createShopProduct(input: ShopProductInput): Promise<{ ok: true; id: number } | { ok: false; error: string }> {
   await requireAdmin()
 
-  await db
-    .update(shopProducts)
-    .set({
-      name: input.name.trim(),
-      slug: input.slug.trim(),
-      description: input.description.trim(),
-      categoryId: input.categoryId,
-      price: toCents(input.price),
-      images: input.images,
-      hasVariants: input.hasVariants,
-      leadTimeDays: input.leadTimeDays,
-      published: input.published,
-      sortOrder: input.sortOrder,
-      updatedAt: new Date(),
-    })
-    .where(eq(shopProducts.id, id))
+  try {
+    const slug = await findAvailableSlug(input.slug.trim())
+    const [product] = await db
+      .insert(shopProducts)
+      .values({
+        name: input.name.trim(),
+        slug,
+        description: input.description.trim(),
+        categoryId: input.categoryId,
+        price: toCents(input.price),
+        images: input.images,
+        hasVariants: input.hasVariants,
+        leadTimeDays: input.leadTimeDays,
+        published: input.published,
+        sortOrder: input.sortOrder,
+      })
+      .returning()
 
-  // Replace variants wholesale — simplest way to keep sizes/prices in sync
-  await db.delete(shopProductVariants).where(eq(shopProductVariants.productId, id))
-  if (input.hasVariants && input.variants.length > 0) {
-    await db.insert(shopProductVariants).values(
-      input.variants.map((v, i) => ({
-        productId: id,
-        size: v.size,
-        priceOverride: v.priceOverride != null ? toCents(v.priceOverride) : null,
-        sortOrder: i,
-      })),
-    )
+    if (input.hasVariants && input.variants.length > 0) {
+      await db.insert(shopProductVariants).values(
+        input.variants.map((v, i) => ({
+          productId: product.id,
+          size: v.size,
+          priceOverride: v.priceOverride != null ? toCents(v.priceOverride) : null,
+          sortOrder: i,
+        })),
+      )
+    }
+
+    revalidatePath("/admin")
+    revalidatePath("/shop")
+    return { ok: true, id: product.id }
+  } catch (e) {
+    return { ok: false, error: friendlyShopSaveError(e) }
   }
+}
 
-  revalidatePath("/admin")
-  revalidatePath("/shop")
-  return { ok: true }
+export async function updateShopProduct(id: number, input: ShopProductInput): Promise<{ ok: true } | { ok: false; error: string }> {
+  await requireAdmin()
+
+  try {
+    const slug = await findAvailableSlug(input.slug.trim(), id)
+    await db
+      .update(shopProducts)
+      .set({
+        name: input.name.trim(),
+        slug,
+        description: input.description.trim(),
+        categoryId: input.categoryId,
+        price: toCents(input.price),
+        images: input.images,
+        hasVariants: input.hasVariants,
+        leadTimeDays: input.leadTimeDays,
+        published: input.published,
+        sortOrder: input.sortOrder,
+        updatedAt: new Date(),
+      })
+      .where(eq(shopProducts.id, id))
+
+    // Replace variants wholesale — simplest way to keep sizes/prices in sync
+    await db.delete(shopProductVariants).where(eq(shopProductVariants.productId, id))
+    if (input.hasVariants && input.variants.length > 0) {
+      await db.insert(shopProductVariants).values(
+        input.variants.map((v, i) => ({
+          productId: id,
+          size: v.size,
+          priceOverride: v.priceOverride != null ? toCents(v.priceOverride) : null,
+          sortOrder: i,
+        })),
+      )
+    }
+
+    revalidatePath("/admin")
+    revalidatePath("/shop")
+    return { ok: true }
+  } catch (e) {
+    return { ok: false, error: friendlyShopSaveError(e) }
+  }
 }
 
 export async function deleteShopProduct(id: number) {
