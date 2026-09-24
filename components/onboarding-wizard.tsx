@@ -151,6 +151,12 @@ export function OnboardingWizard({
   const [parent, setParent] = useState({ firstName: "", lastName: "", email: "", mobile: "", password: "" })
   // Second parent/guardian — optional household contact captured at signup
   const [secondParent, setSecondParent] = useState({ firstName: "", lastName: "", mobile: "" })
+  // Family Package only: each parent is a distinct BILLED member (R{parentAddOnPrice}/month
+  // each), independent of any child's session/schedule. Decoupled from the per-child
+  // "parent joins this session" add-on used by Beginner/Advanced packages.
+  const [familyParent1Enrolled, setFamilyParent1Enrolled] = useState(false)
+  const [familyParent2Enrolled, setFamilyParent2Enrolled] = useState(false)
+  const [familyParent2Name, setFamilyParent2Name] = useState("")
   const [emergency, setEmergency] = useState({ name: "", phone: "" })
   const [prefs, setPrefs] = useState<Prefs>({
     prefEmail: true,
@@ -298,14 +304,18 @@ export function OnboardingWizard({
   // ---------------------------------------------------------------------------
   function computeTotal(): number {
     const childrenBase = (selectedPackage?.price ?? 0) * childCount
-    // Each child's parent add-on(s) are additive — Parent 1 and/or Parent 2
-    // joining that child's exact session, at the package's parent add-on price.
-    const parentAddOns = isParentEligible
-      ? Array.from({ length: childCount }, (_, i) => schedules[i] ?? EMPTY_SCHEDULE).reduce(
-          (sum, s) => sum + (s.parent1 ? parentAddOnPrice : 0) + (s.parent2 ? parentAddOnPrice : 0),
-          0,
-        )
-      : 0
+    // Family packages: each parent who signs up (Parent 1 and/or Parent 2) is billed
+    // once as their own family member, independent of any child's session/schedule.
+    // Other packages: each child's parent add-on(s) are additive — Parent 1 and/or
+    // Parent 2 joining that child's exact session, at the package's parent add-on price.
+    const parentAddOns = !isParentEligible
+      ? 0
+      : isFamilyPkg
+        ? (familyParent1Enrolled ? parentAddOnPrice : 0) + (familyParent2Enrolled ? parentAddOnPrice : 0)
+        : Array.from({ length: childCount }, (_, i) => schedules[i] ?? EMPTY_SCHEDULE).reduce(
+            (sum, s) => sum + (s.parent1 ? parentAddOnPrice : 0) + (s.parent2 ? parentAddOnPrice : 0),
+            0,
+          )
     const base = childrenBase + parentAddOns
     if (appliedVoucher?.discountType === "rand" && appliedVoucher.discountRandCents > 0) {
       return Math.max(0, base - appliedVoucher.discountRandCents / 100)
@@ -357,8 +367,12 @@ export function OnboardingWizard({
         const sched = schedules[idx] ?? EMPTY_SCHEDULE
         const clubObj = clubs.find((c) => c.id === sched.clubId) ?? null
         const schoolObj = schools.find((s) => s.id === sched.schoolId) ?? null
-        const parent1Enrolled = isParentEligible && sched.parent1
-        const parent2Enrolled = isParentEligible && sched.parent2
+        // Family packages: each parent is billed once as their own family member —
+        // attach that billing to the first child's row only (idx 0) so it isn't
+        // duplicated across every child in the cart. Other packages: parent add-on
+        // is per child, tied to that child's own session (sched.parent1/parent2).
+        const parent1Enrolled = isParentEligible && (isFamilyPkg ? idx === 0 && familyParent1Enrolled : sched.parent1)
+        const parent2Enrolled = isParentEligible && (isFamilyPkg ? idx === 0 && familyParent2Enrolled : sched.parent2)
         const parentAddOnAmount =
           (parent1Enrolled ? parentAddOnPrice : 0) + (parent2Enrolled ? parentAddOnPrice : 0)
         return {
@@ -896,8 +910,10 @@ export function OnboardingWizard({
                 </div>
               )}
 
-              {/* Parent add-on — enroll Parent 1 and/or Parent 2 in the same session */}
-              {parentSlotsEnabled && (
+              {/* Parent add-on — enroll Parent 1 and/or Parent 2 in the same session.
+                  Family packages use a dedicated, session-independent signup section
+                  on the Parent Account step instead (see below). */}
+              {parentSlotsEnabled && !isFamilyPkg && (
                 <div className="mt-6 rounded-card border-2 border-lime/40 bg-lime/5 p-4">
                   <p className="text-sm font-semibold text-navy">Add a Parent to This Session</p>
                   <p className="mt-0.5 text-xs text-muted-foreground">
@@ -1085,6 +1101,50 @@ export function OnboardingWizard({
             </div>
           </div>
 
+          {isFamilyPkg && isParentEligible && (
+            <div className="mt-6 rounded-card border-2 border-lime/40 bg-lime/5 p-4">
+              <p className="text-sm font-semibold text-navy">Family Package — Parent Signup</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                The Family Package covers 1 or 2 parents plus your child/ren. Each parent who signs up
+                is billed as their own family member, at{" "}
+                <strong className="text-navy">R{parentAddOnPrice}/month</strong> each — separate from
+                the children&apos;s billing.
+              </p>
+              <div className="mt-3 space-y-3">
+                <label className="flex items-center gap-3 rounded-2xl border border-border bg-card p-3">
+                  <input
+                    type="checkbox"
+                    checked={familyParent1Enrolled}
+                    onChange={(e) => setFamilyParent1Enrolled(e.target.checked)}
+                    className="h-5 w-5 rounded accent-lime"
+                  />
+                  <span className="text-sm font-semibold text-navy">
+                    Parent 1 Enrollment/Signup — {parent.firstName || "you"} (R{parentAddOnPrice}/month)
+                  </span>
+                </label>
+                <label className="flex items-center gap-3 rounded-2xl border border-border bg-card p-3">
+                  <input
+                    type="checkbox"
+                    checked={familyParent2Enrolled}
+                    onChange={(e) => setFamilyParent2Enrolled(e.target.checked)}
+                    className="h-5 w-5 rounded accent-lime"
+                  />
+                  <span className="text-sm font-semibold text-navy">
+                    Parent 2 Enrollment/Signup (R{parentAddOnPrice}/month)
+                  </span>
+                </label>
+                {familyParent2Enrolled && (
+                  <Field
+                    label="Parent 2 Full Name"
+                    value={familyParent2Name}
+                    onChange={setFamilyParent2Name}
+                    placeholder="Full name"
+                  />
+                )}
+              </div>
+            </div>
+          )}
+
           <div className="mt-6 rounded-card border border-border bg-muted/40 p-4">
             <p className="text-sm font-semibold text-navy">Emergency Contact</p>
             <div className="mt-3 grid gap-4 sm:grid-cols-2">
@@ -1194,6 +1254,24 @@ export function OnboardingWizard({
               </div>
             )
           })}
+
+          {isFamilyPkg && isParentEligible && (familyParent1Enrolled || familyParent2Enrolled) && (
+            <div className="mt-3 border-t border-border pt-3">
+              <p className="text-sm font-semibold text-navy">Family Package — Billed Members</p>
+              {familyParent1Enrolled && (
+                <Row
+                  label="Parent 1 Enrollment/Signup"
+                  value={`${parent.firstName} ${parent.lastName}`.trim() + ` — R${parentAddOnPrice}/month`}
+                />
+              )}
+              {familyParent2Enrolled && (
+                <Row
+                  label="Parent 2 Enrollment/Signup"
+                  value={(familyParent2Name.trim() || "Parent 2") + ` — R${parentAddOnPrice}/month`}
+                />
+              )}
+            </div>
+          )}
 
           <Row label="Parent 1" value={`${parent.firstName} ${parent.lastName}`.trim()} />
           <Row label="Email" value={parent.email} />
