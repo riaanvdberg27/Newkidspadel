@@ -132,7 +132,7 @@ export const schools = pgTable("schools", {
 
 export type School = typeof schools.$inferSelect
 
-export const AGE_GROUPS = ["4-8", "9-13", "14-17"] as const
+export const AGE_GROUPS = ["4-8", "9-13", "14-17", "Adult"] as const
 export type AgeGroup = (typeof AGE_GROUPS)[number]
 
 export const clubSlots = pgTable(
@@ -222,6 +222,11 @@ export const enrollments = pgTable("enrollments", {
   parent2Enrolled: boolean("parent2Enrolled").notNull().default(false),
   // Parent 2's name (Parent 1 reuses parentName, the account holder)
   parent2Name: text("parent2Name"),
+  // Family Package only: human-readable description of which time slot each enrolled
+  // parent attends — either "joins <child>'s session" or their own separate club/time.
+  // Informational only (parents share the child's slot capacity pool, not a separate one).
+  parent1SlotLabel: text("parent1SlotLabel"),
+  parent2SlotLabel: text("parent2SlotLabel"),
   // Rands added to this enrollment's price for parent participation, captured at
   // enrollment time so later price changes don't retroactively change history
   parentAddOnAmount: integer("parentAddOnAmount").notNull().default(0),

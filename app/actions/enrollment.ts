@@ -463,6 +463,9 @@ export type CartItem = {
   parent1Enrolled?: boolean
   parent2Enrolled?: boolean
   parent2Name?: string
+  /** Family Package only: human-readable time-slot choice for each enrolled parent. */
+  parent1SlotLabel?: string
+  parent2SlotLabel?: string
   /** Rands added to packagePrice for the enrolled parent(s) — already reflected in packagePrice, stored separately for billing history. */
   parentAddOnAmount?: number
 }
@@ -622,6 +625,8 @@ export async function createCartEnrollments(input: {
         parent1Enrolled: item.parent1Enrolled ?? false,
         parent2Enrolled: item.parent2Enrolled ?? false,
         parent2Name: item.parent2Enrolled ? item.parent2Name ?? undefined : undefined,
+        parent1SlotLabel: item.parent1Enrolled ? item.parent1SlotLabel ?? undefined : undefined,
+        parent2SlotLabel: item.parent2Enrolled ? item.parent2SlotLabel ?? undefined : undefined,
         parentAddOnAmount: item.parentAddOnAmount ?? 0,
         groupAccessCodeId: groupAccessCodeId ?? undefined,
       })
