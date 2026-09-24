@@ -156,7 +156,6 @@ export function OnboardingWizard({
   // "parent joins this session" add-on used by Beginner/Advanced packages.
   const [familyParent1Enrolled, setFamilyParent1Enrolled] = useState(false)
   const [familyParent2Enrolled, setFamilyParent2Enrolled] = useState(false)
-  const [familyParent2Name, setFamilyParent2Name] = useState("")
   const [emergency, setEmergency] = useState({ name: "", phone: "" })
   const [prefs, setPrefs] = useState<Prefs>({
     prefEmail: true,
@@ -393,7 +392,10 @@ export function OnboardingWizard({
           discountRandCents: appliedVoucher?.discountRandCents,
           parent1Enrolled,
           parent2Enrolled,
-          parent2Name: parent2Enrolled ? sched.parent2Name.trim() : undefined,
+          parent2Name: parent2Enrolled
+            ? (isFamilyPkg ? `${secondParent.firstName} ${secondParent.lastName}`.trim() : sched.parent2Name.trim()) ||
+              undefined
+            : undefined,
           parentAddOnAmount,
         }
       })
@@ -1061,54 +1063,56 @@ export function OnboardingWizard({
             </div>
           </div>
 
-          <div className="mt-6 rounded-card border border-border bg-muted/40 p-4">
-            <p className="text-sm font-semibold text-navy">Parent 2 (optional)</p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Add a second parent or guardian&apos;s details if you&apos;d like us to have them on file.
-            </p>
-            <div className="mt-3 grid gap-4 sm:grid-cols-2">
-              <Field
-                label="First Name"
-                value={secondParent.firstName}
-                onChange={(v) => setSecondParent({ ...secondParent, firstName: v })}
-                placeholder="First name"
-              />
-              <Field
-                label="Last Name / Surname"
-                value={secondParent.lastName}
-                onChange={(v) => setSecondParent({ ...secondParent, lastName: v })}
-                placeholder="Last name"
-              />
-              <div className="flex flex-col gap-1 sm:col-span-2 sm:max-w-[calc(50%-0.5rem)]">
+          {!isFamilyPkg && (
+            <div className="mt-6 rounded-card border border-border bg-muted/40 p-4">
+              <p className="text-sm font-semibold text-navy">Parent 2 (optional)</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Add a second parent or guardian&apos;s details if you&apos;d like us to have them on file.
+              </p>
+              <div className="mt-3 grid gap-4 sm:grid-cols-2">
                 <Field
-                  label="Mobile Number"
-                  type="tel"
-                  value={secondParent.mobile}
-                  onChange={(v) => setSecondParent({ ...secondParent, mobile: v.replace(/[^\d]/g, "") })}
-                  placeholder="0812345678"
+                  label="First Name"
+                  value={secondParent.firstName}
+                  onChange={(v) => setSecondParent({ ...secondParent, firstName: v })}
+                  placeholder="First name"
                 />
-                {secondParent.mobile.length > 0 && !/^0\d{9}$/.test(secondParent.mobile) && (
-                  <p className="text-xs font-semibold text-destructive">
-                    {!secondParent.mobile.startsWith("0")
-                      ? "Must start with 0 — e.g. 0812345678"
-                      : `Must be exactly 10 digits (${secondParent.mobile.length}/10)`}
-                  </p>
-                )}
-                {/^0\d{9}$/.test(secondParent.mobile) && (
-                  <p className="text-xs font-semibold text-lime-600">Looks good</p>
-                )}
+                <Field
+                  label="Last Name / Surname"
+                  value={secondParent.lastName}
+                  onChange={(v) => setSecondParent({ ...secondParent, lastName: v })}
+                  placeholder="Last name"
+                />
+                <div className="flex flex-col gap-1 sm:col-span-2 sm:max-w-[calc(50%-0.5rem)]">
+                  <Field
+                    label="Mobile Number"
+                    type="tel"
+                    value={secondParent.mobile}
+                    onChange={(v) => setSecondParent({ ...secondParent, mobile: v.replace(/[^\d]/g, "") })}
+                    placeholder="0812345678"
+                  />
+                  {secondParent.mobile.length > 0 && !/^0\d{9}$/.test(secondParent.mobile) && (
+                    <p className="text-xs font-semibold text-destructive">
+                      {!secondParent.mobile.startsWith("0")
+                        ? "Must start with 0 — e.g. 0812345678"
+                        : `Must be exactly 10 digits (${secondParent.mobile.length}/10)`}
+                    </p>
+                  )}
+                  {/^0\d{9}$/.test(secondParent.mobile) && (
+                    <p className="text-xs font-semibold text-lime-600">Looks good</p>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
           {isFamilyPkg && isParentEligible && (
             <div className="mt-6 rounded-card border-2 border-lime/40 bg-lime/5 p-4">
-              <p className="text-sm font-semibold text-navy">Family Package — Parent Signup</p>
+              <p className="text-sm font-semibold text-navy">Parent Enrollment / Signup</p>
               <p className="mt-0.5 text-xs text-muted-foreground">
-                The Family Package covers 1 or 2 parents plus your child/ren. Each parent who signs up
-                is billed as their own family member, at{" "}
-                <strong className="text-navy">R{parentAddOnPrice}/month</strong> each — separate from
-                the children&apos;s billing.
+                The Family Package covers 1 or 2 parents plus your child/ren. Both are entirely optional —
+                each parent who chooses to enroll is billed as their own family member, at{" "}
+                <strong className="text-navy">R{parentAddOnPrice}/month</strong> each, separate from the
+                children&apos;s billing.
               </p>
               <div className="mt-3 space-y-3">
                 <label className="flex items-center gap-3 rounded-2xl border border-border bg-card p-3">
@@ -1119,7 +1123,8 @@ export function OnboardingWizard({
                     className="h-5 w-5 rounded accent-lime"
                   />
                   <span className="text-sm font-semibold text-navy">
-                    Parent 1 Enrollment/Signup — {parent.firstName || "you"} (R{parentAddOnPrice}/month)
+                    Parent 1 Enrollment/Signup (optional) — {`${parent.firstName} ${parent.lastName}`.trim() || "you"}
+                    {parent.mobile ? `, ${parent.mobile}` : ""} (R{parentAddOnPrice}/month)
                   </span>
                 </label>
                 <label className="flex items-center gap-3 rounded-2xl border border-border bg-card p-3">
@@ -1130,16 +1135,48 @@ export function OnboardingWizard({
                     className="h-5 w-5 rounded accent-lime"
                   />
                   <span className="text-sm font-semibold text-navy">
-                    Parent 2 Enrollment/Signup (R{parentAddOnPrice}/month)
+                    Parent 2 Enrollment/Signup (optional) (R{parentAddOnPrice}/month)
                   </span>
                 </label>
                 {familyParent2Enrolled && (
-                  <Field
-                    label="Parent 2 Full Name"
-                    value={familyParent2Name}
-                    onChange={setFamilyParent2Name}
-                    placeholder="Full name"
-                  />
+                  <div className="rounded-2xl border border-border bg-card p-3">
+                    <p className="text-xs text-muted-foreground">
+                      All details below are optional — leave any of them blank if you prefer.
+                    </p>
+                    <div className="mt-3 grid gap-4 sm:grid-cols-2">
+                      <Field
+                        label="First Name"
+                        value={secondParent.firstName}
+                        onChange={(v) => setSecondParent({ ...secondParent, firstName: v })}
+                        placeholder="First name"
+                      />
+                      <Field
+                        label="Last Name / Surname"
+                        value={secondParent.lastName}
+                        onChange={(v) => setSecondParent({ ...secondParent, lastName: v })}
+                        placeholder="Last name"
+                      />
+                      <div className="flex flex-col gap-1 sm:col-span-2 sm:max-w-[calc(50%-0.5rem)]">
+                        <Field
+                          label="Mobile Number"
+                          type="tel"
+                          value={secondParent.mobile}
+                          onChange={(v) => setSecondParent({ ...secondParent, mobile: v.replace(/[^\d]/g, "") })}
+                          placeholder="0812345678"
+                        />
+                        {secondParent.mobile.length > 0 && !/^0\d{9}$/.test(secondParent.mobile) && (
+                          <p className="text-xs font-semibold text-destructive">
+                            {!secondParent.mobile.startsWith("0")
+                              ? "Must start with 0 — e.g. 0812345678"
+                              : `Must be exactly 10 digits (${secondParent.mobile.length}/10)`}
+                          </p>
+                        )}
+                        {/^0\d{9}$/.test(secondParent.mobile) && (
+                          <p className="text-xs font-semibold text-lime-600">Looks good</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
                 )}
               </div>
             </div>
@@ -1267,7 +1304,10 @@ export function OnboardingWizard({
               {familyParent2Enrolled && (
                 <Row
                   label="Parent 2 Enrollment/Signup"
-                  value={(familyParent2Name.trim() || "Parent 2") + ` — R${parentAddOnPrice}/month`}
+                  value={
+                    (`${secondParent.firstName} ${secondParent.lastName}`.trim() || "Parent 2") +
+                    ` — R${parentAddOnPrice}/month`
+                  }
                 />
               )}
             </div>
