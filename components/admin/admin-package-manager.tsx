@@ -116,6 +116,11 @@ export function AdminPackageManager({
   const visiblePackages =
     filter === "active" ? activePackages : filter === "inactive" ? inactivePackages : initialPackages
 
+  // Split into publicly-listed packages and ones only reachable via a group access code
+  // (e.g. the Family Package), so they're grouped separately instead of blending in.
+  const publiclyShownPackages = visiblePackages.filter((p) => p.visibility !== "hidden")
+  const notPubliclyShownPackages = visiblePackages.filter((p) => p.visibility === "hidden")
+
   return (
     <div>
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -146,8 +151,114 @@ export function AdminPackageManager({
       </div>
 
       <div className="mt-4 grid gap-4">
-        {visiblePackages.map((pkg) => (
-          <article key={pkg.id} className={`rounded-card border bg-card p-5 shadow-sm ${!pkg.published ? "border-dashed border-muted-foreground/30 opacity-80" : "border-border"}`}>
+        {publiclyShownPackages.map((pkg) => (
+          <PackageCard
+            key={pkg.id}
+            pkg={pkg}
+            pending={pending}
+            confirmDeactivate={confirmDeactivate}
+            confirmReactivate={confirmReactivate}
+            reactivateEnrollments={reactivateEnrollments}
+            setReactivateEnrollments={setReactivateEnrollments}
+            setConfirmDeactivate={setConfirmDeactivate}
+            setConfirmReactivate={setConfirmReactivate}
+            openEdit={openEdit}
+            handleDeactivate={handleDeactivate}
+            handleReactivate={handleReactivate}
+            periodLabel={periodLabel}
+          />
+        ))}
+
+        {notPubliclyShownPackages.length > 0 && (
+          <div className="mt-2 flex items-center gap-3">
+            <span className="shrink-0 text-xs font-bold uppercase tracking-wide text-muted-foreground">
+              Not Publicly Shown
+            </span>
+            <span className="h-px flex-1 bg-border" />
+            <span className="shrink-0 text-xs text-muted-foreground">
+              Only reachable via a group access code
+            </span>
+          </div>
+        )}
+        {notPubliclyShownPackages.map((pkg) => (
+          <PackageCard
+            key={pkg.id}
+            pkg={pkg}
+            pending={pending}
+            confirmDeactivate={confirmDeactivate}
+            confirmReactivate={confirmReactivate}
+            reactivateEnrollments={reactivateEnrollments}
+            setReactivateEnrollments={setReactivateEnrollments}
+            setConfirmDeactivate={setConfirmDeactivate}
+            setConfirmReactivate={setConfirmReactivate}
+            openEdit={openEdit}
+            handleDeactivate={handleDeactivate}
+            handleReactivate={handleReactivate}
+            periodLabel={periodLabel}
+          />
+        ))}
+
+        {visiblePackages.length === 0 && (
+          <p className="rounded-card border border-dashed border-border bg-card p-8 text-center text-muted-foreground">
+            {filter === "inactive" ? "No inactive packages." : filter === "active" ? "No active packages yet. Click \"Add Package\" to create your first one." : "No packages yet."}
+          </p>
+        )}
+      </div>
+
+      {(creating || editing) && (
+        <Modal
+          title={editing ? `Edit ${editing.pkg.name}` : "Add New Package"}
+          onClose={closeModal}
+        >
+          <PackageForm
+            pkg={editing?.pkg ?? null}
+            initialSlots={editing?.slots ?? []}
+            allClubs={allClubs}
+            allSchools={allSchools}
+            pending={pending}
+            onSubmit={handleSave}
+            onCancel={closeModal}
+          />
+        </Modal>
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Package card
+// ---------------------------------------------------------------------------
+
+
+function PackageCard({
+  pkg,
+  pending,
+  confirmDeactivate,
+  confirmReactivate,
+  reactivateEnrollments,
+  setReactivateEnrollments,
+  setConfirmDeactivate,
+  setConfirmReactivate,
+  openEdit,
+  handleDeactivate,
+  handleReactivate,
+  periodLabel,
+}: {
+  pkg: PublicPackage
+  pending: boolean
+  confirmDeactivate: { id: number; name: string } | null
+  confirmReactivate: { id: number; name: string } | null
+  reactivateEnrollments: boolean
+  setReactivateEnrollments: (v: boolean) => void
+  setConfirmDeactivate: (v: { id: number; name: string } | null) => void
+  setConfirmReactivate: (v: { id: number; name: string } | null) => void
+  openEdit: (pkg: PublicPackage) => void
+  handleDeactivate: (id: number) => void
+  handleReactivate: (id: number) => void
+  periodLabel: (p: string) => string
+}) {
+  return (
+        <article className={`rounded-card border bg-card p-5 shadow-sm ${!pkg.published ? "border-dashed border-muted-foreground/30 opacity-80" : pkg.visibility === "hidden" ? "border-dashed border-amber-300/60" : "border-border"}`}>
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div className="flex-1 min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
@@ -160,6 +271,11 @@ export function AdminPackageManager({
                   {pkg.popular && (
                     <span className="rounded-full bg-lime px-2 py-0.5 text-xs font-bold text-lime-foreground">Popular</span>
                   )}
+                  {pkg.visibility === "hidden" && (
+                    <span className="rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs font-bold text-amber-700">
+                      Not publicly shown
+                    </span>
+                  )}
                   <span className="rounded-full border border-border px-2 py-0.5 text-xs font-semibold text-muted-foreground">
                     {pkg.slotType === "custom" ? "Custom slots" : "Standard slots"}
                   </span>
@@ -169,6 +285,11 @@ export function AdminPackageManager({
                     </span>
                   )}
                 </div>
+                {pkg.visibility === "hidden" && (
+                  <p className="mt-1 text-xs text-amber-700">
+                    Hidden from the public enrollment list — only accessible with a group access code.
+                  </p>
+                )}
                 <p className="mt-1 text-sm font-semibold text-lime">
                   R{pkg.price.toLocaleString()}{" "}
                   <span className="font-normal text-muted-foreground">{periodLabel(pkg.period)}</span>
@@ -281,33 +402,7 @@ export function AdminPackageManager({
                 </div>
               </div>
             )}
-          </article>
-        ))}
-
-        {visiblePackages.length === 0 && (
-          <p className="rounded-card border border-dashed border-border bg-card p-8 text-center text-muted-foreground">
-            {filter === "inactive" ? "No inactive packages." : filter === "active" ? "No active packages yet. Click \"Add Package\" to create your first one." : "No packages yet."}
-          </p>
-        )}
-      </div>
-
-      {(creating || editing) && (
-        <Modal
-          title={editing ? `Edit ${editing.pkg.name}` : "Add New Package"}
-          onClose={closeModal}
-        >
-          <PackageForm
-            pkg={editing?.pkg ?? null}
-            initialSlots={editing?.slots ?? []}
-            allClubs={allClubs}
-            allSchools={allSchools}
-            pending={pending}
-            onSubmit={handleSave}
-            onCancel={closeModal}
-          />
-        </Modal>
-      )}
-    </div>
+        </article>
   )
 }
 
@@ -342,6 +437,9 @@ function PackageForm({
   const [slug, setSlug] = useState(pkg?.slug ?? "")
   const [name, setName] = useState(pkg?.name ?? "")
   const [price, setPrice] = useState(String(pkg?.price ?? 0))
+  const [parentPrice, setParentPrice] = useState(
+    pkg?.parentPrice != null ? String(pkg.parentPrice) : "",
+  )
   const [period, setPeriod] = useState(pkg?.period ?? "monthly")
   const [tagline, setTagline] = useState(pkg?.tagline ?? "")
   const [features, setFeatures] = useState<FeatureItem[]>(pkg?.features ?? [])
@@ -349,6 +447,8 @@ function PackageForm({
   const [popular, setPopular] = useState(pkg?.popular ?? false)
   const [published, setPublished] = useState(pkg?.published ?? true)
   const [isSchool, setIsSchool] = useState(pkg?.isSchool ?? false)
+  const [isHidden, setIsHidden] = useState((pkg?.visibility ?? "public") === "hidden")
+  const [isFamily, setIsFamily] = useState(pkg?.isFamily ?? false)
   const [slotType, setSlotType] = useState(pkg?.slotType ?? "standard")
   const [sortOrder, setSortOrder] = useState(String(pkg?.sortOrder ?? 0))
   const [activeAgeGroup, setActiveAgeGroup] = useState<AgeGroup>("4-8")
@@ -429,6 +529,7 @@ function PackageForm({
       slug,
       name,
       price: Math.max(0, Number(price)),
+      parentPrice: parentPrice.trim() === "" ? null : Math.max(0, Number(parentPrice)),
       period,
       tagline,
       features,
@@ -437,6 +538,8 @@ function PackageForm({
       published,
       slotType,
       isSchool,
+      visibility: isHidden ? "hidden" : "public",
+      isFamily,
       sortOrder: Number(sortOrder),
       customSlots: slotType !== "custom" ? [] : customSlotList,
       clubIds: isSchool ? [] : selectedClubIds,
@@ -571,6 +674,42 @@ function PackageForm({
             {isSchool
               ? "This package is for schools — one coaching slot per week. Slot and coach settings apply."
               : "Tick this if the package is for schools, not clubs."}
+          </p>
+        </label>
+      </div>
+
+      {/* Hidden / group-code-only toggle */}
+      <div className={`flex items-center gap-3 rounded-md border px-4 py-3 ${isHidden ? "border-lime bg-lime/10" : "border-border bg-card"}`}>
+        <input
+          type="checkbox"
+          id="isHidden"
+          checked={isHidden}
+          onChange={(e) => setIsHidden(e.target.checked)}
+          className="h-5 w-5 accent-lime"
+        />
+        <label htmlFor="isHidden" className="cursor-pointer">
+          <p className="text-sm font-semibold text-navy">Hidden — only visible via group code</p>
+          <p className="text-xs text-muted-foreground">
+            {isHidden
+              ? "This package will never appear on the homepage or the default enrollment list. Create a Group Code for it in Referrals & Vouchers to let families unlock it."
+              : "Tick this to hide the package from the public site — it becomes enrollable only via a shared group code."}
+          </p>
+        </label>
+      </div>
+
+      {/* Family package toggle */}
+      <div className={`flex items-center gap-3 rounded-md border px-4 py-3 ${isFamily ? "border-lime bg-lime/10" : "border-border bg-card"}`}>
+        <input
+          type="checkbox"
+          id="isFamily"
+          checked={isFamily}
+          onChange={(e) => setIsFamily(e.target.checked)}
+          className="h-5 w-5 accent-lime"
+        />
+        <label htmlFor="isFamily" className="cursor-pointer">
+          <p className="text-sm font-semibold text-navy">Family package</p>
+          <p className="text-xs text-muted-foreground">
+            Price = per family member (parent or child) per month, capped at 3 children. Set a Parent Add-on Price above to let parents also enroll themselves.
           </p>
         </label>
       </div>

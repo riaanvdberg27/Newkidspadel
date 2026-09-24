@@ -2,6 +2,11 @@ import { getShopProducts, getShopCategories } from "@/app/actions/shop"
 import { ProductCard } from "@/components/shop/product-card"
 import { ShoppingBag } from "lucide-react"
 
+// Always read fresh from the database — this page has no dynamic APIs of its
+// own, so without this Next.js treats it as static and serves a cached copy
+// that only reflects whatever products existed at deploy/build time.
+export const dynamic = "force-dynamic"
+
 export default async function ShopPage() {
   const [products, allCategories] = await Promise.all([getShopProducts(), getShopCategories()])
 
@@ -18,9 +23,9 @@ export default async function ShopPage() {
             <ShoppingBag className="h-5 w-5" />
             <span className="text-sm font-bold uppercase tracking-wide">Academy Shop</span>
           </div>
-          <h1 className="mt-2 text-2xl font-extrabold sm:text-4xl">Padel Gear, Kit &amp; Caps</h1>
+          <h1 className="mt-2 text-2xl font-extrabold sm:text-4xl">Padel Gear, Padel Accessories and Apparel</h1>
           <p className="mt-2 max-w-xl text-sm text-navy-foreground/80 sm:text-base">
-            Order official NextGen Padel Academy gear for your child. Pay by EFT or card, and track your order from
+            Order official Next Gen Padel Academy gear for your child. Pay by EFT or card, and track your order from
             your parent dashboard.
           </p>
         </div>

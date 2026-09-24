@@ -1,8 +1,8 @@
 "use client"
 
 import { useEffect, useState, useTransition } from "react"
-import { Loader2, Check } from "lucide-react"
-import { getClubSlots, setSlotCapacity } from "@/app/actions/admin"
+import { Loader2, Check, Users } from "lucide-react"
+import { getClubSlots, setSlotCapacity, setSlotParentEnrollment } from "@/app/actions/admin"
 import { getSchoolSlots, setSchoolSlotCapacity } from "@/app/actions/schools"
 import { SLOT_HOURS, WEEKDAYS, formatHour } from "@/lib/slots"
 import { AGE_GROUPS, type AgeGroup, type ClubSlot, type SchoolSlot } from "@/lib/db/schema"
@@ -20,6 +20,7 @@ type VenueRef = { kind: "club"; id: number } | { kind: "school"; id: number }
 
 function AgeGroupGrid({ venue, ageGroup }: { venue: VenueRef; ageGroup: AgeGroup }) {
   const [grid, setGrid] = useState<Record<string, number>>({})
+  const [parentEnabled, setParentEnabled] = useState<Record<string, boolean>>({})
   const [loading, setLoading] = useState(true)
   const [savedKey, setSavedKey] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
@@ -33,11 +34,15 @@ function AgeGroupGrid({ venue, ageGroup }: { venue: VenueRef; ageGroup: AgeGroup
       .then((slots: ClubSlot[] | SchoolSlot[]) => {
         if (!active) return
         const next: Record<string, number> = {}
+        const nextParent: Record<string, boolean> = {}
         for (const s of slots) {
           const h = parseFloat(String(s.hour))
-          next[`${s.weekday}-${h}`] = s.capacity
+          const key = `${s.weekday}-${h}`
+          next[key] = s.capacity
+          nextParent[key] = venue.kind === "club" ? (s as ClubSlot).parentEnrollmentEnabled : false
         }
         setGrid(next)
+        setParentEnabled(nextParent)
       })
       .finally(() => active && setLoading(false))
     return () => { active = false }
@@ -55,6 +60,16 @@ function AgeGroupGrid({ venue, ageGroup }: { venue: VenueRef; ageGroup: AgeGroup
       }
       setSavedKey(key)
       setTimeout(() => setSavedKey((k) => (k === key ? null : k)), 1400)
+    })
+  }
+
+  function toggleParentEnrollment(weekday: number, hour: number) {
+    if (venue.kind !== "club") return
+    const key = `${weekday}-${hour}`
+    const enabled = !(parentEnabled[key] ?? true)
+    setParentEnabled((p) => ({ ...p, [key]: enabled }))
+    startTransition(async () => {
+      await setSlotParentEnrollment({ clubId: venue.id, weekday, hour, ageGroup, enabled })
     })
   }
 
@@ -95,6 +110,7 @@ function AgeGroupGrid({ venue, ageGroup }: { venue: VenueRef; ageGroup: AgeGroup
                 {WEEKDAY_ORDER.map((wd) => {
                   const key = `${wd}-${hour}`
                   const value = grid[key] ?? 0
+                  const parentOn = parentEnabled[key] ?? true
                   return (
                     <td key={wd} className="p-1">
                       <div className="relative">
@@ -114,6 +130,25 @@ function AgeGroupGrid({ venue, ageGroup }: { venue: VenueRef; ageGroup: AgeGroup
                           <Check className="absolute -right-1 -top-1 h-3.5 w-3.5 rounded-full bg-lime p-0.5 text-lime-foreground" />
                         )}
                       </div>
+                      {venue.kind === "club" && value > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => toggleParentEnrollment(wd, hour)}
+                          title={
+                            parentOn
+                              ? "Parent add-on enabled for this slot — click to disable"
+                              : "Parent add-on disabled for this slot — click to enable"
+                          }
+                          className={`mt-1 flex w-14 items-center justify-center gap-1 rounded-md border px-1 py-0.5 text-[10px] font-semibold transition-colors ${
+                            parentOn
+                              ? "border-lime/50 bg-lime/10 text-lime-foreground"
+                              : "border-border bg-muted text-muted-foreground"
+                          }`}
+                        >
+                          <Users className="h-3 w-3" />
+                          {parentOn ? "On" : "Off"}
+                        </button>
+                      )}
                     </td>
                   )
                 })}

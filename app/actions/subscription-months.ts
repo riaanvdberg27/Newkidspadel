@@ -5,6 +5,7 @@ import { subscriptionMonths, enrollments, packages } from "@/lib/db/schema"
 import { eq, and, inArray, asc, desc, sql } from "drizzle-orm"
 import { requireAdmin } from "@/lib/admin-auth"
 import { revalidatePath } from "next/cache"
+import { getEnrollmentVoucherDiscount } from "./referrals"
 
 // ---------------------------------------------------------------------------
 // Types
@@ -18,6 +19,7 @@ export type SubscriptionMonthRow = {
   amountCents: number
   status: string
   discountPct: number
+  discountRandCents: number
   discountReason: string | null
   paidCents: number | null
   paymentReference: string | null
@@ -25,6 +27,56 @@ export type SubscriptionMonthRow = {
   paidAt: Date | null
   createdAt: Date
   updatedAt: Date
+}
+
+/** Effective amount due for a month after both the % and fixed-Rand discounts. */
+function effectiveMonthCents(amountCents: number, discountPct: number, discountRandCents: number): number {
+  const afterPct = Math.round(amountCents * (1 - (discountPct ?? 0) / 100))
+  return Math.max(0, afterPct - (discountRandCents ?? 0))
+}
+
+/**
+ * Apply a redeemed voucher's discount onto an enrollment's *newly generated*
+ * (still pristine — never manually edited) outstanding billing months, so
+ * the voucher discount "pulls through" onto the billing ledger automatically.
+ *
+ * - 'once' vouchers apply only to the earliest outstanding month.
+ * - 'indefinite' vouchers apply to every outstanding month until cancelled.
+ *
+ * Only touches rows with discountPct=0, discountRandCents=0, no discountReason,
+ * and status='outstanding' — so it never overwrites an admin's manual edit.
+ */
+async function syncVoucherDiscountForEnrollment(enrollmentId: number): Promise<void> {
+  const voucher = await getEnrollmentVoucherDiscount(enrollmentId)
+  if (!voucher) return
+
+  const pct = voucher.discountType === "percent" ? voucher.discountPercent : 0
+  const rand = voucher.discountType === "rand" ? voucher.discountRandCents : 0
+  const reason = `Voucher: ${voucher.code}`
+
+  const pristineRows = await db
+    .select({ id: subscriptionMonths.id, year: subscriptionMonths.year, month: subscriptionMonths.month })
+    .from(subscriptionMonths)
+    .where(
+      and(
+        eq(subscriptionMonths.enrollmentId, enrollmentId),
+        eq(subscriptionMonths.status, "outstanding"),
+        eq(subscriptionMonths.discountPct, 0),
+        eq(subscriptionMonths.discountRandCents, 0),
+        sql`${subscriptionMonths.discountReason} IS NULL`,
+      ),
+    )
+    .orderBy(asc(subscriptionMonths.year), asc(subscriptionMonths.month))
+
+  if (pristineRows.length === 0) return
+
+  const targetIds =
+    voucher.recurrence === "indefinite" ? pristineRows.map((r) => r.id) : [pristineRows[0].id]
+
+  await db
+    .update(subscriptionMonths)
+    .set({ discountPct: pct, discountRandCents: rand, discountReason: reason, updatedAt: new Date() })
+    .where(inArray(subscriptionMonths.id, targetIds))
 }
 
 export type BillingLedgerEntry = SubscriptionMonthRow & {
@@ -92,6 +144,7 @@ export async function generateMonthsForEnrollment(
       })
       .onConflictDoNothing()
   }
+  await syncVoucherDiscountForEnrollment(enrollmentId)
 }
 
 // ---------------------------------------------------------------------------
@@ -144,6 +197,7 @@ export async function backfillAllEnrollments(): Promise<{ generated: number }> {
         .returning({ id: subscriptionMonths.id })
       if (result.length > 0) generated++
     }
+    await syncVoucherDiscountForEnrollment(enr.id)
   }
 
   revalidatePath("/admin")
@@ -215,6 +269,7 @@ export async function getBillingLedger(year = BILLING_START_YEAR): Promise<Billi
       amountCents: subscriptionMonths.amountCents,
       status: subscriptionMonths.status,
       discountPct: subscriptionMonths.discountPct,
+      discountRandCents: subscriptionMonths.discountRandCents,
       discountReason: subscriptionMonths.discountReason,
       paidCents: subscriptionMonths.paidCents,
       paymentReference: subscriptionMonths.paymentReference,
@@ -287,6 +342,7 @@ export async function getOutstandingReport(year = BILLING_START_YEAR): Promise<O
       month: subscriptionMonths.month,
       amountCents: subscriptionMonths.amountCents,
       discountPct: subscriptionMonths.discountPct,
+      discountRandCents: subscriptionMonths.discountRandCents,
       discountReason: subscriptionMonths.discountReason,
       paidCents: subscriptionMonths.paidCents,
       status: subscriptionMonths.status,
@@ -329,8 +385,8 @@ export async function getOutstandingReport(year = BILLING_START_YEAR): Promise<O
       })
     }
     const entry = map.get(row.enrollmentId)!
-    // Effective due amount after discount
-    const discountedCents = Math.round(row.amountCents * (1 - (row.discountPct ?? 0) / 100))
+    // Effective due amount after both the % and fixed-Rand discounts
+    const discountedCents = effectiveMonthCents(row.amountCents, row.discountPct, row.discountRandCents)
     // Remaining = discounted total minus what's already been paid (for partial)
     const remainingCents = row.status === "partial"
       ? Math.max(0, discountedCents - (row.paidCents ?? 0))
@@ -382,6 +438,7 @@ export async function getRevenueReport(year = BILLING_START_YEAR): Promise<Reven
       status: subscriptionMonths.status,
       amountCents: subscriptionMonths.amountCents,
       discountPct: subscriptionMonths.discountPct,
+      discountRandCents: subscriptionMonths.discountRandCents,
       paidCents: subscriptionMonths.paidCents,
     })
     .from(subscriptionMonths)
@@ -416,7 +473,7 @@ export async function getRevenueReport(year = BILLING_START_YEAR): Promise<Reven
     const key = `${row.year}-${row.month}`
     const summary = monthMap.get(key)
     if (!summary) continue
-    const discountedCents = Math.round(row.amountCents * (1 - (row.discountPct ?? 0) / 100))
+    const discountedCents = effectiveMonthCents(row.amountCents, row.discountPct, row.discountRandCents)
     summary.totalCents += discountedCents
     if (row.status === "paid") {
       summary.paidCents += discountedCents
@@ -449,6 +506,7 @@ export async function updateMonthStatus(
     paymentReference?: string
     notes?: string
     discountPct?: number
+    discountRandCents?: number
     discountReason?: string
     paidCents?: number
   },
@@ -461,6 +519,7 @@ export async function updateMonthStatus(
         status,
         paidAt: status === "paid" ? new Date() : null,
         discountPct: opts?.discountPct ?? 0,
+        discountRandCents: opts?.discountRandCents ?? 0,
         discountReason: opts?.discountReason ?? null,
         paidCents: status === "partial" ? (opts?.paidCents ?? null) : null,
         paymentReference: opts?.paymentReference ?? null,

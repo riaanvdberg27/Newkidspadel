@@ -1,28 +1,37 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import type {
   AdminReferralRow,
   AdminVoucherRow,
 } from "@/app/actions/referrals"
 import type { VoucherCampaign } from "@/lib/db/schema"
+import type { PublicPackage } from "@/app/actions/packages"
 import {
   adminUpdateCampaign,
   adminCreateCampaign,
   adminGenerateBulkVouchers,
   issueBootcampVoucher,
 } from "@/app/actions/referrals"
+import {
+  adminGetGroupAccessCodes,
+  adminCreateGroupAccessCode,
+  adminUpdateGroupAccessCode,
+  type GroupAccessCodeRow,
+} from "@/app/actions/group-access-codes"
 
-type SubTab = "referrals" | "vouchers" | "campaigns"
+type SubTab = "referrals" | "vouchers" | "campaigns" | "group-codes"
 
 export function AdminReferralsManager({
   referrals,
   vouchers,
   campaigns,
+  packages,
 }: {
   referrals: AdminReferralRow[]
   vouchers: AdminVoucherRow[]
   campaigns: VoucherCampaign[]
+  packages: PublicPackage[]
 }) {
   const [subTab, setSubTab] = useState<SubTab>("referrals")
 
@@ -30,6 +39,7 @@ export function AdminReferralsManager({
     { id: "referrals", label: "Referrals" },
     { id: "vouchers", label: "Vouchers" },
     { id: "campaigns", label: "Campaigns" },
+    { id: "group-codes", label: "Group Codes" },
   ]
 
   return (
@@ -61,6 +71,7 @@ export function AdminReferralsManager({
       {subTab === "referrals" && <ReferralsTab rows={referrals} />}
       {subTab === "vouchers" && <VouchersTab rows={vouchers} campaigns={campaigns} />}
       {subTab === "campaigns" && <CampaignsTab campaigns={campaigns} vouchers={vouchers} />}
+      {subTab === "group-codes" && <GroupCodesTab packages={packages} />}
     </div>
   )
 }
@@ -254,7 +265,9 @@ function VouchersTab({
                   )}
                 </td>
                 <td className="px-4 py-3 text-muted-foreground">{v.campaignName}</td>
-                <td className="px-4 py-3 font-bold text-lime-foreground">{v.discountPercent}%</td>
+                <td className="px-4 py-3 font-bold text-lime-foreground">
+                  {formatDiscount(v.discountType, v.discountPercent, v.discountRandCents)}
+                </td>
                 <td className="px-4 py-3">
                   <StatusBadge status={v.status} />
                 </td>
@@ -297,8 +310,11 @@ function CampaignsTab({
   const [newForm, setNewForm] = useState({
     name: "",
     description: "",
+    discountType: "percent",
     discountPercent: 10,
+    discountRandCents: 0,
     appliesTo: "monthly",
+    recurrence: "once",
     expiryDays: 90 as number | null,
     enabled: true,
   })
@@ -318,8 +334,11 @@ function CampaignsTab({
     await adminUpdateCampaign(c.id, {
       name: c.name,
       description: c.description,
+      discountType: c.discountType,
       discountPercent: c.discountPercent,
+      discountRandCents: c.discountRandCents,
       appliesTo: c.appliesTo,
+      recurrence: c.recurrence,
       expiryDays: c.expiryDays,
       enabled: c.enabled,
     })
@@ -335,7 +354,17 @@ function CampaignsTab({
     }
     setSaving(false)
     setShowNew(false)
-    setNewForm({ name: "", description: "", discountPercent: 10, appliesTo: "monthly", expiryDays: 90, enabled: true })
+    setNewForm({
+      name: "",
+      description: "",
+      discountType: "percent",
+      discountPercent: 10,
+      discountRandCents: 0,
+      appliesTo: "monthly",
+      recurrence: "once",
+      expiryDays: 90,
+      enabled: true,
+    })
     setBulkQuantity(50)
   }
 
@@ -467,7 +496,12 @@ function CampaignsTab({
                   </div>
                   <p className="text-xs text-muted-foreground">{c.description}</p>
                   <div className="flex flex-wrap gap-3 pt-1 text-xs text-muted-foreground">
-                    <span><strong className="text-navy">{c.discountPercent}%</strong> discount</span>
+                    <span>
+                      <strong className="text-navy">
+                        {formatDiscount(c.discountType, c.discountPercent, c.discountRandCents)}
+                      </strong>{" "}
+                      discount
+                    </span>
                     <span>Applies to: <strong className="text-navy capitalize">{c.appliesTo}</strong></span>
                     <span>Expiry: <strong className="text-navy">{c.expiryDays ? `${c.expiryDays} days` : "Never"}</strong></span>
                   </div>
@@ -517,6 +551,302 @@ function CampaignsTab({
 }
 
 // ---------------------------------------------------------------------------
+// Group Codes sub-tab
+// ---------------------------------------------------------------------------
+
+const MIN_GROUP_REDEMPTIONS = 1
+const MAX_GROUP_REDEMPTIONS = 1000
+
+function GroupCodesTab({ packages }: { packages: PublicPackage[] }) {
+  const [rows, setRows] = useState<GroupAccessCodeRow[] | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [showNew, setShowNew] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [copiedId, setCopiedId] = useState<number | null>(null)
+  const [togglingId, setTogglingId] = useState<number | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  const hiddenFirstPackages = [...packages].sort((a, b) => {
+    if (a.visibility === b.visibility) return 0
+    return a.visibility === "hidden" ? -1 : 1
+  })
+
+  const [newForm, setNewForm] = useState({
+    label: "",
+    packageId: hiddenFirstPackages[0]?.id ?? 0,
+    code: "",
+    maxRedemptions: 100,
+    expiryDays: null as number | null,
+    enabled: true,
+  })
+
+  async function refresh() {
+    setLoading(true)
+    try {
+      const data = await adminGetGroupAccessCodes()
+      setRows(data)
+      setError(null)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load group codes.")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    refresh()
+  }, [])
+
+  async function handleCreate() {
+    setError(null)
+    if (!newForm.label.trim()) {
+      setError("Label is required.")
+      return
+    }
+    if (!newForm.packageId) {
+      setError("Select a package.")
+      return
+    }
+    setSaving(true)
+    try {
+      await adminCreateGroupAccessCode(newForm)
+      setShowNew(false)
+      setNewForm({
+        label: "",
+        packageId: hiddenFirstPackages[0]?.id ?? 0,
+        code: "",
+        maxRedemptions: 100,
+        expiryDays: null,
+        enabled: true,
+      })
+      await refresh()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to create group code.")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleToggleEnabled(row: GroupAccessCodeRow) {
+    setTogglingId(row.id)
+    try {
+      await adminUpdateGroupAccessCode(row.id, { enabled: !row.enabled })
+      await refresh()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to update group code.")
+    } finally {
+      setTogglingId(null)
+    }
+  }
+
+  function handleCopy(row: GroupAccessCodeRow) {
+    navigator.clipboard?.writeText(row.code)
+    setCopiedId(row.id)
+    setTimeout(() => setCopiedId(null), 1500)
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm text-muted-foreground">
+          A single shared code that unlocks a hidden package (like the Family Package) for many
+          families, up to a redemption cap you set.
+        </p>
+        <button
+          type="button"
+          onClick={() => setShowNew(true)}
+          className="shrink-0 rounded-md bg-lime px-3 py-1.5 text-xs font-bold text-navy"
+        >
+          + Create Group Code
+        </button>
+      </div>
+
+      {showNew && (
+        <div className="rounded-card border border-border bg-card p-4 shadow-sm space-y-3">
+          <h3 className="font-semibold text-navy">New Group Code</h3>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <label className="col-span-full block">
+              <span className="text-xs font-semibold text-navy">Label</span>
+              <input
+                value={newForm.label}
+                onChange={(e) => setNewForm((f) => ({ ...f, label: e.target.value }))}
+                placeholder="e.g. Gauteng Homeschool Groups"
+                className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-lime"
+              />
+            </label>
+            <label className="block">
+              <span className="text-xs font-semibold text-navy">Package</span>
+              <select
+                value={newForm.packageId}
+                onChange={(e) => setNewForm((f) => ({ ...f, packageId: Number(e.target.value) }))}
+                className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-lime"
+              >
+                {hiddenFirstPackages.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                    {p.visibility === "hidden" ? " (hidden)" : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block">
+              <span className="text-xs font-semibold text-navy">Code (optional — blank auto-generates)</span>
+              <input
+                value={newForm.code}
+                onChange={(e) => setNewForm((f) => ({ ...f, code: e.target.value }))}
+                placeholder="HOMESCHOOL2026"
+                className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm font-mono outline-none focus:border-lime"
+              />
+            </label>
+            <label className="block">
+              <span className="text-xs font-semibold text-navy">Max Redemptions</span>
+              <input
+                type="number"
+                min={MIN_GROUP_REDEMPTIONS}
+                max={MAX_GROUP_REDEMPTIONS}
+                value={newForm.maxRedemptions}
+                onChange={(e) => setNewForm((f) => ({ ...f, maxRedemptions: Number(e.target.value) }))}
+                className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-lime"
+              />
+            </label>
+            <label className="block">
+              <span className="text-xs font-semibold text-navy">Expiry (days, optional)</span>
+              <input
+                type="number"
+                min={1}
+                value={newForm.expiryDays ?? ""}
+                placeholder="No expiry"
+                onChange={(e) =>
+                  setNewForm((f) => ({ ...f, expiryDays: e.target.value ? Number(e.target.value) : null }))
+                }
+                className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-lime"
+              />
+            </label>
+            <label className="flex items-center gap-2 self-end pb-2">
+              <input
+                type="checkbox"
+                checked={newForm.enabled}
+                onChange={(e) => setNewForm((f) => ({ ...f, enabled: e.target.checked }))}
+                className="h-4 w-4 accent-lime"
+              />
+              <span className="text-sm font-semibold text-navy">Enabled</span>
+            </label>
+          </div>
+          {error && <p className="text-xs font-semibold text-red-600">{error}</p>}
+          <div className="flex gap-2 pt-1">
+            <button
+              type="button"
+              disabled={saving}
+              onClick={handleCreate}
+              className="rounded-md bg-navy px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+            >
+              {saving ? "Creating..." : "Create"}
+            </button>
+            <button
+              type="button"
+              onClick={() => { setShowNew(false); setError(null) }}
+              className="rounded-md border border-border px-4 py-2 text-sm text-muted-foreground"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className="overflow-x-auto rounded-card border border-border">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-border bg-muted/40 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              <th className="px-4 py-3">Code</th>
+              <th className="px-4 py-3">Label</th>
+              <th className="px-4 py-3">Package</th>
+              <th className="px-4 py-3">Redeemed / Cap</th>
+              <th className="px-4 py-3">Status</th>
+              <th className="px-4 py-3">Expiry</th>
+              <th className="px-4 py-3">Created</th>
+              <th className="px-4 py-3">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading && (
+              <tr>
+                <td colSpan={8} className="px-4 py-8 text-center text-muted-foreground">
+                  Loading…
+                </td>
+              </tr>
+            )}
+            {!loading && rows === null && (
+              <tr>
+                <td colSpan={8} className="px-4 py-8 text-center">
+                  <p className="text-sm font-semibold text-red-600">
+                    {error ?? "Failed to load group codes."}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={refresh}
+                    className="mt-2 rounded-md border border-border px-3 py-1.5 text-xs font-semibold text-navy hover:bg-muted"
+                  >
+                    Retry
+                  </button>
+                </td>
+              </tr>
+            )}
+            {!loading && rows !== null && rows.length === 0 && (
+              <tr>
+                <td colSpan={8} className="px-4 py-8 text-center text-muted-foreground">
+                  No group codes yet. Click &quot;Create Group Code&quot; to unlock a hidden package for a group.
+                </td>
+              </tr>
+            )}
+            {rows?.map((r) => {
+              const expired = r.expiresAt ? r.expiresAt.getTime() < Date.now() : false
+              const atCap = r.redemptionCount >= r.maxRedemptions
+              const status = !r.enabled ? "disabled" : expired ? "expired" : atCap ? "full" : "active"
+              return (
+                <tr key={r.id} className="border-b border-border last:border-0 hover:bg-muted/20">
+                  <td className="px-4 py-3 font-mono text-xs font-semibold text-navy">{r.code}</td>
+                  <td className="px-4 py-3 text-navy">{r.label || "—"}</td>
+                  <td className="px-4 py-3 text-muted-foreground">{r.packageName}</td>
+                  <td className="px-4 py-3 text-muted-foreground">
+                    {r.redemptionCount} / {r.maxRedemptions}
+                  </td>
+                  <td className="px-4 py-3">
+                    <StatusBadge status={status} />
+                  </td>
+                  <td className="px-4 py-3 text-muted-foreground text-xs">
+                    {r.expiresAt ? formatDate(r.expiresAt) : "—"}
+                  </td>
+                  <td className="px-4 py-3 text-muted-foreground text-xs">{formatDate(r.createdAt)}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleCopy(r)}
+                        className="rounded-md border border-border px-2.5 py-1 text-xs font-semibold text-navy hover:bg-muted"
+                      >
+                        {copiedId === r.id ? "Copied!" : "Copy"}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={togglingId === r.id}
+                        onClick={() => handleToggleEnabled(r)}
+                        className="rounded-md border border-border px-2.5 py-1 text-xs font-semibold text-navy hover:bg-muted disabled:opacity-50"
+                      >
+                        {togglingId === r.id ? "Saving..." : r.enabled ? "Disable" : "Enable"}
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Shared sub-components
 // ---------------------------------------------------------------------------
 
@@ -527,13 +857,17 @@ function CampaignFields({
   values: {
     name: string
     description: string
+    discountType: string
     discountPercent: number
+    discountRandCents: number
     appliesTo: string
+    recurrence: string
     expiryDays: number | null
     enabled: boolean
   }
   onChange: (patch: Partial<typeof values>) => void
 }) {
+  const isRand = values.discountType === "rand"
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
       <label className="col-span-full block">
@@ -553,16 +887,43 @@ function CampaignFields({
         />
       </label>
       <label className="block">
-        <span className="text-xs font-semibold text-navy">Discount %</span>
-        <input
-          type="number"
-          min={1}
-          max={100}
-          value={values.discountPercent}
-          onChange={(e) => onChange({ discountPercent: Number(e.target.value) })}
+        <span className="text-xs font-semibold text-navy">Discount Type</span>
+        <select
+          value={values.discountType}
+          onChange={(e) => onChange({ discountType: e.target.value })}
           className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-lime"
-        />
+        >
+          <option value="percent">Percentage (%)</option>
+          <option value="rand">Fixed Amount (R)</option>
+        </select>
       </label>
+      {isRand ? (
+        <label className="block">
+          <span className="text-xs font-semibold text-navy">Discount (R)</span>
+          <input
+            type="number"
+            min={1}
+            step="0.01"
+            value={values.discountRandCents / 100}
+            onChange={(e) =>
+              onChange({ discountRandCents: Math.round(Number(e.target.value) * 100) })
+            }
+            className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-lime"
+          />
+        </label>
+      ) : (
+        <label className="block">
+          <span className="text-xs font-semibold text-navy">Discount %</span>
+          <input
+            type="number"
+            min={1}
+            max={100}
+            value={values.discountPercent}
+            onChange={(e) => onChange({ discountPercent: Number(e.target.value) })}
+            className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-lime"
+          />
+        </label>
+      )}
       <label className="block">
         <span className="text-xs font-semibold text-navy">Applies To</span>
         <select
@@ -573,6 +934,17 @@ function CampaignFields({
           <option value="monthly">Monthly subscriptions only</option>
           <option value="once-off">Once-off packages only</option>
           <option value="both">Both</option>
+        </select>
+      </label>
+      <label className="block">
+        <span className="text-xs font-semibold text-navy">Discount Duration</span>
+        <select
+          value={values.recurrence}
+          onChange={(e) => onChange({ recurrence: e.target.value })}
+          className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-lime"
+        >
+          <option value="once">Once-off (first billing month only)</option>
+          <option value="indefinite">Indefinite (every month until cancelled)</option>
         </select>
       </label>
       <label className="block">
@@ -623,6 +995,12 @@ function StatusBadge({ status }: { status: string }) {
       {status}
     </span>
   )
+}
+
+function formatDiscount(discountType: string, discountPercent: number, discountRandCents: number) {
+  return discountType === "rand"
+    ? `R${(discountRandCents / 100).toLocaleString("en-ZA")}`
+    : `${discountPercent}%`
 }
 
 function formatDate(d: Date) {
