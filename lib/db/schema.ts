@@ -132,7 +132,7 @@ export const schools = pgTable("schools", {
 
 export type School = typeof schools.$inferSelect
 
-export const AGE_GROUPS = ["4-8", "9-13", "14-17"] as const
+export const AGE_GROUPS = ["4-8", "9-13", "14-17", "Adult"] as const
 export type AgeGroup = (typeof AGE_GROUPS)[number]
 
 export const clubSlots = pgTable(

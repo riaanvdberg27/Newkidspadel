@@ -14,6 +14,7 @@ const AGE_GROUP_LABELS: Record<AgeGroup, string> = {
   "4-8": "Ages 4 – 8",
   "9-13": "Ages 9 – 13",
   "14-17": "Ages 14 – 17",
+  Adult: "Parents",
 }
 
 type VenueRef = { kind: "club"; id: number } | { kind: "school"; id: number }
