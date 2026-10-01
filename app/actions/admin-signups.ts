@@ -1,8 +1,8 @@
 "use server"
 
-import { asc, desc, eq, ilike, or } from "drizzle-orm"
+import { asc, desc, eq, ilike, or, and } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { enrollments, user, coachClubs, coaches } from "@/lib/db/schema"
+import { enrollments, user, coachClubs, coaches, packages, subscriptionMonths } from "@/lib/db/schema"
 import { requireAdmin } from "@/lib/admin-auth"
 import { generateContractPdf } from "@/lib/contract-pdf"
 import { sendWelcomeEmail } from "@/lib/email"
