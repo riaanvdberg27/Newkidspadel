@@ -122,6 +122,26 @@ function getBillingMonths(year: number): { year: number; month: number }[] {
   return months
 }
 
+/**
+ * Same as getBillingMonths, but skips any month before the client's signup
+ * date — a client who joins in October must never be billed for Aug/Sep.
+ * `signupDate` defaults to "no restriction" (start of the billing year) when omitted.
+ */
+function getBillingMonthsFrom(
+  year: number,
+  signupDate?: Date | null,
+): { year: number; month: number }[] {
+  const months = getBillingMonths(year)
+  if (!signupDate) return months
+  const signupYear = signupDate.getFullYear()
+  const signupMonth = signupDate.getMonth() + 1
+  return months.filter(({ year: y, month: m }) => {
+    if (y > signupYear) return true
+    if (y < signupYear) return false
+    return m >= signupMonth
+  })
+}
+
 // ---------------------------------------------------------------------------
 // Generate / backfill months for a single enrollment (idempotent)
 // ---------------------------------------------------------------------------
@@ -130,8 +150,9 @@ export async function generateMonthsForEnrollment(
   enrollmentId: number,
   amountCents: number,
   year = BILLING_START_YEAR,
+  signupDate?: Date | null,
 ): Promise<void> {
-  const months = getBillingMonths(year)
+  const months = getBillingMonthsFrom(year, signupDate)
   for (const { year: y, month: m } of months) {
     await db
       .insert(subscriptionMonths)
@@ -169,6 +190,7 @@ export async function backfillAllEnrollments(): Promise<{ generated: number }> {
       packageName: enrollments.packageName,
       status: enrollments.status,
       paymentType: enrollments.paymentType,
+      createdAt: enrollments.createdAt,
     })
     .from(enrollments)
     .where(inArray(enrollments.status, ["active", "pending"]))
@@ -182,7 +204,8 @@ export async function backfillAllEnrollments(): Promise<{ generated: number }> {
     // Only generate months for monthly packages
     if (enr.paymentType === "once-off") continue
     const amountCents = (pkgMap.get(enr.packageName) ?? 0) * 100
-    const months = getBillingMonths(BILLING_START_YEAR)
+    // Never bill for months before the client actually signed up
+    const months = getBillingMonthsFrom(BILLING_START_YEAR, enr.createdAt)
     for (const { year: y, month: m } of months) {
       const result = await db
         .insert(subscriptionMonths)

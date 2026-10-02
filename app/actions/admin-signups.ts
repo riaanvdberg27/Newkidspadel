@@ -172,6 +172,13 @@ export async function updateSignup(
       })
     }
 
+    // If the package changed, the monthly billing amount must change with it.
+    // Only touch months that haven't been paid yet — never rewrite history.
+    const packageChanged = input.packageName.trim() !== existing.packageName
+    if (packageChanged) {
+      await syncBillingAmountForPackageChange(id, input.packageName.trim())
+    }
+
     revalidatePath("/admin")
     revalidatePath("/dashboard")
     return { ok: true }
@@ -204,6 +211,36 @@ async function notifySlotChange(
     )
   } catch (err) {
     console.log("[v0] notifySlotChange error:", err)
+  }
+}
+
+/**
+ * When an admin changes an enrollment's package, the monthly billing amount
+ * must change with it. Only "outstanding" or "partial" months are updated —
+ * months already marked "paid" are left untouched so history is never rewritten.
+ */
+async function syncBillingAmountForPackageChange(enrollmentId: number, newPackageName: string): Promise<void> {
+  try {
+    const pkgRows = await db
+      .select({ price: packages.price })
+      .from(packages)
+      .where(eq(packages.name, newPackageName))
+      .limit(1)
+    const price = pkgRows[0]?.price
+    if (price == null) return // unknown package name — don't guess, leave billing as-is
+
+    const newAmountCents = price * 100
+    await db
+      .update(subscriptionMonths)
+      .set({ amountCents: newAmountCents, updatedAt: new Date() })
+      .where(
+        and(
+          eq(subscriptionMonths.enrollmentId, enrollmentId),
+          or(eq(subscriptionMonths.status, "outstanding"), eq(subscriptionMonths.status, "partial")),
+        ),
+      )
+  } catch (err) {
+    console.log("[v0] syncBillingAmountForPackageChange error:", err)
   }
 }
 
