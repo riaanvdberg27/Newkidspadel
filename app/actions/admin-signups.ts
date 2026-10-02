@@ -229,7 +229,17 @@ async function syncBillingAmountForPackageChange(enrollmentId: number, newPackag
     const price = pkgRows[0]?.price
     if (price == null) return // unknown package name — don't guess, leave billing as-is
 
-    const newAmountCents = price * 100
+    // Include the parent self-enrollment add-on (e.g. Family Package parent
+    // joining their own/a child's session) — it's stored on the enrollment
+    // row but must be folded into the monthly amount, never dropped.
+    const enrollmentRows = await db
+      .select({ parentAddOnAmount: enrollments.parentAddOnAmount })
+      .from(enrollments)
+      .where(eq(enrollments.id, enrollmentId))
+      .limit(1)
+    const addOnAmount = enrollmentRows[0]?.parentAddOnAmount ?? 0
+
+    const newAmountCents = (price + addOnAmount) * 100
     await db
       .update(subscriptionMonths)
       .set({ amountCents: newAmountCents, updatedAt: new Date() })

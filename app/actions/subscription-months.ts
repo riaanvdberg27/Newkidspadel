@@ -191,6 +191,7 @@ export async function backfillAllEnrollments(): Promise<{ generated: number }> {
       status: enrollments.status,
       paymentType: enrollments.paymentType,
       createdAt: enrollments.createdAt,
+      parentAddOnAmount: enrollments.parentAddOnAmount,
     })
     .from(enrollments)
     .where(inArray(enrollments.status, ["active", "pending"]))
@@ -203,7 +204,10 @@ export async function backfillAllEnrollments(): Promise<{ generated: number }> {
   for (const enr of rows) {
     // Only generate months for monthly packages
     if (enr.paymentType === "once-off") continue
-    const amountCents = (pkgMap.get(enr.packageName) ?? 0) * 100
+    // Include the parent self-enrollment add-on (e.g. Family Package parent
+    // joining their own/a child's session) — stored on the enrollment row
+    // but must be folded into the monthly amount, never dropped.
+    const amountCents = ((pkgMap.get(enr.packageName) ?? 0) + (enr.parentAddOnAmount ?? 0)) * 100
     // Never bill for months before the client actually signed up
     const months = getBillingMonthsFrom(BILLING_START_YEAR, enr.createdAt)
     for (const { year: y, month: m } of months) {
