@@ -51,6 +51,12 @@ export type AdminSignup = {
   signedAt: string | null
   createdAt: string | null
   pendingDiscountPercent: number
+  parent1Enrolled: boolean
+  parent1SlotLabel: string | null
+  parent2Enrolled: boolean
+  parent2Name: string | null
+  parent2SlotLabel: string | null
+  parentAddOnAmount: number
 }
 
 export type UpdateSignupInput = {
@@ -116,6 +122,12 @@ export async function getAllSignups(): Promise<AdminSignup[]> {
     signedAt: r.signedAt ? r.signedAt.toISOString() : null,
     createdAt: r.createdAt ? r.createdAt.toISOString() : null,
     pendingDiscountPercent: r.pendingDiscountPercent ?? 0,
+    parent1Enrolled: r.parent1Enrolled ?? false,
+    parent1SlotLabel: r.parent1SlotLabel ?? null,
+    parent2Enrolled: r.parent2Enrolled ?? false,
+    parent2Name: r.parent2Name ?? null,
+    parent2SlotLabel: r.parent2SlotLabel ?? null,
+    parentAddOnAmount: r.parentAddOnAmount ?? 0,
   }))
 }
 

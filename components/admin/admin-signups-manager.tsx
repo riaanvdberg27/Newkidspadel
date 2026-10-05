@@ -278,6 +278,12 @@ export function AdminSignupsManager({
         const newSignup: AdminSignup = {
           id: res.id,
           referenceNumber: res.referenceNumber,
+          parent1Enrolled: false,
+          parent1SlotLabel: null,
+          parent2Enrolled: false,
+          parent2Name: null,
+          parent2SlotLabel: null,
+          parentAddOnAmount: 0,
           parentName: input.parentName,
           parentEmail: input.parentEmail,
           parentMobile: input.parentMobile,
@@ -791,7 +797,38 @@ export function AdminSignupsManager({
                   </td>
                 </tr>
               )
-            })}
+            }).reduce<React.ReactElement[]>((rows, row, idx) => {
+              const s = filtered[idx]
+              rows.push(row)
+              // Each enrolled parent is its own separate signup — billed R500/month on top of the
+              // child's package — so it gets its own visually distinct sub-row directly under the child.
+              const parentRows: { name: string; slotLabel: string | null }[] = []
+              if (s.parent1Enrolled) parentRows.push({ name: s.parentName, slotLabel: s.parent1SlotLabel })
+              if (s.parent2Enrolled) parentRows.push({ name: s.parent2Name || "Parent 2", slotLabel: s.parent2SlotLabel })
+              parentRows.forEach((p, i) => {
+                rows.push(
+                  <tr key={`${s.id}-parent-${i}`} className="bg-primary/5">
+                    <td className="px-2 py-1.5" />
+                    <td className="truncate px-3 py-1.5" colSpan={3}>
+                      <span className="inline-flex items-center gap-1.5 text-xs font-medium text-primary">
+                        <span className="rounded-full bg-primary/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide">
+                          Parent signup
+                        </span>
+                        {p.name} · R500/month
+                      </span>
+                    </td>
+                    <td className="px-3 py-1.5" colSpan={2} />
+                    <td className="px-2 py-1.5 font-medium text-navy" colSpan={2}>
+                      <span title={p.slotLabel ?? undefined}>
+                        {compactSlot(p.slotLabel) ?? <span className="text-muted-foreground">TBC</span>}
+                      </span>
+                    </td>
+                    <td className="px-2 py-1.5" colSpan={3} />
+                  </tr>,
+                )
+              })
+              return rows
+            }, [])}
             {filtered.length === 0 && (
               <tr>
                 <td colSpan={12} className="px-4 py-10 text-center text-muted-foreground">
