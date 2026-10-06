@@ -276,6 +276,96 @@ export type VoucherValidationResult =
     }
   | { valid: false; error: string }
 
+/**
+ * Resolves a campaign-wide shared code (the one printed on flyers) into a
+ * personal voucher for the signed-in account. Each account can redeem a given
+ * shared code only once. Returns null when the code is not a shared code so the
+ * caller can fall back to per-voucher lookup.
+ */
+async function validateSharedCode(
+  code: string,
+  userId: string,
+  packagePeriod: "monthly" | "once-off",
+): Promise<VoucherValidationResult | null> {
+  const [campaign] = await db
+    .select()
+    .from(voucherCampaigns)
+    .where(eq(voucherCampaigns.sharedCode, code))
+    .limit(1)
+
+  if (!campaign) return null
+
+  if (!campaign.enabled) return { valid: false, error: "This voucher campaign is no longer active." }
+  if (campaign.appliesTo === "monthly" && packagePeriod !== "monthly")
+    return { valid: false, error: "This voucher can only be applied to monthly subscription packages." }
+  if (campaign.appliesTo === "once-off" && packagePeriod !== "once-off")
+    return { valid: false, error: "This voucher can only be applied to once-off packages." }
+
+  const mine = await db
+    .select()
+    .from(vouchers)
+    .where(
+      and(
+        eq(vouchers.campaignId, campaign.id),
+        eq(vouchers.userId, userId),
+        eq(vouchers.viaSharedCode, true),
+      ),
+    )
+
+  if (mine.some((v) => v.status === "used"))
+    return { valid: false, error: "You have already used this code. Each email address can only use it once." }
+
+  const toResult = (v: { id: number; discountType: string; discountPercent: number; discountRandCents: number }) => ({
+    valid: true as const,
+    voucher: {
+      id: v.id,
+      code,
+      discountType: v.discountType,
+      discountPercent: v.discountPercent,
+      discountRandCents: v.discountRandCents,
+      campaignName: campaign.name,
+    },
+  })
+
+  const now = new Date()
+  const reusable = mine.find((v) => v.status === "active" && (!v.expiresAt || v.expiresAt > now))
+  if (reusable) return toResult(reusable)
+
+  if (campaign.sharedCodeMaxUses != null) {
+    const [{ used }] = await db
+      .select({ used: count() })
+      .from(vouchers)
+      .where(
+        and(
+          eq(vouchers.campaignId, campaign.id),
+          eq(vouchers.viaSharedCode, true),
+          eq(vouchers.status, "used"),
+        ),
+      )
+    if (Number(used) >= campaign.sharedCodeMaxUses)
+      return { valid: false, error: "This code has reached its maximum number of redemptions." }
+  }
+
+  const expiresAt = campaign.expiryDays ? new Date(Date.now() + campaign.expiryDays * 86_400_000) : null
+  const [created] = await db
+    .insert(vouchers)
+    .values({
+      code: generateVoucherCode(),
+      campaignId: campaign.id,
+      userId,
+      discountType: campaign.discountType,
+      discountPercent: campaign.discountPercent,
+      discountRandCents: campaign.discountRandCents,
+      recurrence: campaign.recurrence,
+      status: "active",
+      viaSharedCode: true,
+      expiresAt,
+    })
+    .returning()
+
+  return toResult(created)
+}
+
 export async function validateVoucherCode(
   code: string,
   packagePeriod: "monthly" | "once-off",
@@ -289,6 +379,10 @@ export async function validateVoucherCode(
   } catch {
     return { valid: false, error: "Your session has expired. Please refresh the page and try again." }
   }
+
+  const normalizedCode = code.trim().toUpperCase()
+  const sharedResult = await validateSharedCode(normalizedCode, u.id, packagePeriod)
+  if (sharedResult) return sharedResult
 
   const [row] = await db
     .select({
@@ -339,10 +433,14 @@ export async function redeemVoucher(voucherId: number, enrollmentId: number): Pr
   // Bulk/promo codes have no owner until redeemed — stamp the redeeming
   // enrollment's user onto the voucher so it becomes single-use permanently.
   const [existing] = await db
-    .select({ userId: vouchers.userId })
+    .select({ userId: vouchers.userId, status: vouchers.status })
     .from(vouchers)
     .where(eq(vouchers.id, voucherId))
     .limit(1)
+
+  // Already redeemed (e.g. EFT signup redeemed at checkout, then admin marks
+  // a month paid, or a sibling row of the same cart) — keep the original redemption.
+  if (existing?.status === "used") return
 
   let ownerUserId: string | undefined
   if (!existing?.userId) {
@@ -494,6 +592,7 @@ export type AdminVoucherRow = {
   expiresAt: Date | null
   usedAt: Date | null
   createdAt: Date
+  viaSharedCode: boolean
 }
 
 export async function adminGetAllVouchers(): Promise<AdminVoucherRow[]> {
@@ -505,6 +604,7 @@ export async function adminGetAllVouchers(): Promise<AdminVoucherRow[]> {
       discountType: vouchers.discountType,
       discountPercent: vouchers.discountPercent,
       discountRandCents: vouchers.discountRandCents,
+      viaSharedCode: vouchers.viaSharedCode,
       status: vouchers.status,
       campaignName: voucherCampaigns.name,
       userName: user.name,
@@ -566,6 +666,50 @@ export async function markReferralDiscountApplied(enrollmentId: number): Promise
 
   revalidatePath("/admin")
   revalidatePath("/dashboard")
+}
+
+const SHARED_CODE_PATTERN = /^[A-Z0-9-]{4,20}$/
+
+/** Sets (or clears, when code is blank) the single printable code for a campaign. */
+export async function adminSetSharedCode(
+  campaignId: number,
+  code: string,
+  maxUses: number | null,
+): Promise<{ sharedCode: string | null; sharedCodeMaxUses: number | null } | { error: string }> {
+  const normalized = code.trim().toUpperCase()
+
+  if (maxUses != null && (!Number.isInteger(maxUses) || maxUses < 1)) {
+    return { error: "Maximum redemptions must be a whole number of 1 or more." }
+  }
+
+  if (normalized) {
+    if (!SHARED_CODE_PATTERN.test(normalized)) {
+      return { error: "Use 4-20 characters: letters, numbers and dashes only." }
+    }
+    const [clashCampaign] = await db
+      .select({ id: voucherCampaigns.id })
+      .from(voucherCampaigns)
+      .where(eq(voucherCampaigns.sharedCode, normalized))
+      .limit(1)
+    if (clashCampaign && clashCampaign.id !== campaignId) {
+      return { error: "That code is already used by another campaign." }
+    }
+    const [clashVoucher] = await db
+      .select({ id: vouchers.id })
+      .from(vouchers)
+      .where(eq(vouchers.code, normalized))
+      .limit(1)
+    if (clashVoucher) return { error: "That code already exists as an individual voucher code." }
+  }
+
+  const sharedCode = normalized || null
+  await db
+    .update(voucherCampaigns)
+    .set({ sharedCode, sharedCodeMaxUses: sharedCode ? maxUses : null, updatedAt: new Date() })
+    .where(eq(voucherCampaigns.id, campaignId))
+
+  revalidatePath("/admin")
+  return { sharedCode, sharedCodeMaxUses: sharedCode ? maxUses : null }
 }
 
 export async function adminCreateCampaign(data: {
@@ -660,6 +804,7 @@ export type AdminCampaignVoucherRow = {
   expiresAt: Date | null
   usedAt: Date | null
   createdAt: Date
+  viaSharedCode: boolean
 }
 
 export async function adminGetCampaignVouchers(campaignId: number): Promise<AdminCampaignVoucherRow[]> {
@@ -670,6 +815,7 @@ export async function adminGetCampaignVouchers(campaignId: number): Promise<Admi
       discountType: vouchers.discountType,
       discountPercent: vouchers.discountPercent,
       discountRandCents: vouchers.discountRandCents,
+      viaSharedCode: vouchers.viaSharedCode,
       status: vouchers.status,
       userEmail: user.email,
       expiresAt: vouchers.expiresAt,

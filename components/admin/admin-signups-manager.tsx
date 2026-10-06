@@ -22,6 +22,8 @@ import {
   createSignup,
   searchUsers,
   permanentlyDeleteSignup,
+  addSiblingToFamily,
+  getAllSignups,
 } from "@/app/actions/admin-signups"
 import { markReferralDiscountApplied } from "@/app/actions/referrals"
 import {
@@ -110,6 +112,7 @@ export function AdminSignupsManager({
   const [customizingSlots, setCustomizingSlots] = useState<AdminSignup | null>(null)
   const [expanded, setExpanded] = useState<number | null>(null)
   const [showAddModal, setShowAddModal] = useState(false)
+  const [addingSiblingTo, setAddingSiblingTo] = useState<AdminSignup | null>(null)
   const [confirmDeactivateId, setConfirmDeactivateId] = useState<number | null>(null)
   const [confirmReactivateId, setConfirmReactivateId] = useState<number | null>(null)
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null)
@@ -271,6 +274,24 @@ export function AdminSignupsManager({
     })
   }
 
+  function handleAddSibling(
+    source: AdminSignup,
+    input: { childName: string; childDob: string; slotWeekday: number | null; slotHour: number | null },
+  ) {
+    return new Promise<{ ok: boolean; error?: string }>((resolve) => {
+      startTransition(async () => {
+        const res = await addSiblingToFamily({ sourceEnrollmentId: source.id, ...input })
+        if (res.ok) {
+          setSignups(await getAllSignups())
+          setAddingSiblingTo(null)
+          flash(source.id, true, `${input.childName.trim()} added`)
+          router.refresh()
+        }
+        resolve(res)
+      })
+    })
+  }
+
   function handleCreate(input: CreateSignupInput) {
     startTransition(async () => {
       const res = await createSignup(input)
@@ -278,6 +299,14 @@ export function AdminSignupsManager({
         const newSignup: AdminSignup = {
           id: res.id,
           referenceNumber: res.referenceNumber,
+          parent1Enrolled: false,
+          parent1SlotLabel: null,
+          parent2Enrolled: false,
+          parent2Name: null,
+          parent2SlotLabel: null,
+          parentAddOnAmount: 0,
+          isParentSignup: false,
+          linkedEnrollmentId: null,
           parentName: input.parentName,
           parentEmail: input.parentEmail,
           parentMobile: input.parentMobile,
@@ -587,14 +616,14 @@ export function AdminSignupsManager({
       <div className="mt-4 rounded-card border border-border bg-card shadow-sm">
         <table className="w-full table-fixed text-left text-xs">
           <colgroup>
-            <col style={{ width: "5%" }} />{/* ID */}
-            <col style={{ width: "13%" }} />{/* Child */}
-            <col style={{ width: "5%" }} />{/* Age */}
-            <col style={{ width: "11%" }} />{/* Parent */}
-            <col style={{ width: "9%" }} />{/* Package */}
+            <col style={{ width: "4%" }} />{/* ID */}
+            <col style={{ width: "18%" }} />{/* Child */}
+            <col style={{ width: "4%" }} />{/* Age */}
+            <col style={{ width: "10%" }} />{/* Parent */}
+            <col style={{ width: "8%" }} />{/* Package */}
             <col style={{ width: "8%" }} />{/* Club */}
-            <col style={{ width: "9%" }} />{/* Slot */}
-            <col style={{ width: "8%" }} />{/* Coach */}
+            <col style={{ width: "8%" }} />{/* Slot */}
+            <col style={{ width: "7%" }} />{/* Coach */}
             <col style={{ width: "7%" }} />{/* Status */}
             <col style={{ width: "8%" }} />{/* Signed up */}
             <col style={{ width: "8%" }} />{/* Payment */}
@@ -623,7 +652,10 @@ export function AdminSignupsManager({
               const coachData = allCoaches.find((c) => c.name === s.coachName)
               const coachImg = coachData?.imageUrl ?? null
               return (
-                <tr key={s.id} className="hover:bg-muted/20 align-middle">
+                <tr
+                  key={s.id}
+                  className={`align-middle ${s.isParentSignup ? "bg-primary/10 hover:bg-primary/20" : "hover:bg-muted/20"}`}
+                >
                   {/* Enrollment ID */}
                   <td className="px-2 py-2">
                     <span className="inline-block rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] font-semibold text-muted-foreground">
@@ -631,15 +663,22 @@ export function AdminSignupsManager({
                     </span>
                   </td>
                   {/* Child name */}
-                  <td className="truncate px-3 py-2">
-                    <span className="font-semibold text-navy">{s.childName}</span>
+                  <td className="px-3 py-2">
+                    <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+                      <span className="font-semibold text-navy">{s.childName}</span>
+                      {s.isParentSignup && (
+                        <span className="shrink-0 rounded-full bg-primary px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-navy">
+                          Parent
+                        </span>
+                      )}
+                    </div>
                   </td>
                   {/* Age — own compact column. Computed live from DOB so it advances on each birthday
                       without ever touching the stored slot assignment. */}
                   <td className="px-2 py-2 text-center">
                     {(() => {
                       const liveAge = calculateAge(s.childDob) ?? s.childAge
-                      return liveAge != null ? (
+                      return liveAge ? (
                         <span className="inline-block rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
                           {liveAge}
                         </span>
@@ -737,6 +776,11 @@ export function AdminSignupsManager({
                       <IconBtn title="Edit sign-up" onClick={() => setEditing(s)}>
                         <Pencil className="h-3.5 w-3.5" />
                       </IconBtn>
+                      {!s.isParentSignup && s.status !== "inactive" && (
+                        <IconBtn title="Add brother / sister to this family" onClick={() => setAddingSiblingTo(s)}>
+                          <UserPlus className="h-3.5 w-3.5" />
+                        </IconBtn>
+                      )}
                       {(s.pendingDiscountPercent ?? 0) > 0 && (
                         <IconBtn
                           title={`Mark ${s.pendingDiscountPercent}% referral discount as applied to debit order`}
@@ -826,6 +870,24 @@ export function AdminSignupsManager({
             setViewing(null)
           }}
           onCustomizeSlots={() => setCustomizingSlots(viewing)}
+          familyMembers={signups.filter(
+            (x) =>
+              x.id !== viewing.id &&
+              !x.isParentSignup &&
+              x.parentEmail.trim().toLowerCase() === viewing.parentEmail.trim().toLowerCase(),
+          )}
+          onAddSibling={() => setAddingSiblingTo(viewing)}
+          onRemoveMember={(id) => setConfirmDeactivateId(id)}
+        />
+      )}
+
+      {/* Add brother / sister modal */}
+      {addingSiblingTo && (
+        <AddSiblingModal
+          source={addingSiblingTo}
+          pending={pending}
+          onSave={(input) => handleAddSibling(addingSiblingTo, input)}
+          onClose={() => setAddingSiblingTo(null)}
         />
       )}
 
@@ -993,11 +1055,17 @@ function ViewModal({
   onClose,
   onEdit,
   onCustomizeSlots,
+  familyMembers,
+  onAddSibling,
+  onRemoveMember,
 }: {
   signup: AdminSignup
   onClose: () => void
   onEdit: () => void
   onCustomizeSlots: () => void
+  familyMembers: AdminSignup[]
+  onAddSibling: () => void
+  onRemoveMember: (id: number) => void
 }) {
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 pt-10">
@@ -1104,10 +1172,158 @@ function ViewModal({
             </DetailSection>
           </div>
 
+          {/* Family members — add a brother/sister or remove one who cancels */}
+          {!s.isParentSignup && (
+            <div className="rounded-lg border border-border p-3">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <h3 className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
+                  Family members
+                </h3>
+                <button
+                  type="button"
+                  onClick={onAddSibling}
+                  className="inline-flex items-center gap-1 rounded-md bg-navy px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-navy/90"
+                >
+                  <UserPlus className="h-3 w-3" />
+                  Add brother / sister
+                </button>
+              </div>
+              <ul className="divide-y divide-border text-sm">
+                {[s, ...familyMembers].map((m) => (
+                  <li key={m.id} className="flex items-center justify-between gap-2 py-1.5">
+                    <div className="min-w-0">
+                      <span className="font-medium text-navy">{m.childName}</span>
+                      {m.id === s.id && <span className="ml-1.5 text-[10px] text-muted-foreground">(this profile)</span>}
+                      <span className="ml-2 text-xs text-muted-foreground">
+                        {m.slotLabel ?? "No session"} · {m.status}
+                      </span>
+                    </div>
+                    {m.status !== "inactive" && (
+                      <button
+                        type="button"
+                        onClick={() => onRemoveMember(m.id)}
+                        className="shrink-0 rounded-md px-2 py-1 text-[11px] font-semibold text-amber-700 hover:bg-amber-50"
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-2 text-[11px] text-muted-foreground">
+                Removing a child makes only that child inactive; their history is kept and the other children carry on.
+              </p>
+            </div>
+          )}
+
           {/* Inline billing ledger */}
           <InlineBillingPanel enrollmentId={s.id} />
         </div>
       </div>
+    </div>
+  )
+}
+
+function AddSiblingModal({
+  source,
+  pending,
+  onSave,
+  onClose,
+}: {
+  source: AdminSignup
+  pending: boolean
+  onSave: (input: {
+    childName: string
+    childDob: string
+    slotWeekday: number | null
+    slotHour: number | null
+  }) => Promise<{ ok: boolean; error?: string }>
+  onClose: () => void
+}) {
+  const [childName, setChildName] = useState("")
+  const [childDob, setChildDob] = useState("")
+  const [ownSession, setOwnSession] = useState(false)
+  const [weekday, setWeekday] = useState<number>(source.slotWeekday ?? 1)
+  const [hour, setHour] = useState<number>(source.slotHour != null ? Math.floor(parseFloat(source.slotHour)) : 10)
+  const [error, setError] = useState<string | null>(null)
+  const age = calculateAge(childDob)
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault()
+    setError(null)
+    if (!childName.trim()) return setError("Enter the child's name")
+    if (age == null) return setError("Enter a valid date of birth")
+    const res = await onSave({
+      childName,
+      childDob,
+      slotWeekday: ownSession ? weekday : null,
+      slotHour: ownSession ? hour : null,
+    })
+    if (!res.ok) setError(res.error ?? "Could not add child")
+  }
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto bg-black/50 p-4 pt-16">
+      <form onSubmit={submit} className="w-full max-w-md rounded-xl bg-card shadow-2xl">
+        <ModalHeader
+          title="Add brother / sister"
+          subtitle={`Joins ${source.parentName}'s family · ${source.packageName}`}
+          onClose={onClose}
+        />
+        <div className="space-y-4 px-6 py-5 text-sm">
+          <Field label="Child's full name" required>
+            <input
+              value={childName}
+              onChange={(e) => setChildName(e.target.value)}
+              className="w-full rounded-md border border-border bg-background px-3 py-2"
+              placeholder="e.g. Daniel Bunsee"
+            />
+          </Field>
+          <Field label="Date of birth" required>
+            <input
+              type="date"
+              value={childDob}
+              onChange={(e) => setChildDob(e.target.value)}
+              className="w-full rounded-md border border-border bg-background px-3 py-2"
+            />
+            {age != null && <p className="mt-1 text-xs text-muted-foreground">{age} years old</p>}
+          </Field>
+          <div className="rounded-lg bg-muted/50 p-3">
+            <p className="text-xs text-navy">
+              Parent, club ({source.club ?? "—"}), coach, package and contract are copied from {source.childName}.
+              Billing starts from this month at the package price.
+            </p>
+            <label className="mt-2 flex items-center gap-2 text-xs font-medium text-navy">
+              <input type="checkbox" checked={ownSession} onChange={(e) => setOwnSession(e.target.checked)} />
+              Different session from {source.childName} ({source.slotLabel ?? "TBC"})
+            </label>
+            {ownSession && (
+              <div className="mt-2 flex gap-2">
+                <select
+                  value={weekday}
+                  onChange={(e) => setWeekday(Number(e.target.value))}
+                  className="flex-1 rounded-md border border-border bg-background px-2 py-1.5"
+                >
+                  {ASSIGNABLE_WEEKDAYS.map((d) => (
+                    <option key={d} value={d}>{WEEKDAYS[d]}</option>
+                  ))}
+                </select>
+                <select
+                  value={hour}
+                  onChange={(e) => setHour(Number(e.target.value))}
+                  className="flex-1 rounded-md border border-border bg-background px-2 py-1.5"
+                >
+                  {HOURS.map((h) => (
+                    <option key={h} value={h}>{String(h).padStart(2, "0")}:00</option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
+          {error && <p className="text-xs font-semibold text-destructive">{error}</p>}
+        </div>
+        <ModalFooter pending={pending} onClose={onClose} submitLabel="Add child" />
+      </form>
     </div>
   )
 }

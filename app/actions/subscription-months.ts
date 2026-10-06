@@ -5,7 +5,13 @@ import { subscriptionMonths, enrollments, packages } from "@/lib/db/schema"
 import { eq, and, inArray, asc, desc, sql } from "drizzle-orm"
 import { requireAdmin } from "@/lib/admin-auth"
 import { revalidatePath } from "next/cache"
-import { getEnrollmentVoucherDiscount } from "./referrals"
+import { getEnrollmentVoucherDiscount, redeemVoucher } from "./referrals"
+import {
+  BILLING_START_YEAR,
+  BILLING_START_MONTH,
+  currentBillingYear,
+  getBillingWindow,
+} from "@/lib/billing-utils"
 
 // ---------------------------------------------------------------------------
 // Types
@@ -79,6 +85,27 @@ async function syncVoucherDiscountForEnrollment(enrollmentId: number): Promise<v
     .where(inArray(subscriptionMonths.id, targetIds))
 }
 
+/**
+ * Redeem the voucher a parent applied at signup but that has not been consumed
+ * yet (it is only consumed once payment is confirmed). Marks it used, clears
+ * the pending reference on every enrollment in that signup, and applies its
+ * discount to the billing ledger. Returns true when a voucher was redeemed.
+ */
+async function redeemPendingVoucherForEnrollment(enrollmentId: number): Promise<boolean> {
+  const [enr] = await db
+    .select({ pendingVoucherId: enrollments.pendingVoucherId })
+    .from(enrollments)
+    .where(eq(enrollments.id, enrollmentId))
+    .limit(1)
+  const voucherId = enr?.pendingVoucherId
+  if (!voucherId) return false
+
+  await redeemVoucher(voucherId, enrollmentId)
+  await db.update(enrollments).set({ pendingVoucherId: null }).where(eq(enrollments.pendingVoucherId, voucherId))
+  await syncVoucherDiscountForEnrollment(enrollmentId)
+  return true
+}
+
 export type BillingLedgerEntry = SubscriptionMonthRow & {
   childName: string
   parentName: string
@@ -87,6 +114,7 @@ export type BillingLedgerEntry = SubscriptionMonthRow & {
   packageName: string
   club: string
   referenceNumber: string
+  enrollmentCreatedAt: Date
 }
 
 export type MonthLabel = { year: number; month: number; label: string }
@@ -100,11 +128,6 @@ const MONTH_NAMES = [
   "Jul","Aug","Sep","Oct","Nov","Dec",
 ]
 
-// Current academic/billing year window: Aug–Dec 2026
-const BILLING_START_YEAR  = 2026
-const BILLING_START_MONTH = 8   // August
-const BILLING_END_MONTH   = 12  // December
-
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -113,25 +136,20 @@ function formatMonth(year: number, month: number): string {
   return `${MONTH_NAMES[month - 1]} ${year}`
 }
 
-/** Generate all (year, month) pairs for Aug–Dec of a given year */
-function getBillingMonths(year: number): { year: number; month: number }[] {
-  const months: { year: number; month: number }[] = []
-  for (let m = BILLING_START_MONTH; m <= BILLING_END_MONTH; m++) {
-    months.push({ year, month: m })
-  }
-  return months
-}
-
 // ---------------------------------------------------------------------------
 // Generate / backfill months for a single enrollment (idempotent)
 // ---------------------------------------------------------------------------
 
+/**
+ * Billing starts in the client's signup month (never earlier than Aug 2026)
+ * and always runs 12+ months ahead, rolling over to the next calendar year.
+ */
 export async function generateMonthsForEnrollment(
   enrollmentId: number,
   amountCents: number,
-  year = BILLING_START_YEAR,
+  signupDate?: Date | null,
 ): Promise<void> {
-  const months = getBillingMonths(year)
+  const months = getBillingWindow(signupDate)
   for (const { year: y, month: m } of months) {
     await db
       .insert(subscriptionMonths)
@@ -169,6 +187,9 @@ export async function backfillAllEnrollments(): Promise<{ generated: number }> {
       packageName: enrollments.packageName,
       status: enrollments.status,
       paymentType: enrollments.paymentType,
+      createdAt: enrollments.createdAt,
+      parentAddOnAmount: enrollments.parentAddOnAmount,
+      isParentSignup: enrollments.isParentSignup,
     })
     .from(enrollments)
     .where(inArray(enrollments.status, ["active", "pending"]))
@@ -181,8 +202,15 @@ export async function backfillAllEnrollments(): Promise<{ generated: number }> {
   for (const enr of rows) {
     // Only generate months for monthly packages
     if (enr.paymentType === "once-off") continue
-    const amountCents = (pkgMap.get(enr.packageName) ?? 0) * 100
-    const months = getBillingMonths(BILLING_START_YEAR)
+    // Include the parent self-enrollment add-on (e.g. Family Package parent
+    // joining their own/a child's session) — stored on the enrollment row
+    // but must be folded into the monthly amount, never dropped.
+    // A parent's own signup row is billed only its add-on price (no package price on top).
+    const amountCents = enr.isParentSignup
+      ? (enr.parentAddOnAmount ?? 0) * 100
+      : ((pkgMap.get(enr.packageName) ?? 0) + (enr.parentAddOnAmount ?? 0)) * 100
+    // Start at the signup month, never earlier; extends 12+ months and rolls into the next year
+    const months = getBillingWindow(enr.createdAt)
     for (const { year: y, month: m } of months) {
       const result = await db
         .insert(subscriptionMonths)
@@ -253,7 +281,7 @@ export async function getMonthlyBillingRows(
 // Get full billing ledger (all enrollments + their months)
 // ---------------------------------------------------------------------------
 
-export async function getBillingLedger(year = BILLING_START_YEAR): Promise<BillingLedgerEntry[]> {
+export async function getBillingLedger(year = currentBillingYear()): Promise<BillingLedgerEntry[]> {
   try {
     await requireAdmin()
   } catch {
@@ -284,6 +312,7 @@ export async function getBillingLedger(year = BILLING_START_YEAR): Promise<Billi
       packageName: enrollments.packageName,
       club: enrollments.club,
       referenceNumber: enrollments.referenceNumber,
+      enrollmentCreatedAt: enrollments.createdAt,
     })
     .from(subscriptionMonths)
     .innerJoin(enrollments, eq(subscriptionMonths.enrollmentId, enrollments.id))
@@ -326,12 +355,17 @@ export type OutstandingEntry = {
   totalOutstandingCents: number
 }
 
-export async function getOutstandingReport(year = BILLING_START_YEAR): Promise<OutstandingEntry[]> {
+export async function getOutstandingReport(): Promise<OutstandingEntry[]> {
   try {
     await requireAdmin()
   } catch {
     return []
   }
+
+  // Only months that have started count as outstanding, across every year —
+  // so unpaid December months stay visible after the ledger rolls into January.
+  const nowSA = new Date(Date.now() + 2 * 60 * 60 * 1000)
+  const dueIndex = nowSA.getUTCFullYear() * 12 + nowSA.getUTCMonth() + 1
 
   // Include both 'outstanding' and 'partial' months — partial still has a balance
   const rows = await db
@@ -358,7 +392,7 @@ export async function getOutstandingReport(year = BILLING_START_YEAR): Promise<O
     .innerJoin(enrollments, eq(subscriptionMonths.enrollmentId, enrollments.id))
     .where(
       and(
-        eq(subscriptionMonths.year, year),
+        sql`(${subscriptionMonths.year} * 12 + ${subscriptionMonths.month}) <= ${dueIndex}`,
         // outstanding OR partial (partial still has a remaining balance)
         sql`${subscriptionMonths.status} IN ('outstanding', 'partial')`,
         // "active" or "pending" enrollments belong in billing — see getBillingLedger.
@@ -424,7 +458,7 @@ export type RevenueMonthSummary = {
   outstandingCount: number
 }
 
-export async function getRevenueReport(year = BILLING_START_YEAR): Promise<RevenueMonthSummary[]> {
+export async function getRevenueReport(year = currentBillingYear()): Promise<RevenueMonthSummary[]> {
   try {
     await requireAdmin()
   } catch {
@@ -454,7 +488,8 @@ export async function getRevenueReport(year = BILLING_START_YEAR): Promise<Reven
 
   // Build summary per month
   const monthMap = new Map<string, RevenueMonthSummary>()
-  for (let m = BILLING_START_MONTH; m <= BILLING_END_MONTH; m++) {
+  const firstMonth = year === BILLING_START_YEAR ? BILLING_START_MONTH : 1
+  for (let m = firstMonth; m <= 12; m++) {
     const key = `${year}-${m}`
     monthMap.set(key, {
       year,
@@ -513,14 +548,41 @@ export async function updateMonthStatus(
 ): Promise<{ ok: boolean; error?: string }> {
   try {
     await requireAdmin()
+
+    const [existingRow] = await db
+      .select()
+      .from(subscriptionMonths)
+      .where(eq(subscriptionMonths.id, id))
+      .limit(1)
+
+    // Marking a month paid consumes the parent's pending voucher (if any) and
+    // pulls its discount onto the billing rows.
+    let current = existingRow
+    let redeemed = false
+    if (status === "paid" && existingRow) {
+      redeemed = await redeemPendingVoucherForEnrollment(existingRow.enrollmentId)
+      if (redeemed) {
+        const [fresh] = await db.select().from(subscriptionMonths).where(eq(subscriptionMonths.id, id)).limit(1)
+        current = fresh ?? existingRow
+      }
+    }
+
+    // The admin UI sends its (possibly stale) view of the discount. If it sent
+    // no discount and the voucher was just applied, keep the voucher discount;
+    // an unspecified Rand discount always keeps what is already on the row.
+    const callerSentNoDiscount = !opts?.discountPct && !opts?.discountRandCents && !opts?.discountReason
+    const useStoredDiscount = redeemed && callerSentNoDiscount
+
     await db
       .update(subscriptionMonths)
       .set({
         status,
         paidAt: status === "paid" ? new Date() : null,
-        discountPct: opts?.discountPct ?? 0,
-        discountRandCents: opts?.discountRandCents ?? 0,
-        discountReason: opts?.discountReason ?? null,
+        discountPct: useStoredDiscount ? (current?.discountPct ?? 0) : (opts?.discountPct ?? 0),
+        discountRandCents: useStoredDiscount
+          ? (current?.discountRandCents ?? 0)
+          : (opts?.discountRandCents ?? current?.discountRandCents ?? 0),
+        discountReason: useStoredDiscount ? (current?.discountReason ?? null) : (opts?.discountReason ?? null),
         paidCents: status === "partial" ? (opts?.paidCents ?? null) : null,
         paymentReference: opts?.paymentReference ?? null,
         notes: opts?.notes ?? null,
@@ -545,6 +607,15 @@ export async function bulkMarkPaid(
   try {
     await requireAdmin()
     if (ids.length === 0) return { ok: true }
+
+    const enrollmentRows = await db
+      .selectDistinct({ enrollmentId: subscriptionMonths.enrollmentId })
+      .from(subscriptionMonths)
+      .where(inArray(subscriptionMonths.id, ids))
+    for (const r of enrollmentRows) {
+      await redeemPendingVoucherForEnrollment(r.enrollmentId)
+    }
+
     await db
       .update(subscriptionMonths)
       .set({

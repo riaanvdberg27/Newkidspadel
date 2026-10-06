@@ -11,6 +11,7 @@ import {
   adminUpdateCampaign,
   adminCreateCampaign,
   adminGenerateBulkVouchers,
+  adminSetSharedCode,
   issueBootcampVoucher,
 } from "@/app/actions/referrals"
 import {
@@ -293,6 +294,89 @@ function VouchersTab({
 const MIN_BULK_CODES = 10
 const MAX_BULK_CODES = 1000
 
+function SharedCodePanel({
+  campaign,
+  redeemed,
+  onSaved,
+}: {
+  campaign: VoucherCampaign
+  redeemed: number
+  onSaved: (patch: { sharedCode: string | null; sharedCodeMaxUses: number | null }) => void
+}) {
+  const [code, setCode] = useState(campaign.sharedCode ?? "")
+  const [maxUses, setMaxUses] = useState<number | "">(campaign.sharedCodeMaxUses ?? "")
+  const [saving, setSaving] = useState(false)
+  const [message, setMessage] = useState<{ text: string; isError: boolean } | null>(null)
+
+  async function handleSave() {
+    setSaving(true)
+    setMessage(null)
+    const result = await adminSetSharedCode(campaign.id, code, maxUses === "" ? null : maxUses)
+    setSaving(false)
+    if ("error" in result) {
+      setMessage({ text: result.error, isError: true })
+      return
+    }
+    setCode(result.sharedCode ?? "")
+    onSaved(result)
+    setMessage({ text: result.sharedCode ? "Shared code saved." : "Shared code removed.", isError: false })
+  }
+
+  return (
+    <div className="mt-3 max-w-xl space-y-2 rounded-md border border-border bg-background p-3">
+      <p className="text-xs font-semibold text-navy">
+        Shared printable code
+        {campaign.sharedCode && (
+          <span className="ml-2 font-normal text-muted-foreground">
+            {redeemed}
+            {campaign.sharedCodeMaxUses != null ? ` / ${campaign.sharedCodeMaxUses}` : ""} redeemed
+          </span>
+        )}
+      </p>
+      <p className="text-xs text-muted-foreground">
+        One code you can print and hand out to everyone. Each email address can use it once.
+      </p>
+      <div className="flex flex-wrap items-end gap-2">
+        <label className="block">
+          <span className="text-xs text-muted-foreground">Code</span>
+          <input
+            type="text"
+            value={code}
+            maxLength={20}
+            placeholder="e.g. SAPL250"
+            onChange={(e) => setCode(e.target.value.toUpperCase())}
+            className="mt-1 block w-40 rounded-md border border-border bg-card px-3 py-1.5 font-mono text-sm uppercase outline-none focus:border-lime"
+          />
+        </label>
+        <label className="block">
+          <span className="text-xs text-muted-foreground">Max redemptions</span>
+          <input
+            type="number"
+            min={1}
+            value={maxUses}
+            placeholder="Unlimited"
+            onChange={(e) => setMaxUses(e.target.value === "" ? "" : Number(e.target.value))}
+            className="mt-1 block w-32 rounded-md border border-border bg-card px-3 py-1.5 text-sm outline-none focus:border-lime"
+          />
+        </label>
+        <button
+          type="button"
+          disabled={saving}
+          onClick={handleSave}
+          className="rounded-md bg-navy px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+        >
+          {saving ? "Saving..." : "Save"}
+        </button>
+      </div>
+      {message && (
+        <p className={`text-xs ${message.isError ? "text-red-600" : "font-semibold text-lime-foreground"}`}>
+          {message.text}
+        </p>
+      )}
+    </div>
+  )
+}
+
 function CampaignsTab({
   campaigns: initial,
   vouchers,
@@ -322,11 +406,25 @@ function CampaignsTab({
   const editForm = campaigns.find((c) => c.id === editingId)
 
   const voucherCountsByCampaign = new Map<number, { total: number; used: number }>()
+  const sharedRedeemedByCampaign = new Map<number, number>()
   for (const v of vouchers) {
+    if (v.viaSharedCode) {
+      if (v.status === "used") {
+        sharedRedeemedByCampaign.set(v.campaignId, (sharedRedeemedByCampaign.get(v.campaignId) ?? 0) + 1)
+      }
+      continue
+    }
     const entry = voucherCountsByCampaign.get(v.campaignId) ?? { total: 0, used: 0 }
     entry.total += 1
     if (v.status === "used") entry.used += 1
     voucherCountsByCampaign.set(v.campaignId, entry)
+  }
+
+  function handleSharedCodeSaved(
+    campaignId: number,
+    patch: { sharedCode: string | null; sharedCodeMaxUses: number | null },
+  ) {
+    setCampaigns((prev) => prev.map((x) => (x.id === campaignId ? { ...x, ...patch } : x)))
   }
 
   async function handleSave(c: VoucherCampaign) {
@@ -533,6 +631,11 @@ function CampaignsTab({
                       {genMessage.text}
                     </p>
                   )}
+                  <SharedCodePanel
+                    campaign={c}
+                    redeemed={sharedRedeemedByCampaign.get(c.id) ?? 0}
+                    onSaved={(patch) => handleSharedCodeSaved(c.id, patch)}
+                  />
                 </div>
                 <button
                   type="button"

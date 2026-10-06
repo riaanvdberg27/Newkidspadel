@@ -230,6 +230,11 @@ export const enrollments = pgTable("enrollments", {
   // Rands added to this enrollment's price for parent participation, captured at
   // enrollment time so later price changes don't retroactively change history
   parentAddOnAmount: integer("parentAddOnAmount").notNull().default(0),
+  // A parent who signs up to train is their own enrollment row (separately counted, billed
+  // and scheduled). For those rows childName holds the parent's name, parentAddOnAmount holds
+  // their monthly price, and linkedEnrollmentId points at the child enrollment they signed up with.
+  isParentSignup: boolean("isParentSignup").notNull().default(false),
+  linkedEnrollmentId: integer("linkedEnrollmentId"),
   // Debit order
   debitAccountHolder: text("debitAccountHolder"),
   debitBankName: text("debitBankName"),
@@ -485,6 +490,11 @@ export const voucherCampaigns = pgTable("voucher_campaigns", {
   // Configurable expiry relative to issuance (days); null = no expiry
   expiryDays: integer("expiryDays"),
   enabled: boolean("enabled").notNull().default(true),
+  // One printable code shared by everyone (e.g. on a flyer). Each account may
+  // redeem it once; a personal voucher row is created for them on first use.
+  sharedCode: text("sharedCode").unique(),
+  // Maximum number of accounts that can redeem the shared code; null = unlimited
+  sharedCodeMaxUses: integer("sharedCodeMaxUses"),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
   updatedAt: timestamp("updatedAt").notNull().defaultNow(),
 })
@@ -521,8 +531,10 @@ export const vouchers = pgTable("vouchers", {
   referralId: integer("referralId").references(() => referrals.id, { onDelete: "set null" }),
   expiresAt: timestamp("expiresAt"),
   usedAt: timestamp("usedAt"),
+  // True when this row was created for an account that entered the campaign's shared code
+  viaSharedCode: boolean("viaSharedCode").notNull().default(false),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
-})
+  })
 
 export type Voucher = typeof vouchers.$inferSelect
 
