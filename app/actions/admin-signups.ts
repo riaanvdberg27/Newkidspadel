@@ -691,7 +691,7 @@ export async function addSiblingToFamily(
         .from(packages)
         .where(eq(packages.name, src.packageName))
         .limit(1)
-      await generateMonthsForEnrollment(row.id, (pkg?.price ?? 0) * 100, undefined, new Date())
+      await generateMonthsForEnrollment(row.id, (pkg?.price ?? 0) * 100, new Date())
     }
 
     revalidatePath("/admin")

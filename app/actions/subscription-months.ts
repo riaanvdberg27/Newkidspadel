@@ -6,6 +6,12 @@ import { eq, and, inArray, asc, desc, sql } from "drizzle-orm"
 import { requireAdmin } from "@/lib/admin-auth"
 import { revalidatePath } from "next/cache"
 import { getEnrollmentVoucherDiscount, redeemVoucher } from "./referrals"
+import {
+  BILLING_START_YEAR,
+  BILLING_START_MONTH,
+  currentBillingYear,
+  getBillingWindow,
+} from "@/lib/billing-utils"
 
 // ---------------------------------------------------------------------------
 // Types
@@ -121,11 +127,6 @@ const MONTH_NAMES = [
   "Jul","Aug","Sep","Oct","Nov","Dec",
 ]
 
-// Current academic/billing year window: Aug–Dec 2026
-const BILLING_START_YEAR  = 2026
-const BILLING_START_MONTH = 8   // August
-const BILLING_END_MONTH   = 12  // December
-
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -134,46 +135,20 @@ function formatMonth(year: number, month: number): string {
   return `${MONTH_NAMES[month - 1]} ${year}`
 }
 
-/** Generate all (year, month) pairs for Aug–Dec of a given year */
-function getBillingMonths(year: number): { year: number; month: number }[] {
-  const months: { year: number; month: number }[] = []
-  for (let m = BILLING_START_MONTH; m <= BILLING_END_MONTH; m++) {
-    months.push({ year, month: m })
-  }
-  return months
-}
-
-/**
- * Same as getBillingMonths, but skips any month before the client's signup
- * date — a client who joins in October must never be billed for Aug/Sep.
- * `signupDate` defaults to "no restriction" (start of the billing year) when omitted.
- */
-function getBillingMonthsFrom(
-  year: number,
-  signupDate?: Date | null,
-): { year: number; month: number }[] {
-  const months = getBillingMonths(year)
-  if (!signupDate) return months
-  const signupYear = signupDate.getFullYear()
-  const signupMonth = signupDate.getMonth() + 1
-  return months.filter(({ year: y, month: m }) => {
-    if (y > signupYear) return true
-    if (y < signupYear) return false
-    return m >= signupMonth
-  })
-}
-
 // ---------------------------------------------------------------------------
 // Generate / backfill months for a single enrollment (idempotent)
 // ---------------------------------------------------------------------------
 
+/**
+ * Billing starts in the client's signup month (never earlier than Aug 2026)
+ * and always runs 12+ months ahead, rolling over to the next calendar year.
+ */
 export async function generateMonthsForEnrollment(
   enrollmentId: number,
   amountCents: number,
-  year = BILLING_START_YEAR,
   signupDate?: Date | null,
 ): Promise<void> {
-  const months = getBillingMonthsFrom(year, signupDate)
+  const months = getBillingWindow(signupDate)
   for (const { year: y, month: m } of months) {
     await db
       .insert(subscriptionMonths)
@@ -233,8 +208,8 @@ export async function backfillAllEnrollments(): Promise<{ generated: number }> {
     const amountCents = enr.isParentSignup
       ? (enr.parentAddOnAmount ?? 0) * 100
       : ((pkgMap.get(enr.packageName) ?? 0) + (enr.parentAddOnAmount ?? 0)) * 100
-    // Never bill for months before the client actually signed up
-    const months = getBillingMonthsFrom(BILLING_START_YEAR, enr.createdAt)
+    // Start at the signup month, never earlier; extends 12+ months and rolls into the next year
+    const months = getBillingWindow(enr.createdAt)
     for (const { year: y, month: m } of months) {
       const result = await db
         .insert(subscriptionMonths)
@@ -305,7 +280,7 @@ export async function getMonthlyBillingRows(
 // Get full billing ledger (all enrollments + their months)
 // ---------------------------------------------------------------------------
 
-export async function getBillingLedger(year = BILLING_START_YEAR): Promise<BillingLedgerEntry[]> {
+export async function getBillingLedger(year = currentBillingYear()): Promise<BillingLedgerEntry[]> {
   try {
     await requireAdmin()
   } catch {
@@ -378,12 +353,17 @@ export type OutstandingEntry = {
   totalOutstandingCents: number
 }
 
-export async function getOutstandingReport(year = BILLING_START_YEAR): Promise<OutstandingEntry[]> {
+export async function getOutstandingReport(): Promise<OutstandingEntry[]> {
   try {
     await requireAdmin()
   } catch {
     return []
   }
+
+  // Only months that have started count as outstanding, across every year —
+  // so unpaid December months stay visible after the ledger rolls into January.
+  const nowSA = new Date(Date.now() + 2 * 60 * 60 * 1000)
+  const dueIndex = nowSA.getUTCFullYear() * 12 + nowSA.getUTCMonth() + 1
 
   // Include both 'outstanding' and 'partial' months — partial still has a balance
   const rows = await db
@@ -410,7 +390,7 @@ export async function getOutstandingReport(year = BILLING_START_YEAR): Promise<O
     .innerJoin(enrollments, eq(subscriptionMonths.enrollmentId, enrollments.id))
     .where(
       and(
-        eq(subscriptionMonths.year, year),
+        sql`(${subscriptionMonths.year} * 12 + ${subscriptionMonths.month}) <= ${dueIndex}`,
         // outstanding OR partial (partial still has a remaining balance)
         sql`${subscriptionMonths.status} IN ('outstanding', 'partial')`,
         // "active" or "pending" enrollments belong in billing — see getBillingLedger.
@@ -476,7 +456,7 @@ export type RevenueMonthSummary = {
   outstandingCount: number
 }
 
-export async function getRevenueReport(year = BILLING_START_YEAR): Promise<RevenueMonthSummary[]> {
+export async function getRevenueReport(year = currentBillingYear()): Promise<RevenueMonthSummary[]> {
   try {
     await requireAdmin()
   } catch {
@@ -506,7 +486,8 @@ export async function getRevenueReport(year = BILLING_START_YEAR): Promise<Reven
 
   // Build summary per month
   const monthMap = new Map<string, RevenueMonthSummary>()
-  for (let m = BILLING_START_MONTH; m <= BILLING_END_MONTH; m++) {
+  const firstMonth = year === BILLING_START_YEAR ? BILLING_START_MONTH : 1
+  for (let m = firstMonth; m <= 12; m++) {
     const key = `${year}-${m}`
     monthMap.set(key, {
       year,

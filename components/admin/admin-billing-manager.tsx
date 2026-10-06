@@ -27,8 +27,7 @@ import {
 } from "@/app/actions/subscription-months"
 import {
   BILLING_START_YEAR,
-  BILLING_START_MONTH,
-  BILLING_END_MONTH,
+  currentBillingYear,
   MONTH_NAMES,
 } from "@/lib/billing-utils"
 
@@ -38,11 +37,6 @@ import {
 
 const ZAR = (cents: number) =>
   `R ${(cents / 100).toLocaleString("en-ZA", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-
-const BILLING_MONTHS = Array.from(
-  { length: BILLING_END_MONTH - BILLING_START_MONTH + 1 },
-  (_, i) => BILLING_START_MONTH + i,
-)
 
 function statusColor(status: string) {
   switch (status) {
@@ -86,21 +80,37 @@ export function AdminBillingManager({
   const [revenue, setRevenue] = useState(initialRevenue)
   const [backfilling, startBackfill] = useTransition()
   const [backfillMsg, setBackfillMsg] = useState<string | null>(null)
+  const [year, setYear] = useState(currentBillingYear())
+  const [loadingYear, startYearChange] = useTransition()
+  const years = Array.from(
+    { length: currentBillingYear() + 1 - BILLING_START_YEAR + 1 },
+    (_, i) => BILLING_START_YEAR + i,
+  )
+
+  async function refreshAll(forYear: number) {
+    const [newLedger, newOutstanding, newRevenue] = await Promise.all([
+      getBillingLedger(forYear),
+      getOutstandingReport(),
+      getRevenueReport(forYear),
+    ])
+    setLedger(newLedger)
+    setOutstanding(newOutstanding)
+    setRevenue(newRevenue)
+  }
 
   function handleBackfill() {
     startBackfill(async () => {
       const res = await backfillAllEnrollments()
       setBackfillMsg(`Generated ${res.generated} new month records`)
-      // Refresh all views
-      const [newLedger, newOutstanding, newRevenue] = await Promise.all([
-        getBillingLedger(BILLING_START_YEAR),
-        getOutstandingReport(BILLING_START_YEAR),
-        getRevenueReport(BILLING_START_YEAR),
-      ])
-      setLedger(newLedger)
-      setOutstanding(newOutstanding)
-      setRevenue(newRevenue)
+      await refreshAll(year)
       setTimeout(() => setBackfillMsg(null), 4000)
+    })
+  }
+
+  function handleYearChange(next: number) {
+    setYear(next)
+    startYearChange(async () => {
+      await refreshAll(next)
     })
   }
 
@@ -111,10 +121,22 @@ export function AdminBillingManager({
         <div>
           <h2 className="text-xl font-extrabold text-navy">Billing Ledger</h2>
           <p className="text-sm text-muted-foreground">
-            Track monthly payment status for every active enrollment — Aug–Dec {BILLING_START_YEAR}
+            Track monthly payment status for every active enrollment — billing starts in each signup month and rolls over every year
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <label className="sr-only" htmlFor="billing-year">Billing year</label>
+          <select
+            id="billing-year"
+            value={year}
+            disabled={loadingYear}
+            onChange={(e) => handleYearChange(Number(e.target.value))}
+            className="rounded-md border border-border bg-background px-3 py-2 text-sm font-semibold text-navy focus:outline-none focus:ring-2 focus:ring-navy/30 disabled:opacity-50"
+          >
+            {years.map((y) => (
+              <option key={y} value={y}>{y}</option>
+            ))}
+          </select>
           {backfillMsg && (
             <span className="rounded-md bg-lime/20 px-3 py-1.5 text-xs font-semibold text-navy">
               {backfillMsg}
@@ -170,12 +192,12 @@ export function AdminBillingManager({
           outstanding={outstanding}
           onOutstandingChange={setOutstanding}
           onLedgerRefresh={async () => {
-            const newLedger = await getBillingLedger(BILLING_START_YEAR)
+            const newLedger = await getBillingLedger(year)
             setLedger(newLedger)
           }}
         />
       )}
-      {subView === "revenue" && <RevenueView revenue={revenue} />}
+      {subView === "revenue" && <RevenueView revenue={revenue} year={year} />}
     </div>
   )
 }
@@ -299,7 +321,7 @@ function LedgerView({
       <div className="rounded-xl border border-dashed border-border py-16 text-center">
         <Clock className="mx-auto h-8 w-8 text-muted-foreground/30" />
         <p className="mt-3 text-sm text-muted-foreground">
-          No billing months generated yet. Click &ldquo;Sync Months&rdquo; to generate Aug–Dec records for all active enrollments.
+          No billing months generated yet. Click &ldquo;Sync Months&rdquo; to generate billing months for all active enrollments.
         </p>
       </div>
     )
@@ -400,7 +422,7 @@ function LedgerView({
             {/* Expanded month grid */}
             {isExpanded && (
               <div className="border-t border-border bg-muted/20 px-4 py-3">
-                <div className="grid grid-cols-5 gap-2">
+                <div className="grid grid-cols-3 gap-2 lg:grid-cols-6">
                   {group.months.map((m) => {
                     const isUpdating = updating === m.id
                     const flashState = flash[m.id]
@@ -711,7 +733,7 @@ function OutstandingView({
 // Revenue view
 // ---------------------------------------------------------------------------
 
-function RevenueView({ revenue }: { revenue: RevenueMonthSummary[] }) {
+function RevenueView({ revenue, year }: { revenue: RevenueMonthSummary[]; year: number }) {
   const totalPaid = revenue.reduce((s, r) => s + r.paidCents, 0)
   const totalOutstanding = revenue.reduce((s, r) => s + r.outstandingCents, 0)
   const totalBilled = revenue.reduce((s, r) => s + r.totalCents, 0)
@@ -722,14 +744,14 @@ function RevenueView({ revenue }: { revenue: RevenueMonthSummary[] }) {
     <div className="space-y-6">
       {/* KPI cards */}
       <div className="grid grid-cols-3 gap-4">
-        <StatCard label="Total Billed" value={ZAR(totalBilled)} sub={`${BILLING_END_MONTH - BILLING_START_MONTH + 1} months`} color="text-navy" />
+        <StatCard label="Total Billed" value={ZAR(totalBilled)} sub={`${revenue.length} months`} color="text-navy" />
         <StatCard label="Collected" value={ZAR(totalPaid)} sub="paid" color="text-lime" />
         <StatCard label="Outstanding" value={ZAR(totalOutstanding)} sub="to collect" color="text-amber-600" />
       </div>
 
       {/* Month bars */}
       <div className="rounded-xl border border-border bg-card p-5">
-        <h3 className="mb-4 text-sm font-bold text-navy">Monthly Breakdown — {BILLING_START_YEAR}</h3>
+        <h3 className="mb-4 text-sm font-bold text-navy">Monthly Breakdown — {year}</h3>
         <div className="space-y-3">
           {revenue.map((r) => {
             const paidPct = maxCents > 0 ? (r.paidCents / maxCents) * 100 : 0
