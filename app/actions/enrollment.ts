@@ -2,7 +2,7 @@
 
 import { auth } from "@/lib/auth"
 import { db } from "@/lib/db"
-import { enrollments, user, coachClubs, coachSchools, coaches } from "@/lib/db/schema"
+import { enrollments, user, coachClubs, coachSchools, coaches, vouchers } from "@/lib/db/schema"
 import { and, asc, desc, eq, inArray } from "drizzle-orm"
 import { headers } from "next/headers"
 import { revalidatePath } from "next/cache"
@@ -547,12 +547,35 @@ export async function createCartEnrollments(input: {
     (sum, item) => sum + item.packagePrice + (item.parentAddOnAmount ?? 0),
     0,
   )
+  // The discount is read from the voucher row itself — never from the client —
+  // so a tampered request cannot change the amount charged.
+  let discountType = "percent"
+  let discountPercent = 0
+  let discountRandCents = 0
+  if (input.voucherId) {
+    const [voucher] = await db
+      .select()
+      .from(vouchers)
+      .where(eq(vouchers.id, input.voucherId))
+      .limit(1)
+    const usable =
+      voucher &&
+      voucher.status === "active" &&
+      (!voucher.userId || voucher.userId === userId) &&
+      (!voucher.expiresAt || voucher.expiresAt > new Date())
+    if (!usable) {
+      throw new Error("This voucher is no longer valid. Please remove it and try again.")
+    }
+    discountType = voucher.discountType
+    discountPercent = voucher.discountPercent
+    discountRandCents = voucher.discountRandCents
+  }
+
   let totalAmount = subtotal
-  if (input.discountType === "rand" && (input.discountRandCents ?? 0) > 0) {
-    totalAmount = Math.max(0, subtotal - input.discountRandCents! / 100)
+  if (discountType === "rand" && discountRandCents > 0) {
+    totalAmount = Math.max(0, subtotal - discountRandCents / 100)
   } else {
-    const disc = input.discountPercent ?? 0
-    totalAmount = disc > 0 ? subtotal * (1 - disc / 100) : subtotal
+    totalAmount = discountPercent > 0 ? subtotal * (1 - discountPercent / 100) : subtotal
   }
 
   const isOnceOff = input.cartItems.every((item) => item.packagePeriod === "once-off")

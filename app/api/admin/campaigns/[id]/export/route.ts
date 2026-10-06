@@ -31,7 +31,14 @@ export async function GET(
   }
 
   const rows = await adminGetCampaignVouchers(campaignId)
-  const buffer = buildVoucherWorkbook(campaign.name, rows)
+  const buffer = buildVoucherWorkbook(
+    {
+      name: campaign.name,
+      sharedCode: campaign.sharedCode,
+      sharedCodeMaxUses: campaign.sharedCodeMaxUses,
+    },
+    rows,
+  )
 
   return new NextResponse(new Uint8Array(buffer), {
     status: 200,

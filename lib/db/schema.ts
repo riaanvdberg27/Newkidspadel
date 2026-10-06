@@ -490,6 +490,11 @@ export const voucherCampaigns = pgTable("voucher_campaigns", {
   // Configurable expiry relative to issuance (days); null = no expiry
   expiryDays: integer("expiryDays"),
   enabled: boolean("enabled").notNull().default(true),
+  // One printable code shared by everyone (e.g. on a flyer). Each account may
+  // redeem it once; a personal voucher row is created for them on first use.
+  sharedCode: text("sharedCode").unique(),
+  // Maximum number of accounts that can redeem the shared code; null = unlimited
+  sharedCodeMaxUses: integer("sharedCodeMaxUses"),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
   updatedAt: timestamp("updatedAt").notNull().defaultNow(),
 })
@@ -526,8 +531,10 @@ export const vouchers = pgTable("vouchers", {
   referralId: integer("referralId").references(() => referrals.id, { onDelete: "set null" }),
   expiresAt: timestamp("expiresAt"),
   usedAt: timestamp("usedAt"),
+  // True when this row was created for an account that entered the campaign's shared code
+  viaSharedCode: boolean("viaSharedCode").notNull().default(false),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
-})
+  })
 
 export type Voucher = typeof vouchers.$inferSelect
 
