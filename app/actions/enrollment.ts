@@ -515,6 +515,8 @@ export async function createCartEnrollments(input: {
   discountRandCents?: number
   /** Group access code entered to unlock a hidden package (e.g. Family Package). */
   groupAccessCode?: string | null
+  /** "eft" signups have no gateway callback, so the voucher is redeemed immediately at signup. */
+  paymentMethod?: "netcash" | "eft"
 }): Promise<{ orderReference: string; totalAmount: number; enrollmentIds: number[] }> {
   const userId = await getUserId()
   const signedAt = new Date()
@@ -756,6 +758,16 @@ export async function createCartEnrollments(input: {
       status: "awaiting_payment",
       netcashOrderId: orderReference,        // the p3 we'll send to Netcash
     })
+
+  // EFT: no gateway webhook will ever confirm payment, so consume the voucher
+  // now (one per email/signup). Admin corrects the billing row manually later.
+  if (input.paymentMethod === "eft" && input.voucherId) {
+    await redeemVoucher(input.voucherId, firstEnrollmentId)
+    await db
+      .update(enrollments)
+      .set({ pendingVoucherId: null })
+      .where(eq(enrollments.pendingVoucherId, input.voucherId))
+  }
 
   // Best-effort: send welcome email for first child only (to avoid spam for multi-child)
   try {

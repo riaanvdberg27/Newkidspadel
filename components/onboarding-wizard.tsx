@@ -481,6 +481,7 @@ export function OnboardingWizard({
         discountPercent: appliedVoucher?.discountPercent ?? undefined,
         discountRandCents: appliedVoucher?.discountRandCents,
         groupAccessCode: unlockedGroupCode,
+        paymentMethod,
       })
 
       // Enrollment + order records now exist — remember them so the EFT

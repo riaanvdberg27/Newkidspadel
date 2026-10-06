@@ -5,7 +5,7 @@ import { subscriptionMonths, enrollments, packages } from "@/lib/db/schema"
 import { eq, and, inArray, asc, desc, sql } from "drizzle-orm"
 import { requireAdmin } from "@/lib/admin-auth"
 import { revalidatePath } from "next/cache"
-import { getEnrollmentVoucherDiscount } from "./referrals"
+import { getEnrollmentVoucherDiscount, redeemVoucher } from "./referrals"
 
 // ---------------------------------------------------------------------------
 // Types
@@ -77,6 +77,27 @@ async function syncVoucherDiscountForEnrollment(enrollmentId: number): Promise<v
     .update(subscriptionMonths)
     .set({ discountPct: pct, discountRandCents: rand, discountReason: reason, updatedAt: new Date() })
     .where(inArray(subscriptionMonths.id, targetIds))
+}
+
+/**
+ * Redeem the voucher a parent applied at signup but that has not been consumed
+ * yet (it is only consumed once payment is confirmed). Marks it used, clears
+ * the pending reference on every enrollment in that signup, and applies its
+ * discount to the billing ledger. Returns true when a voucher was redeemed.
+ */
+async function redeemPendingVoucherForEnrollment(enrollmentId: number): Promise<boolean> {
+  const [enr] = await db
+    .select({ pendingVoucherId: enrollments.pendingVoucherId })
+    .from(enrollments)
+    .where(eq(enrollments.id, enrollmentId))
+    .limit(1)
+  const voucherId = enr?.pendingVoucherId
+  if (!voucherId) return false
+
+  await redeemVoucher(voucherId, enrollmentId)
+  await db.update(enrollments).set({ pendingVoucherId: null }).where(eq(enrollments.pendingVoucherId, voucherId))
+  await syncVoucherDiscountForEnrollment(enrollmentId)
+  return true
 }
 
 export type BillingLedgerEntry = SubscriptionMonthRow & {
@@ -544,14 +565,41 @@ export async function updateMonthStatus(
 ): Promise<{ ok: boolean; error?: string }> {
   try {
     await requireAdmin()
+
+    const [existingRow] = await db
+      .select()
+      .from(subscriptionMonths)
+      .where(eq(subscriptionMonths.id, id))
+      .limit(1)
+
+    // Marking a month paid consumes the parent's pending voucher (if any) and
+    // pulls its discount onto the billing rows.
+    let current = existingRow
+    let redeemed = false
+    if (status === "paid" && existingRow) {
+      redeemed = await redeemPendingVoucherForEnrollment(existingRow.enrollmentId)
+      if (redeemed) {
+        const [fresh] = await db.select().from(subscriptionMonths).where(eq(subscriptionMonths.id, id)).limit(1)
+        current = fresh ?? existingRow
+      }
+    }
+
+    // The admin UI sends its (possibly stale) view of the discount. If it sent
+    // no discount and the voucher was just applied, keep the voucher discount;
+    // an unspecified Rand discount always keeps what is already on the row.
+    const callerSentNoDiscount = !opts?.discountPct && !opts?.discountRandCents && !opts?.discountReason
+    const useStoredDiscount = redeemed && callerSentNoDiscount
+
     await db
       .update(subscriptionMonths)
       .set({
         status,
         paidAt: status === "paid" ? new Date() : null,
-        discountPct: opts?.discountPct ?? 0,
-        discountRandCents: opts?.discountRandCents ?? 0,
-        discountReason: opts?.discountReason ?? null,
+        discountPct: useStoredDiscount ? (current?.discountPct ?? 0) : (opts?.discountPct ?? 0),
+        discountRandCents: useStoredDiscount
+          ? (current?.discountRandCents ?? 0)
+          : (opts?.discountRandCents ?? current?.discountRandCents ?? 0),
+        discountReason: useStoredDiscount ? (current?.discountReason ?? null) : (opts?.discountReason ?? null),
         paidCents: status === "partial" ? (opts?.paidCents ?? null) : null,
         paymentReference: opts?.paymentReference ?? null,
         notes: opts?.notes ?? null,
@@ -576,6 +624,15 @@ export async function bulkMarkPaid(
   try {
     await requireAdmin()
     if (ids.length === 0) return { ok: true }
+
+    const enrollmentRows = await db
+      .selectDistinct({ enrollmentId: subscriptionMonths.enrollmentId })
+      .from(subscriptionMonths)
+      .where(inArray(subscriptionMonths.id, ids))
+    for (const r of enrollmentRows) {
+      await redeemPendingVoucherForEnrollment(r.enrollmentId)
+    }
+
     await db
       .update(subscriptionMonths)
       .set({

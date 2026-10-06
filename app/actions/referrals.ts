@@ -433,10 +433,14 @@ export async function redeemVoucher(voucherId: number, enrollmentId: number): Pr
   // Bulk/promo codes have no owner until redeemed — stamp the redeeming
   // enrollment's user onto the voucher so it becomes single-use permanently.
   const [existing] = await db
-    .select({ userId: vouchers.userId })
+    .select({ userId: vouchers.userId, status: vouchers.status })
     .from(vouchers)
     .where(eq(vouchers.id, voucherId))
     .limit(1)
+
+  // Already redeemed (e.g. EFT signup redeemed at checkout, then admin marks
+  // a month paid, or a sibling row of the same cart) — keep the original redemption.
+  if (existing?.status === "used") return
 
   let ownerUserId: string | undefined
   if (!existing?.userId) {
