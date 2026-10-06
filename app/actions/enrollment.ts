@@ -466,9 +466,16 @@ export type CartItem = {
   /** Family Package only: human-readable time-slot choice for each enrolled parent. */
   parent1SlotLabel?: string
   parent2SlotLabel?: string
-  /** Rands added to packagePrice for the enrolled parent(s) — already reflected in packagePrice, stored separately for billing history. */
+  /** Rands for the enrolled parent(s), on top of packagePrice (the child's own base price). Each parent becomes its own enrollment row. */
   parentAddOnAmount?: number
+  /** Where each enrolled parent trains: with a child in the cart, or their own club/time. */
+  parent1Slot?: ParentSlotChoice
+  parent2Slot?: ParentSlotChoice
 }
+
+export type ParentSlotChoice =
+  | { mode: "join"; joinChildIdx: number }
+  | { mode: "own"; clubId: number; clubName: string; weekday: number; hour: number }
 
 type CartPrefs = {
   prefEmail: boolean
@@ -627,13 +634,81 @@ export async function createCartEnrollments(input: {
         parent2Name: item.parent2Enrolled ? item.parent2Name ?? undefined : undefined,
         parent1SlotLabel: item.parent1Enrolled ? item.parent1SlotLabel ?? undefined : undefined,
         parent2SlotLabel: item.parent2Enrolled ? item.parent2SlotLabel ?? undefined : undefined,
-        parentAddOnAmount: item.parentAddOnAmount ?? 0,
+        // The add-on is billed on each parent's own enrollment row, never on the child's.
+        parentAddOnAmount: 0,
         groupAccessCodeId: groupAccessCodeId ?? undefined,
       })
       .returning({ id: enrollments.id })
 
     if (inserted?.id) {
       enrollmentIds.push(inserted.id)
+
+      const parentCount = (item.parent1Enrolled ? 1 : 0) + (item.parent2Enrolled ? 1 : 0)
+      const perParentAmount = parentCount > 0 ? Math.round((item.parentAddOnAmount ?? 0) / parentCount) : 0
+      const parentsToCreate = [
+        item.parent1Enrolled ? { name: parentName, choice: item.parent1Slot } : null,
+        item.parent2Enrolled ? { name: item.parent2Name?.trim() || "Parent 2", choice: item.parent2Slot } : null,
+      ].filter((p): p is { name: string; choice: ParentSlotChoice | undefined } => p !== null)
+
+      for (const p of parentsToCreate) {
+        const joined = p.choice?.mode === "own" ? null : input.cartItems[p.choice?.joinChildIdx ?? 0] ?? item
+        const own = p.choice?.mode === "own" ? p.choice : null
+        const slotClubId = own ? own.clubId : joined?.clubId ?? null
+        let parentCoachId = resolvedCoachId
+        let parentCoachName = resolvedCoachName
+        if (own) {
+          const ownCoach = await lookupClubCoach(own.clubId)
+          parentCoachId = ownCoach?.coachId ?? null
+          parentCoachName = ownCoach?.coachName ?? null
+        }
+        const [parentRow] = await db
+          .insert(enrollments)
+          .values({
+            userId,
+            referenceNumber: generateReference(),
+            orderReference,
+            parentName,
+            parentEmail: input.parent.email.trim(),
+            parentMobile: input.parent.mobile,
+            secondParentName: secondParentName || undefined,
+            secondParentMobile: secondParentMobile || undefined,
+            childName: p.name,
+            childDob: "",
+            childAge: 0,
+            packageName: item.packageName,
+            club: own ? own.clubName : joined?.clubName ?? item.clubName,
+            clubId: slotClubId ?? undefined,
+            slotWeekday: own ? own.weekday : joined?.slotWeekday ?? undefined,
+            slotHour: own ? String(own.hour) : joined?.slotHour != null ? String(joined.slotHour) : undefined,
+            slotAgeGroup: own ? "Adult" : joined?.ageGroup ?? undefined,
+            emergencyContactName: input.emergencyContactName,
+            emergencyContactPhone: input.emergencyContactPhone,
+            agreedTerms: input.agreedTerms,
+            consentMedia: input.consentMedia,
+            signatureData: input.signatureData ?? undefined,
+            signedName: input.signedName,
+            signedAt,
+            prefEmail: input.prefs.prefEmail,
+            prefWhatsapp: input.prefs.prefWhatsapp,
+            prefSessionReminders: input.prefs.prefSessionReminders,
+            prefAnnouncements: input.prefs.prefAnnouncements,
+            prefEvents: input.prefs.prefEvents,
+            prefHolidayClinics: input.prefs.prefHolidayClinics,
+            paymentType: isOnceOff ? "once-off" : "monthly",
+            paymentStatus: "pending",
+            status: "pending",
+            accountStatus: "active",
+            onboardingComplete: false,
+            coachId: parentCoachId ?? undefined,
+            coachName: parentCoachName ?? undefined,
+            parentAddOnAmount: perParentAmount,
+            isParentSignup: true,
+            linkedEnrollmentId: inserted.id,
+            groupAccessCodeId: groupAccessCodeId ?? undefined,
+          })
+          .returning({ id: enrollments.id })
+        if (parentRow?.id) enrollmentIds.push(parentRow.id)
+      }
 
       // Record referral (best-effort)
       if (input.referralCode) {

@@ -57,6 +57,8 @@ export type AdminSignup = {
   parent2Name: string | null
   parent2SlotLabel: string | null
   parentAddOnAmount: number
+  isParentSignup: boolean
+  linkedEnrollmentId: number | null
 }
 
 export type UpdateSignupInput = {
@@ -128,6 +130,8 @@ export async function getAllSignups(): Promise<AdminSignup[]> {
     parent2Name: r.parent2Name ?? null,
     parent2SlotLabel: r.parent2SlotLabel ?? null,
     parentAddOnAmount: r.parentAddOnAmount ?? 0,
+    isParentSignup: r.isParentSignup ?? false,
+    linkedEnrollmentId: r.linkedEnrollmentId ?? null,
   }))
 }
 
@@ -245,13 +249,14 @@ async function syncBillingAmountForPackageChange(enrollmentId: number, newPackag
     // joining their own/a child's session) — it's stored on the enrollment
     // row but must be folded into the monthly amount, never dropped.
     const enrollmentRows = await db
-      .select({ parentAddOnAmount: enrollments.parentAddOnAmount })
+      .select({ parentAddOnAmount: enrollments.parentAddOnAmount, isParentSignup: enrollments.isParentSignup })
       .from(enrollments)
       .where(eq(enrollments.id, enrollmentId))
       .limit(1)
     const addOnAmount = enrollmentRows[0]?.parentAddOnAmount ?? 0
 
-    const newAmountCents = (price + addOnAmount) * 100
+    // A parent's own signup row is billed its add-on price only.
+    const newAmountCents = enrollmentRows[0]?.isParentSignup ? addOnAmount * 100 : (price + addOnAmount) * 100
     await db
       .update(subscriptionMonths)
       .set({ amountCents: newAmountCents, updatedAt: new Date() })

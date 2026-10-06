@@ -284,6 +284,8 @@ export function AdminSignupsManager({
           parent2Name: null,
           parent2SlotLabel: null,
           parentAddOnAmount: 0,
+          isParentSignup: false,
+          linkedEnrollmentId: null,
           parentName: input.parentName,
           parentEmail: input.parentEmail,
           parentMobile: input.parentMobile,
@@ -639,13 +641,18 @@ export function AdminSignupsManager({
                   {/* Child name */}
                   <td className="truncate px-3 py-2">
                     <span className="font-semibold text-navy">{s.childName}</span>
+                    {s.isParentSignup && (
+                      <span className="ml-1.5 rounded-full bg-primary/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-primary">
+                        Parent
+                      </span>
+                    )}
                   </td>
                   {/* Age — own compact column. Computed live from DOB so it advances on each birthday
                       without ever touching the stored slot assignment. */}
                   <td className="px-2 py-2 text-center">
                     {(() => {
                       const liveAge = calculateAge(s.childDob) ?? s.childAge
-                      return liveAge != null ? (
+                      return liveAge ? (
                         <span className="inline-block rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
                           {liveAge}
                         </span>
@@ -797,38 +804,7 @@ export function AdminSignupsManager({
                   </td>
                 </tr>
               )
-            }).reduce<React.ReactElement[]>((rows, row, idx) => {
-              const s = filtered[idx]
-              rows.push(row)
-              // Each enrolled parent is its own separate signup — billed R500/month on top of the
-              // child's package — so it gets its own visually distinct sub-row directly under the child.
-              const parentRows: { name: string; slotLabel: string | null }[] = []
-              if (s.parent1Enrolled) parentRows.push({ name: s.parentName, slotLabel: s.parent1SlotLabel })
-              if (s.parent2Enrolled) parentRows.push({ name: s.parent2Name || "Parent 2", slotLabel: s.parent2SlotLabel })
-              parentRows.forEach((p, i) => {
-                rows.push(
-                  <tr key={`${s.id}-parent-${i}`} className="bg-primary/5">
-                    <td className="px-2 py-1.5" />
-                    <td className="truncate px-3 py-1.5" colSpan={3}>
-                      <span className="inline-flex items-center gap-1.5 text-xs font-medium text-primary">
-                        <span className="rounded-full bg-primary/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide">
-                          Parent signup
-                        </span>
-                        {p.name} · R500/month
-                      </span>
-                    </td>
-                    <td className="px-3 py-1.5" colSpan={2} />
-                    <td className="px-2 py-1.5 font-medium text-navy" colSpan={2}>
-                      <span title={p.slotLabel ?? undefined}>
-                        {compactSlot(p.slotLabel) ?? <span className="text-muted-foreground">TBC</span>}
-                      </span>
-                    </td>
-                    <td className="px-2 py-1.5" colSpan={3} />
-                  </tr>,
-                )
-              })
-              return rows
-            }, [])}
+            })}
             {filtered.length === 0 && (
               <tr>
                 <td colSpan={12} className="px-4 py-10 text-center text-muted-foreground">

@@ -15,7 +15,7 @@ import { DobPicker } from "@/components/dob-picker"
 import { SignaturePad } from "@/components/signature-pad"
 import { CONSENT_TERMS_LABEL, CONSENT_MEDIA_LABEL, TERMS_TITLE, TERMS_SECTIONS } from "@/lib/terms"
 import { authClient } from "@/lib/auth-client"
-import { createCartEnrollments, getOrderAmountByReference } from "@/app/actions/enrollment"
+import { createCartEnrollments, getOrderAmountByReference, type ParentSlotChoice } from "@/app/actions/enrollment"
 import type { CartItem } from "@/app/actions/enrollment"
 import { blobUrl } from "@/lib/blob"
 import { validateVoucherCode } from "@/app/actions/referrals"
@@ -385,6 +385,23 @@ export function OnboardingWizard({
         const parentAddOnAmount =
           (parent1Enrolled ? parentAddOnPrice : 0) + (parent2Enrolled ? parentAddOnPrice : 0)
         const namedChildren = children.filter((c) => c.firstName.trim().length > 0)
+        const toParentSlotChoice = (
+          mode: "join" | "own",
+          joinIdx: number,
+          ownClubId: number | null,
+          ownSlot: SelectedSlot | null,
+        ): ParentSlotChoice => {
+          if (mode === "own" && ownClubId && ownSlot) {
+            return {
+              mode: "own",
+              clubId: ownClubId,
+              clubName: clubs.find((c) => c.id === ownClubId)?.name ?? "",
+              weekday: ownSlot.weekday,
+              hour: ownSlot.hour,
+            }
+          }
+          return { mode: "join", joinChildIdx: joinIdx }
+        }
         const describeParentSlot = (mode: "join" | "own", joinIdx: number, ownClubId: number | null, ownSlot: SelectedSlot | null) => {
           if (mode === "join") {
             const joinChild = namedChildren[joinIdx] ?? namedChildren[0]
@@ -400,7 +417,7 @@ export function OnboardingWizard({
           child: { firstName: child.firstName, lastName: child.lastName, dob: child.dob },
           packageId: selectedPackage.id,
           packageName: selectedPackage.name,
-          packagePrice: selectedPackage.price + parentAddOnAmount,
+          packagePrice: selectedPackage.price,
           packagePeriod: selectedPackage.period,
           clubId: isSchoolPkg ? null : (sched.clubId ?? null),
           clubName: isSchoolPkg ? (schoolObj?.name ?? "") : (clubObj?.name ?? ""),
@@ -424,6 +441,12 @@ export function OnboardingWizard({
             : undefined,
           parent2SlotLabel: parent2Enrolled
             ? describeParentSlot(parent2SlotMode, parent2JoinChildIdx, parent2ClubId, parent2Slot)
+            : undefined,
+          parent1Slot: parent1Enrolled
+            ? toParentSlotChoice(parent1SlotMode, parent1JoinChildIdx, parent1ClubId, parent1Slot)
+            : undefined,
+          parent2Slot: parent2Enrolled
+            ? toParentSlotChoice(parent2SlotMode, parent2JoinChildIdx, parent2ClubId, parent2Slot)
             : undefined,
         }
       })

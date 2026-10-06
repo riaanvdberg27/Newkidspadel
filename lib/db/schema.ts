@@ -230,6 +230,11 @@ export const enrollments = pgTable("enrollments", {
   // Rands added to this enrollment's price for parent participation, captured at
   // enrollment time so later price changes don't retroactively change history
   parentAddOnAmount: integer("parentAddOnAmount").notNull().default(0),
+  // A parent who signs up to train is their own enrollment row (separately counted, billed
+  // and scheduled). For those rows childName holds the parent's name, parentAddOnAmount holds
+  // their monthly price, and linkedEnrollmentId points at the child enrollment they signed up with.
+  isParentSignup: boolean("isParentSignup").notNull().default(false),
+  linkedEnrollmentId: integer("linkedEnrollmentId"),
   // Debit order
   debitAccountHolder: text("debitAccountHolder"),
   debitBankName: text("debitBankName"),
