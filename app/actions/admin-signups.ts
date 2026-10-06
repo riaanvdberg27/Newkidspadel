@@ -1,12 +1,13 @@
 "use server"
 
-import { asc, desc, eq, ilike, or, and } from "drizzle-orm"
+import { asc, desc, eq, ilike, or, and, sql } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { enrollments, user, coachClubs, coaches, packages, subscriptionMonths } from "@/lib/db/schema"
+import { enrollments, user, coachClubs, coaches, packages, subscriptionMonths, groupAccessCodes } from "@/lib/db/schema"
+import { generateMonthsForEnrollment } from "@/app/actions/subscription-months"
 import { requireAdmin } from "@/lib/admin-auth"
 import { generateContractPdf } from "@/lib/contract-pdf"
 import { sendWelcomeEmail } from "@/lib/email"
-import { formatSlot } from "@/lib/slots"
+import { formatSlot, calculateAge } from "@/lib/slots"
 import { notifyUser } from "@/app/actions/notifications"
 import { put } from "@vercel/blob"
 import { revalidatePath } from "next/cache"
@@ -586,6 +587,118 @@ async function resolveCoachForClub(clubId: number | null | undefined): Promise<{
     return rows[0] ?? null
   } catch {
     return null
+  }
+}
+
+export type AddSiblingInput = {
+  /** Existing enrollment whose family (parent, package, club, coach, order) the new child joins. */
+  sourceEnrollmentId: number
+  childName: string
+  childDob: string
+  /** Optional own session; defaults to the source child's session. */
+  slotWeekday?: number | null
+  slotHour?: number | null
+}
+
+function ageGroupFor(age: number): string {
+  if (age <= 8) return "5-8"
+  if (age <= 13) return "9-13"
+  return "14-17"
+}
+
+/**
+ * Add a brother/sister to an existing family. The new child is a separate
+ * enrollment (own billing, own attendance) that inherits the parent details,
+ * package, club, coach, contract acceptance and order reference of the source
+ * enrollment, and is billed from the current month onwards.
+ */
+export async function addSiblingToFamily(
+  input: AddSiblingInput,
+): Promise<{ ok: boolean; id?: number; referenceNumber?: string; error?: string }> {
+  try {
+    await requireAdmin()
+    const name = input.childName.trim()
+    if (!name) return { ok: false, error: "Child name is required" }
+    const age = calculateAge(input.childDob)
+    if (age == null) return { ok: false, error: "A valid date of birth is required" }
+
+    const [src] = await db.select().from(enrollments).where(eq(enrollments.id, input.sourceEnrollmentId)).limit(1)
+    if (!src) return { ok: false, error: "Source enrollment not found" }
+
+    if (src.groupAccessCodeId) {
+      const [code] = await db
+        .select({ max: groupAccessCodes.maxRedemptions, used: groupAccessCodes.redemptionCount })
+        .from(groupAccessCodes)
+        .where(eq(groupAccessCodes.id, src.groupAccessCodeId))
+        .limit(1)
+      if (code && code.used >= code.max) {
+        return { ok: false, error: "This group access code has reached its maximum number of sign-ups" }
+      }
+    }
+
+    const referenceNumber = `NGP-2026-${nanoid(8).toUpperCase()}`
+    const weekday = input.slotWeekday ?? src.slotWeekday ?? null
+    const hour = input.slotHour != null ? String(input.slotHour) : (src.slotHour ?? null)
+
+    const [row] = await db
+      .insert(enrollments)
+      .values({
+        userId: src.userId,
+        referenceNumber,
+        parentName: src.parentName,
+        parentEmail: src.parentEmail,
+        parentMobile: src.parentMobile,
+        emergencyContactName: src.emergencyContactName,
+        emergencyContactPhone: src.emergencyContactPhone,
+        childName: name,
+        childDob: input.childDob,
+        childAge: age,
+        club: src.club,
+        clubId: src.clubId,
+        coachId: src.coachId,
+        coachName: src.coachName,
+        packageName: src.packageName,
+        slotWeekday: weekday ?? undefined,
+        slotHour: hour ?? undefined,
+        slotAgeGroup: ageGroupFor(age),
+        status: src.status === "inactive" || src.status === "cancelled" ? "pending" : src.status,
+        paymentType: src.paymentType,
+        paymentStatus: src.paymentStatus,
+        agreedTerms: src.agreedTerms,
+        consentMedia: src.consentMedia,
+        signatureData: src.signatureData,
+        signedName: src.signedName,
+        signedAt: src.signedAt,
+        orderReference: src.orderReference,
+        groupAccessCodeId: src.groupAccessCodeId,
+        parent1Enrolled: false,
+        parent2Enrolled: false,
+        parentAddOnAmount: 0,
+        isParentSignup: false,
+      })
+      .returning({ id: enrollments.id })
+
+    if (src.groupAccessCodeId) {
+      await db
+        .update(groupAccessCodes)
+        .set({ redemptionCount: sql`${groupAccessCodes.redemptionCount} + 1`, updatedAt: new Date() })
+        .where(eq(groupAccessCodes.id, src.groupAccessCodeId))
+    }
+
+    if (src.paymentType !== "once-off") {
+      const [pkg] = await db
+        .select({ price: packages.price })
+        .from(packages)
+        .where(eq(packages.name, src.packageName))
+        .limit(1)
+      await generateMonthsForEnrollment(row.id, (pkg?.price ?? 0) * 100, undefined, new Date())
+    }
+
+    revalidatePath("/admin")
+    revalidatePath("/coach/portal")
+    return { ok: true, id: row.id, referenceNumber }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Could not add sibling" }
   }
 }
 
