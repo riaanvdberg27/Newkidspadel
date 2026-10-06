@@ -616,14 +616,14 @@ export function AdminSignupsManager({
       <div className="mt-4 rounded-card border border-border bg-card shadow-sm">
         <table className="w-full table-fixed text-left text-xs">
           <colgroup>
-            <col style={{ width: "5%" }} />{/* ID */}
-            <col style={{ width: "13%" }} />{/* Child */}
-            <col style={{ width: "5%" }} />{/* Age */}
-            <col style={{ width: "11%" }} />{/* Parent */}
-            <col style={{ width: "9%" }} />{/* Package */}
+            <col style={{ width: "4%" }} />{/* ID */}
+            <col style={{ width: "18%" }} />{/* Child */}
+            <col style={{ width: "4%" }} />{/* Age */}
+            <col style={{ width: "10%" }} />{/* Parent */}
+            <col style={{ width: "8%" }} />{/* Package */}
             <col style={{ width: "8%" }} />{/* Club */}
-            <col style={{ width: "9%" }} />{/* Slot */}
-            <col style={{ width: "8%" }} />{/* Coach */}
+            <col style={{ width: "8%" }} />{/* Slot */}
+            <col style={{ width: "7%" }} />{/* Coach */}
             <col style={{ width: "7%" }} />{/* Status */}
             <col style={{ width: "8%" }} />{/* Signed up */}
             <col style={{ width: "8%" }} />{/* Payment */}
@@ -652,7 +652,10 @@ export function AdminSignupsManager({
               const coachData = allCoaches.find((c) => c.name === s.coachName)
               const coachImg = coachData?.imageUrl ?? null
               return (
-                <tr key={s.id} className="hover:bg-muted/20 align-middle">
+                <tr
+                  key={s.id}
+                  className={`align-middle ${s.isParentSignup ? "bg-primary/10 hover:bg-primary/20" : "hover:bg-muted/20"}`}
+                >
                   {/* Enrollment ID */}
                   <td className="px-2 py-2">
                     <span className="inline-block rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] font-semibold text-muted-foreground">
@@ -660,13 +663,15 @@ export function AdminSignupsManager({
                     </span>
                   </td>
                   {/* Child name */}
-                  <td className="truncate px-3 py-2">
-                    <span className="font-semibold text-navy">{s.childName}</span>
-                    {s.isParentSignup && (
-                      <span className="ml-1.5 rounded-full bg-primary/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-primary">
-                        Parent
-                      </span>
-                    )}
+                  <td className="px-3 py-2">
+                    <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+                      <span className="font-semibold text-navy">{s.childName}</span>
+                      {s.isParentSignup && (
+                        <span className="shrink-0 rounded-full bg-primary px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-navy">
+                          Parent
+                        </span>
+                      )}
+                    </div>
                   </td>
                   {/* Age — own compact column. Computed live from DOB so it advances on each birthday
                       without ever touching the stored slot assignment. */}
