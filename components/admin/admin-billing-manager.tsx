@@ -64,6 +64,13 @@ function StatusDot({ status }: { status: string }) {
 // ---------------------------------------------------------------------------
 
 type SubView = "ledger" | "outstanding" | "revenue"
+type LedgerSort = "signup" | "name" | "surname"
+
+const LEDGER_SORT_OPTIONS: { value: LedgerSort; label: string }[] = [
+  { value: "signup", label: "Date signed up (new to old)" },
+  { value: "name", label: "Name (A to Z)" },
+  { value: "surname", label: "Surname (A to Z)" },
+]
 
 export function AdminBillingManager({
   initialLedger,
@@ -214,6 +221,7 @@ function LedgerView({
   onLedgerChange: (l: BillingLedgerEntry[]) => void
 }) {
   const [search, setSearch] = useState("")
+  const [sortBy, setSortBy] = useState<LedgerSort>("signup")
   const [expandedId, setExpandedId] = useState<number | null>(null)
   const [pending, startTransition] = useTransition()
   const [updating, setUpdating] = useState<number | null>(null)
@@ -238,6 +246,7 @@ function LedgerView({
         packageName: string
         club: string
         referenceNumber: string
+        signedUpAt: number
         months: BillingLedgerEntry[]
       }
     >()
@@ -252,26 +261,42 @@ function LedgerView({
           packageName: row.packageName,
           club: row.club,
           referenceNumber: row.referenceNumber,
+          signedUpAt: new Date(row.enrollmentCreatedAt).getTime(),
           months: [],
         })
       }
       map.get(row.enrollmentId)!.months.push(row)
     }
-    return [...map.values()].sort((a, b) => a.childName.localeCompare(b.childName))
+    return [...map.values()]
   }, [ledger])
 
   const filtered = useMemo(() => {
-    if (!search.trim()) return grouped
-    const q = search.toLowerCase()
-    return grouped.filter(
-      (g) =>
-        g.childName.toLowerCase().includes(q) ||
-        g.parentName.toLowerCase().includes(q) ||
-        g.club.toLowerCase().includes(q) ||
-        g.packageName.toLowerCase().includes(q) ||
-        g.referenceNumber.toLowerCase().includes(q),
-    )
-  }, [grouped, search])
+    const q = search.trim().toLowerCase()
+    const matches = q
+      ? grouped.filter(
+          (g) =>
+            g.childName.toLowerCase().includes(q) ||
+            g.parentName.toLowerCase().includes(q) ||
+            g.club.toLowerCase().includes(q) ||
+            g.packageName.toLowerCase().includes(q) ||
+            g.referenceNumber.toLowerCase().includes(q),
+        )
+      : grouped
+    const splitName = (full: string) => {
+      const parts = full.trim().split(/\s+/)
+      return { first: parts[0] ?? "", last: parts.length > 1 ? parts.slice(1).join(" ") : "" }
+    }
+    const byText = (a: string, b: string) => a.localeCompare(b, undefined, { sensitivity: "base" })
+    return [...matches].sort((a, b) => {
+      if (sortBy === "signup") return b.signedUpAt - a.signedUpAt
+      const an = splitName(a.childName)
+      const bn = splitName(b.childName)
+      if (sortBy === "surname") {
+        return byText(an.last, bn.last) || byText(an.first, bn.first)
+      }
+      return byText(an.first, bn.first) || byText(an.last, bn.last)
+    })
+  }, [grouped, search, sortBy])
 
   function handleApply(rowId: number) {
     const dbRow = ledger.find((r) => r.id === rowId)
@@ -329,15 +354,32 @@ function LedgerView({
 
   return (
     <div className="space-y-3">
-      {/* Search */}
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by child, parent, club, package or reference..."
-          className="w-full rounded-lg border border-border bg-background pl-9 pr-4 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-navy/30"
-        />
+      {/* Search + sort */}
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by child, parent, club, package or reference..."
+            className="w-full rounded-lg border border-border bg-background pl-9 pr-4 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-navy/30"
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <label htmlFor="ledger-sort" className="shrink-0 text-xs font-semibold text-muted-foreground">
+            Sort by
+          </label>
+          <select
+            id="ledger-sort"
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as LedgerSort)}
+            className="rounded-lg border border-border bg-background px-3 py-2 text-sm font-semibold text-navy focus:outline-none focus:ring-2 focus:ring-navy/30"
+          >
+            {LEDGER_SORT_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {/* Summary row */}

@@ -114,6 +114,7 @@ export type BillingLedgerEntry = SubscriptionMonthRow & {
   packageName: string
   club: string
   referenceNumber: string
+  enrollmentCreatedAt: Date
 }
 
 export type MonthLabel = { year: number; month: number; label: string }
@@ -311,6 +312,7 @@ export async function getBillingLedger(year = currentBillingYear()): Promise<Bil
       packageName: enrollments.packageName,
       club: enrollments.club,
       referenceNumber: enrollments.referenceNumber,
+      enrollmentCreatedAt: enrollments.createdAt,
     })
     .from(subscriptionMonths)
     .innerJoin(enrollments, eq(subscriptionMonths.enrollmentId, enrollments.id))
