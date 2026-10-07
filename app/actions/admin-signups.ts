@@ -3,7 +3,7 @@
 import { asc, desc, eq, ilike, or, and, sql } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { enrollments, user, coachClubs, coaches, packages, subscriptionMonths, groupAccessCodes } from "@/lib/db/schema"
-import { generateMonthsForEnrollment } from "@/app/actions/subscription-months"
+import { generateMonthsForEnrollment, removeUnpaidMonthsFromNow } from "@/app/actions/subscription-months"
 import { requireAdmin } from "@/lib/admin-auth"
 import { generateContractPdf } from "@/lib/contract-pdf"
 import { sendWelcomeEmail } from "@/lib/email"
@@ -459,6 +459,7 @@ export async function deactivateSignup(id: number): Promise<{ ok: boolean; error
   try {
     await requireAdmin()
     await db.update(enrollments).set({ status: "inactive", updatedAt: new Date() }).where(eq(enrollments.id, id))
+    await removeUnpaidMonthsFromNow([id])
     revalidatePath("/admin")
     revalidatePath("/coach/portal")
     return { ok: true }

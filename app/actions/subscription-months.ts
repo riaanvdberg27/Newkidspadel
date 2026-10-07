@@ -233,6 +233,34 @@ export async function backfillAllEnrollments(): Promise<{ generated: number }> {
 }
 
 // ---------------------------------------------------------------------------
+// Deactivation — drop unpaid months from the deactivation month onward
+// ---------------------------------------------------------------------------
+
+/**
+ * Called when enrollments are made inactive. Removes their still-unpaid months
+ * from the current month onward so no future revenue is expected. Paid and
+ * partially-paid months, and earlier unpaid arrears, are left untouched.
+ */
+export async function removeUnpaidMonthsFromNow(enrollmentIds: number[]): Promise<{ removed: number }> {
+  await requireAdmin()
+  if (enrollmentIds.length === 0) return { removed: 0 }
+  const nowSA = new Date(Date.now() + 2 * 60 * 60 * 1000)
+  const fromIndex = nowSA.getUTCFullYear() * 12 + nowSA.getUTCMonth() + 1
+  const result = await db
+    .delete(subscriptionMonths)
+    .where(
+      and(
+        inArray(subscriptionMonths.enrollmentId, enrollmentIds),
+        eq(subscriptionMonths.status, "outstanding"),
+        sql`COALESCE(${subscriptionMonths.paidCents}, 0) = 0`,
+        sql`(${subscriptionMonths.year} * 12 + ${subscriptionMonths.month}) >= ${fromIndex}`,
+      ),
+    )
+  revalidatePath("/admin")
+  return { removed: result.rowCount ?? 0 }
+}
+
+// ---------------------------------------------------------------------------
 // Get months for a single enrollment
 // ---------------------------------------------------------------------------
 
@@ -319,10 +347,11 @@ export async function getBillingLedger(year = currentBillingYear()): Promise<Bil
     .where(
       and(
         eq(subscriptionMonths.year, year),
-        // "active" or "pending" enrollments belong in billing — see
-        // backfillAllEnrollments. Only inactive/cancelled (including test
-        // signups) must never appear here.
-        inArray(enrollments.status, ["active", "pending"]),
+        // Active/pending enrollments are billed. Inactive enrollments keep the
+        // months already billed/paid (revenue history) — their unpaid months
+        // from the deactivation date onward are removed by
+        // removeUnpaidMonthsFromNow. Cancelled/test signups never appear.
+        inArray(enrollments.status, ["active", "pending", "inactive"]),
       ),
     )
     .orderBy(asc(enrollments.childName), asc(subscriptionMonths.month))
@@ -395,8 +424,9 @@ export async function getOutstandingReport(): Promise<OutstandingEntry[]> {
         sql`(${subscriptionMonths.year} * 12 + ${subscriptionMonths.month}) <= ${dueIndex}`,
         // outstanding OR partial (partial still has a remaining balance)
         sql`${subscriptionMonths.status} IN ('outstanding', 'partial')`,
-        // "active" or "pending" enrollments belong in billing — see getBillingLedger.
-        inArray(enrollments.status, ["active", "pending"]),
+        // See getBillingLedger — inactive enrollments only retain arrears from
+        // before they were deactivated.
+        inArray(enrollments.status, ["active", "pending", "inactive"]),
       )
     )
     .orderBy(asc(enrollments.childName), asc(subscriptionMonths.month))
@@ -480,8 +510,8 @@ export async function getRevenueReport(year = currentBillingYear()): Promise<Rev
     .where(
       and(
         eq(subscriptionMonths.year, year),
-        // "active" or "pending" enrollments belong in billing — see getBillingLedger.
-        inArray(enrollments.status, ["active", "pending"]),
+        // See getBillingLedger — paid months of inactive enrollments stay as revenue.
+        inArray(enrollments.status, ["active", "pending", "inactive"]),
       ),
     )
     .orderBy(asc(subscriptionMonths.month))
