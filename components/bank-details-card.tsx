@@ -2,6 +2,7 @@
 // chooses to pay via EFT at sign-up, or as a fallback if a Netcash card
 // payment fails, is declined, or the gateway is unreachable.
 export const NEXT_GEN_BANK_DETAILS = {
+  bankName: "First National Bank (FNB)",
   accountName: "Next Gen Padel Academy",
   accountNumber: "63214278441",
   accountType: "Business Cheque",
@@ -32,6 +33,10 @@ export function BankDetailsCard({
         {note ?? "You can also complete your payment manually via EFT using the banking details below."}
       </p>
       <dl className="mt-4 space-y-2 text-sm">
+        <div className="flex justify-between gap-4 border-b border-border pb-2">
+          <dt className="text-muted-foreground">Bank</dt>
+          <dd className="font-semibold text-navy">{NEXT_GEN_BANK_DETAILS.bankName}</dd>
+        </div>
         <div className="flex justify-between gap-4 border-b border-border pb-2">
           <dt className="text-muted-foreground">Account Holder</dt>
           <dd className="font-semibold text-navy">{NEXT_GEN_BANK_DETAILS.accountName}</dd>
