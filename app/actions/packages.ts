@@ -5,6 +5,7 @@ import { and, asc, eq, inArray, sql } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { packages, packageSlots, packageClubs, clubs, enrollments } from "@/lib/db/schema"
 import { requireAdmin } from "@/lib/admin-auth"
+import { removeUnpaidMonthsFromNow } from "@/app/actions/subscription-months"
 import type { PackageSlot } from "@/lib/db/schema"
 
 export type FeatureItem = { type: "heading" | "bullet"; text: string }
@@ -352,8 +353,10 @@ export async function deactivatePackage(id: number): Promise<{ ok: boolean; deac
     .update(enrollments)
     .set({ status: "inactive", updatedAt: new Date() })
     .where(and(eq(enrollments.packageName, (await db.select({ name: packages.name }).from(packages).where(eq(packages.id, id)).limit(1))[0]?.name ?? ""), inArray(enrollments.status, ["active", "pending"])))
+    .returning({ id: enrollments.id })
+  await removeUnpaidMonthsFromNow(result.map((r) => r.id))
   revalidatePaths()
-  return { ok: true, deactivatedEnrollments: result.rowCount ?? 0 }
+  return { ok: true, deactivatedEnrollments: result.length }
 }
 
 /**
