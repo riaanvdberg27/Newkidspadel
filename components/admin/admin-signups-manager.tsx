@@ -2452,6 +2452,7 @@ function ProgrammeFields({
                   packageId={selectedPkg.id}
                   packageName={selectedPkg.name}
                   ageGroup={ageGroup}
+                  anyAgeGroup
                   clubId={clubId}
                   selected={selectedSlot}
                   onSelect={handleSlotSelect}
@@ -2474,6 +2475,7 @@ function ProgrammeFields({
                     packageId={selectedPkg.id}
                     packageName={selectedPkg.name}
                     ageGroup={ageGroup}
+                    anyAgeGroup
                     clubId={clubId}
                     selected={slotWeekday2 !== "" && slotHour2 !== "" ? { weekday: Number(slotWeekday2), hour: Number(slotHour2) } : null}
                     onSelect={(slot) => { setSlotWeekday2(String(slot.weekday)); setSlotHour2(String(slot.hour)) }}
