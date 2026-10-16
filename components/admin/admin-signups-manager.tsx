@@ -36,7 +36,7 @@ import { MONTH_NAMES } from "@/lib/billing-utils"
 import type { CoachRow } from "@/app/actions/coaches"
 import type { PublicPackage } from "@/app/actions/packages"
 import type { Club } from "@/lib/db/schema"
-import { formatSlot, calculateAge } from "@/lib/slots"
+import { formatSlot, formatHour, calculateAge, SLOT_HOURS } from "@/lib/slots"
 import { PackageSlotPicker } from "@/components/package-slot-picker"
 import type { SelectedSlot } from "@/components/slot-picker"
 
@@ -82,9 +82,9 @@ function ageGroupFromAge(age: number | string | null | undefined): string {
 }
 
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
-/** Admin manual day/time assignment is restricted to business days & hours: Monday–Saturday, 10:00–17:00. */
+/** Admin manual day/time assignment is restricted to Monday–Saturday, in half-hour steps from 08:00 to 18:00. */
 const ASSIGNABLE_WEEKDAYS = [1, 2, 3, 4, 5, 6]
-const HOURS = Array.from({ length: 8 }, (_, i) => i + 10)
+const HOURS = SLOT_HOURS
 const STATUS_OPTIONS = ["active", "pending", "cancelled", "on-hold", "inactive"]
 
 // ---------------------------------------------------------------------------
@@ -1314,7 +1314,7 @@ function AddSiblingModal({
                   className="flex-1 rounded-md border border-border bg-background px-2 py-1.5"
                 >
                   {HOURS.map((h) => (
-                    <option key={h} value={h}>{String(h).padStart(2, "0")}:00</option>
+                    <option key={h} value={h}>{formatHour(h)}</option>
                   ))}
                 </select>
               </div>
@@ -1441,7 +1441,7 @@ function CustomizeTimeSlotsModal({
                 <Field label="Time">
                   <select value={slotHour} onChange={(e) => setSlotHour(e.target.value)} className={selectCls}>
                     <option value="">— not set —</option>
-                    {HOURS.map((h) => <option key={h} value={h}>{String(h).padStart(2, "0")}:00</option>)}
+                    {HOURS.map((h) => <option key={h} value={h}>{formatHour(h)}</option>)}
                   </select>
                 </Field>
               </div>
@@ -1459,7 +1459,7 @@ function CustomizeTimeSlotsModal({
                   <Field label="Time">
                     <select value={slotHour2} onChange={(e) => setSlotHour2(e.target.value)} className={selectCls}>
                       <option value="">— not set —</option>
-                      {HOURS.map((h) => <option key={h} value={h}>{String(h).padStart(2, "0")}:00</option>)}
+                      {HOURS.map((h) => <option key={h} value={h}>{formatHour(h)}</option>)}
                     </select>
                   </Field>
                 </div>
@@ -2418,7 +2418,7 @@ function ProgrammeFields({
                 <Field label={isAdvanced ? "Session 1 — time" : "Session time"}>
                   <select value={slotHour} onChange={(e) => setSlotHour(e.target.value)} className={selectCls}>
                     <option value="">— not set —</option>
-                    {HOURS.map((h) => <option key={h} value={h}>{String(h).padStart(2, "0")}:00</option>)}
+                    {HOURS.map((h) => <option key={h} value={h}>{formatHour(h)}</option>)}
                   </select>
                 </Field>
               </div>
@@ -2433,7 +2433,7 @@ function ProgrammeFields({
                   <Field label="Session 2 — time">
                     <select value={slotHour2} onChange={(e) => setSlotHour2(e.target.value)} className={selectCls}>
                       <option value="">— not set —</option>
-                      {HOURS.map((h) => <option key={h} value={h}>{String(h).padStart(2, "0")}:00</option>)}
+                      {HOURS.map((h) => <option key={h} value={h}>{formatHour(h)}</option>)}
                     </select>
                   </Field>
                 </div>
@@ -2505,7 +2505,7 @@ function ProgrammeFields({
             <Field label={isAdvanced ? "Session 1 — time" : "Session time"}>
               <select value={slotHour} onChange={(e) => setSlotHour(e.target.value)} className={selectCls}>
                 <option value="">— not set —</option>
-                {HOURS.map((h) => <option key={h} value={h}>{String(h).padStart(2, "0")}:00</option>)}
+                {HOURS.map((h) => <option key={h} value={h}>{formatHour(h)}</option>)}
               </select>
             </Field>
           </div>
@@ -2520,7 +2520,7 @@ function ProgrammeFields({
               <Field label="Session 2 — time">
                 <select value={slotHour2} onChange={(e) => setSlotHour2(e.target.value)} className={selectCls}>
                   <option value="">— not set —</option>
-                  {HOURS.map((h) => <option key={h} value={h}>{String(h).padStart(2, "0")}:00</option>)}
+                  {HOURS.map((h) => <option key={h} value={h}>{formatHour(h)}</option>)}
                 </select>
               </Field>
             </div>
