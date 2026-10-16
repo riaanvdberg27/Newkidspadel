@@ -303,6 +303,30 @@ export async function getPackageSlots(packageId: number): Promise<CustomSlot[]> 
   return rows.map((r) => ({ id: r.id, packageId: r.packageId, clubId: r.clubId, weekday: r.weekday, hour: r.hour, capacity: r.capacity, ageGroup: r.ageGroup }))
 }
 
+/**
+ * Live active-booking counts per club/weekday/hour for a package (admin).
+ * Keyed "clubId-weekday-hour"; bookings are pooled across age groups, matching the signup picker.
+ */
+export async function getPackageSlotBookings(packageName: string): Promise<Record<string, number>> {
+  await requireAdmin()
+  const rows = await db
+    .select({
+      clubId: enrollments.clubId,
+      weekday: enrollments.slotWeekday,
+      hour: enrollments.slotHour,
+      count: sql<number>`cast(count(*) as int)`,
+    })
+    .from(enrollments)
+    .where(and(eq(enrollments.packageName, packageName), eq(enrollments.status, "active")))
+    .groupBy(enrollments.clubId, enrollments.slotWeekday, enrollments.slotHour)
+  const result: Record<string, number> = {}
+  for (const r of rows) {
+    if (r.clubId == null || r.weekday == null || r.hour == null) continue
+    result[`${r.clubId}-${r.weekday}-${parseFloat(String(r.hour))}`] = r.count
+  }
+  return result
+}
+
 export type PackageInput = {
   slug: string
   name: string

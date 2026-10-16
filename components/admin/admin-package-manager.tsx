@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { useEffect, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { Pencil, Plus, Check, X, PowerOff, RotateCcw } from "lucide-react"
 import {
@@ -9,6 +9,7 @@ import {
   deactivatePackage,
   reactivatePackage,
   getPackageSlots,
+  getPackageSlotBookings,
   type PublicPackage,
   type PackageInput,
   type CustomSlot,
@@ -469,6 +470,20 @@ function PackageForm({
     return m
   })
 
+  // Live active bookings per "clubId-weekday-hour" so admins see spots taken vs. capacity
+  const [bookings, setBookings] = useState<Record<string, number>>({})
+  const packageName = pkg?.name
+  useEffect(() => {
+    if (!packageName) return
+    let active = true
+    getPackageSlotBookings(packageName).then((data) => {
+      if (active) setBookings(data)
+    })
+    return () => {
+      active = false
+    }
+  }, [packageName])
+
   // Ensure activeSlotClubId stays in sync when selectedClubIds changes
   function handleClubToggle(clubId: number, checked: boolean) {
     setSelectedClubIds((prev) => {
@@ -904,6 +919,8 @@ function PackageForm({
                               const k = slotKey(activeSlotClubId, activeAgeGroup, wd, hour)
                               const isOn = k in customSlots
                               const cap = customSlots[k] ?? 10
+                              const booked = bookings[`${activeSlotClubId}-${wd}-${hour}`] ?? 0
+                              const left = Math.max(0, cap - booked)
                               return (
                                 <td key={wd} className="px-1.5 py-1.5 text-center">
                                   {isOn ? (
@@ -924,6 +941,15 @@ function PackageForm({
                                         aria-label={`Capacity for ${WEEKDAYS[wd]} ${formatHour(hour)} (${activeAgeGroup}) at club ${activeSlotClubId}`}
                                         className="w-12 rounded border border-border bg-background px-1 py-0.5 text-center text-xs outline-none focus:border-lime"
                                       />
+                                      {pkg && (
+                                        <span
+                                          className={`whitespace-nowrap text-[10px] font-semibold ${
+                                            left === 0 ? "text-destructive" : "text-muted-foreground"
+                                          }`}
+                                        >
+                                          {booked} booked · {left} left
+                                        </span>
+                                      )}
                                     </div>
                                   ) : (
                                     <button
