@@ -154,7 +154,59 @@ export async function getPublicPackageSlotAvailability(
   packageName: string,
   ageGroup?: string,
   clubId?: number,
-): Promise<CustomSlotWithAvailability[]> {
+  options?: { anyAgeGroup?: boolean },
+  ): Promise<CustomSlotWithAvailability[]> {
+  // Admin reassignments ignore the child's age group: any slot opened for this package at the
+  // venue (under any age tab in Packages) must be selectable, and bookings are pooled per slot.
+  if (options?.anyAgeGroup) {
+    const mergedConditions = [eq(packageSlots.packageId, packageId)]
+    if (clubId != null && clubId !== 0) mergedConditions.push(eq(packageSlots.clubId, clubId))
+    const allRows = await db
+      .select()
+      .from(packageSlots)
+      .where(and(...mergedConditions))
+      .orderBy(asc(packageSlots.weekday), asc(packageSlots.hour))
+    if (!allRows.length) return []
+
+    const bookedWhere = [eq(enrollments.packageName, packageName), eq(enrollments.status, "active")]
+    if (clubId != null && clubId !== 0) bookedWhere.push(eq(enrollments.clubId, clubId))
+    const booked = await db
+      .select({
+        weekday: enrollments.slotWeekday,
+        hour: enrollments.slotHour,
+        count: sql<number>`cast(count(*) as int)`,
+      })
+      .from(enrollments)
+      .where(and(...bookedWhere))
+      .groupBy(enrollments.slotWeekday, enrollments.slotHour)
+    const bookedByTime = new Map<string, number>()
+    for (const r of booked) {
+      if (r.weekday == null || r.hour == null) continue
+      bookedByTime.set(`${r.weekday}-${parseFloat(String(r.hour))}`, r.count)
+    }
+
+    const merged = new Map<string, CustomSlotWithAvailability>()
+    for (const s of allRows) {
+      const h = parseFloat(String(s.hour))
+      const key = `${s.weekday}-${h}`
+      const existing = merged.get(key)
+      if (existing && existing.capacity >= s.capacity) continue
+      const bookedCount = bookedByTime.get(key) ?? 0
+      merged.set(key, {
+        id: s.id,
+        packageId: s.packageId,
+        clubId: s.clubId,
+        weekday: s.weekday,
+        hour: s.hour,
+        capacity: s.capacity,
+        ageGroup: s.ageGroup,
+        booked: bookedCount,
+        remaining: Math.max(0, s.capacity - bookedCount),
+      })
+    }
+    return Array.from(merged.values())
+  }
+
   // 1. Get slot definitions scoped to this club (or fall back to clubId=0 rows)
   const conditions = [eq(packageSlots.packageId, packageId)]
   // Only filter by ageGroup when one is explicitly provided — never hard-code a default here
@@ -249,6 +301,30 @@ export async function getPackageSlots(packageId: number): Promise<CustomSlot[]> 
     .where(eq(packageSlots.packageId, packageId))
     .orderBy(asc(packageSlots.clubId), asc(packageSlots.ageGroup), asc(packageSlots.weekday), asc(packageSlots.hour))
   return rows.map((r) => ({ id: r.id, packageId: r.packageId, clubId: r.clubId, weekday: r.weekday, hour: r.hour, capacity: r.capacity, ageGroup: r.ageGroup }))
+}
+
+/**
+ * Live active-booking counts per club/weekday/hour for a package (admin).
+ * Keyed "clubId-weekday-hour"; bookings are pooled across age groups, matching the signup picker.
+ */
+export async function getPackageSlotBookings(packageName: string): Promise<Record<string, number>> {
+  await requireAdmin()
+  const rows = await db
+    .select({
+      clubId: enrollments.clubId,
+      weekday: enrollments.slotWeekday,
+      hour: enrollments.slotHour,
+      count: sql<number>`cast(count(*) as int)`,
+    })
+    .from(enrollments)
+    .where(and(eq(enrollments.packageName, packageName), eq(enrollments.status, "active")))
+    .groupBy(enrollments.clubId, enrollments.slotWeekday, enrollments.slotHour)
+  const result: Record<string, number> = {}
+  for (const r of rows) {
+    if (r.clubId == null || r.weekday == null || r.hour == null) continue
+    result[`${r.clubId}-${r.weekday}-${parseFloat(String(r.hour))}`] = r.count
+  }
+  return result
 }
 
 export type PackageInput = {

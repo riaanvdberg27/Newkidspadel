@@ -593,7 +593,7 @@ export const orders = pgTable("orders", {
 export type Order = typeof orders.$inferSelect
 
 /**
- * payments — one row per successful (or failed) payment attempt.
+ * payments �� one row per successful (or failed) payment attempt.
  */
 export const payments = pgTable("payments", {
   id: serial("id").primaryKey(),
@@ -680,8 +680,12 @@ export const subscriptionMonths = pgTable(
     // Human-readable reason for the discount, e.g. "Sibling discount", "Bursary"
     discountReason: text("discountReason"),
     // For partial payments: amount actually received in cents
-    paidCents: integer("paidCents"),
-    // Netcash/payment reference that settled this month (if any)
+  paidCents: integer("paidCents"),
+  // For overpayments (status 'overpaid'): extra amount received above what was due, in cents
+  overpaidCents: integer("overpaidCents"),
+  // Why the client overpaid, e.g. "Paid ahead", "Rounded up", "Credit for next month"
+  overpaidReason: text("overpaidReason"),
+  // Netcash/payment reference that settled this month (if any)
     paymentReference: text("paymentReference"),
     // Notes added by admin
     notes: text("notes"),

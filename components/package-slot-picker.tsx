@@ -14,6 +14,7 @@ export function PackageSlotPicker({
   clubId,
   selected,
   disabledWeekday,
+  anyAgeGroup = false,
   onSelect,
 }: {
   packageId: number
@@ -24,6 +25,8 @@ export function PackageSlotPicker({
   selected: SelectedSlot | null
   /** Weekday number (0–6) to disable — used for the second session to prevent same-day booking. */
   disabledWeekday?: number
+  /** Admin use: show slots opened under any age group instead of only the child's own. */
+  anyAgeGroup?: boolean
   onSelect: (slot: SelectedSlot) => void
 }) {
   const [slots, setSlots] = useState<CustomSlotWithAvailability[] | null>(null)
@@ -32,11 +35,11 @@ export function PackageSlotPicker({
   useEffect(() => {
     let active = true
     setLoading(true)
-    getPublicPackageSlotAvailability(packageId, packageName, ageGroup, clubId)
+    getPublicPackageSlotAvailability(packageId, packageName, ageGroup, clubId, { anyAgeGroup })
       .then((data) => { if (active) setSlots(data) })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
-  }, [packageId, packageName, ageGroup, clubId])
+  }, [packageId, packageName, ageGroup, clubId, anyAgeGroup])
 
   if (loading) {
     return (
