@@ -27,7 +27,9 @@ export type SubscriptionMonthRow = {
   discountPct: number
   discountRandCents: number
   discountReason: string | null
+  /** For status "partial": the adjusted amount due for the month (replaces the full amount). */
   paidCents: number | null
+  partialReason: string | null
   /** Extra amount received above the amount due (only when status === "overpaid"). */
   overpaidCents: number | null
   overpaidReason: string | null
@@ -331,6 +333,7 @@ export async function getBillingLedger(year = currentBillingYear()): Promise<Bil
       discountRandCents: subscriptionMonths.discountRandCents,
       discountReason: subscriptionMonths.discountReason,
       paidCents: subscriptionMonths.paidCents,
+      partialReason: subscriptionMonths.partialReason,
       overpaidCents: subscriptionMonths.overpaidCents,
       overpaidReason: subscriptionMonths.overpaidReason,
       paymentReference: subscriptionMonths.paymentReference,
@@ -427,8 +430,8 @@ export async function getOutstandingReport(): Promise<OutstandingEntry[]> {
     .where(
       and(
         sql`(${subscriptionMonths.year} * 12 + ${subscriptionMonths.month}) <= ${dueIndex}`,
-        // outstanding OR partial (partial still has a remaining balance)
-        sql`${subscriptionMonths.status} IN ('outstanding', 'partial')`,
+        // Partial months are adjusted amounts that are settled — no balance remains.
+        eq(subscriptionMonths.status, "outstanding"),
         // See getBillingLedger — inactive enrollments only retain arrears from
         // before they were deactivated.
         inArray(enrollments.status, ["active", "pending", "inactive"]),
@@ -456,10 +459,7 @@ export async function getOutstandingReport(): Promise<OutstandingEntry[]> {
     const entry = map.get(row.enrollmentId)!
     // Effective due amount after both the % and fixed-Rand discounts
     const discountedCents = effectiveMonthCents(row.amountCents, row.discountPct, row.discountRandCents)
-    // Remaining = discounted total minus what's already been paid (for partial)
-    const remainingCents = row.status === "partial"
-      ? Math.max(0, discountedCents - (row.paidCents ?? 0))
-      : discountedCents
+    const remainingCents = discountedCents
     entry.outstandingMonths.push({
       id: row.id,
       year: row.year,
@@ -563,13 +563,12 @@ export async function getRevenueReport(year = currentBillingYear()): Promise<Rev
       summary.outstandingCents += discountedCents
       summary.outstandingCount++
     } else if (row.status === "partial") {
-      // Partial: paidCents counts as collected, remainder is outstanding
-      const paid = row.paidCents ?? 0
-      const remaining = Math.max(0, discountedCents - paid)
-      summary.paidCents += paid
-      summary.outstandingCents += remaining
-      if (remaining > 0) summary.outstandingCount++
-      else summary.paidCount++
+      // Partial: an adjusted amount (e.g. started mid-month). It replaces the
+      // full amount for the month, so it is fully collected with no balance.
+      const adjusted = row.paidCents ?? 0
+      summary.totalCents += adjusted - discountedCents
+      summary.paidCents += adjusted
+      summary.paidCount++
     }
   }
 
@@ -590,12 +589,22 @@ export async function updateMonthStatus(
     discountRandCents?: number
     discountReason?: string
     paidCents?: number
+    partialReason?: string
     overpaidCents?: number
     overpaidReason?: string
   },
 ): Promise<{ ok: boolean; error?: string }> {
   try {
     await requireAdmin()
+
+    if (status === "partial") {
+      if (!opts?.paidCents || opts.paidCents <= 0) {
+        return { ok: false, error: "Enter the adjusted amount for this month." }
+      }
+      if (!opts.partialReason?.trim()) {
+        return { ok: false, error: "Please give a reason for the partial amount." }
+      }
+    }
 
     if (status === "overpaid") {
       if (!opts?.overpaidCents || opts.overpaidCents <= 0) {
@@ -643,6 +652,7 @@ export async function updateMonthStatus(
           : (opts?.discountRandCents ?? current?.discountRandCents ?? 0),
         discountReason: useStoredDiscount ? (current?.discountReason ?? null) : (opts?.discountReason ?? null),
         paidCents: status === "partial" ? (opts?.paidCents ?? null) : null,
+        partialReason: status === "partial" ? (opts?.partialReason?.trim() ?? null) : null,
         paymentReference: opts?.paymentReference ?? null,
         notes: opts?.notes ?? null,
         updatedAt: new Date(),

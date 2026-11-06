@@ -264,7 +264,7 @@ async function syncBillingAmountForPackageChange(enrollmentId: number, newPackag
       .where(
         and(
           eq(subscriptionMonths.enrollmentId, enrollmentId),
-          or(eq(subscriptionMonths.status, "outstanding"), eq(subscriptionMonths.status, "partial")),
+          eq(subscriptionMonths.status, "outstanding"),
         ),
       )
   } catch (err) {
