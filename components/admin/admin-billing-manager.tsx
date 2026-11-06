@@ -42,7 +42,8 @@ function statusColor(status: string) {
   switch (status) {
     case "paid":        return "bg-lime/20 text-navy"
     case "outstanding": return "bg-amber-100 text-amber-800"
-    case "partial":     return "bg-orange-100 text-orange-700"
+    case "partial":     return "bg-lime/10 text-navy ring-1 ring-lime/50"
+    case "overpaid":    return "bg-navy text-white"
     default:            return "bg-muted text-muted-foreground"
   }
 }
@@ -52,7 +53,7 @@ function StatusDot({ status }: { status: string }) {
     <span
       className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize ${statusColor(status)}`}
     >
-      {status === "paid" && <Check className="mr-0.5 h-2.5 w-2.5" />}
+      {(status === "paid" || status === "partial" || status === "overpaid") && <Check className="mr-0.5 h-2.5 w-2.5" />}
       {status === "outstanding" && <AlertCircle className="mr-0.5 h-2.5 w-2.5" />}
       {status}
     </span>
@@ -232,6 +233,9 @@ function LedgerView({
   const [discountRandInputs, setDiscountRandInputs] = useState<Record<number, string>>({})
   const [discountReasons, setDiscountReasons] = useState<Record<number, string>>({})
   const [partialInputs, setPartialInputs] = useState<Record<number, string>>({})
+  const [overpaidInputs, setOverpaidInputs] = useState<Record<number, string>>({})
+  const [overpaidReasonInputs, setOverpaidReasonInputs] = useState<Record<number, string>>({})
+  const [applyError, setApplyError] = useState<Record<number, string>>({})
 
   // Group ledger rows by enrollmentId
   const grouped = useMemo(() => {
@@ -300,7 +304,7 @@ function LedgerView({
 
   function handleApply(rowId: number) {
     const dbRow = ledger.find((r) => r.id === rowId)
-    const newStatus = (pendingStatus[rowId] ?? dbRow?.status ?? "outstanding") as "outstanding" | "paid" | "partial"
+    const newStatus = (pendingStatus[rowId] ?? dbRow?.status ?? "outstanding") as "outstanding" | "paid" | "partial" | "overpaid"
     const discountPct = discountInputs[rowId] !== undefined
       ? Math.min(100, Math.max(0, parseInt(discountInputs[rowId]) || 0))
       : (dbRow?.discountPct ?? 0)
@@ -314,12 +318,38 @@ function LedgerView({
       ? parseFloat(partialInputs[rowId]) || 0
       : (dbRow?.paidCents != null ? dbRow.paidCents / 100 : 0)
     const paidCents = newStatus === "partial" ? Math.round(partialRaw * 100) : undefined
+    const overpaidRaw = overpaidInputs[rowId] !== undefined
+      ? parseFloat(overpaidInputs[rowId]) || 0
+      : (dbRow?.overpaidCents != null ? dbRow.overpaidCents / 100 : 0)
+    const overpaidCents = newStatus === "overpaid" ? Math.round(overpaidRaw * 100) : undefined
+    const overpaidReason = newStatus === "overpaid"
+      ? (overpaidReasonInputs[rowId] !== undefined ? overpaidReasonInputs[rowId] : (dbRow?.overpaidReason ?? "")).trim()
+      : undefined
+
+    if (newStatus === "overpaid" && (!overpaidCents || overpaidCents <= 0)) {
+      setApplyError((e) => ({ ...e, [rowId]: "Enter the extra amount overpaid." }))
+      return
+    }
+    if (newStatus === "overpaid" && !overpaidReason) {
+      setApplyError((e) => ({ ...e, [rowId]: "Add a reason for the overpayment." }))
+      return
+    }
+    setApplyError((e) => { const n = { ...e }; delete n[rowId]; return n })
 
     setUpdating(rowId)
     startTransition(async () => {
-      const res = await updateMonthStatus(rowId, newStatus, { discountPct, discountRandCents, discountReason, paidCents })
+      const res = await updateMonthStatus(rowId, newStatus, {
+        discountPct,
+        discountRandCents,
+        discountReason,
+        paidCents,
+        overpaidCents,
+        overpaidReason,
+      })
       setUpdating(null)
       if (res.ok) {
+        setOverpaidInputs((p) => { const n = { ...p }; delete n[rowId]; return n })
+        setOverpaidReasonInputs((p) => { const n = { ...p }; delete n[rowId]; return n })
         // Clear draft state — now committed to DB
         setPendingStatus((p) => { const n = { ...p }; delete n[rowId]; return n })
         setDiscountInputs((p) => { const n = { ...p }; delete n[rowId]; return n })
@@ -329,7 +359,7 @@ function LedgerView({
         onLedgerChange(
           ledger.map((r) =>
             r.id === rowId
-              ? { ...r, status: newStatus, discountPct, discountRandCents, discountReason: discountReason ?? null, paidCents: paidCents ?? null, paidAt: newStatus === "paid" ? new Date() : null }
+              ? { ...r, status: newStatus, discountPct, discountRandCents, discountReason: discountReason ?? null, paidCents: paidCents ?? null, overpaidCents: overpaidCents ?? null, overpaidReason: overpaidReason ?? null, paidAt: newStatus === "paid" || newStatus === "overpaid" ? new Date() : null }
               : r,
           ),
         )
@@ -386,11 +416,14 @@ function LedgerView({
       <div className="grid grid-cols-3 gap-3">
         {(() => {
           const total = ledger.length
-          const paid = ledger.filter((r) => r.status === "paid").length
+          const isSettled = (r: BillingLedgerEntry) => r.status === "paid" || r.status === "overpaid"
+          const paid = ledger.filter(isSettled).length
           const outstanding = ledger.filter((r) => r.status === "outstanding" || r.status === "partial").length
           const effCents = (r: BillingLedgerEntry) =>
             Math.max(0, Math.round(r.amountCents * (1 - (r.discountPct ?? 0) / 100)) - (r.discountRandCents ?? 0))
-          const paidR = ledger.filter((r) => r.status === "paid").reduce((s, r) => s + effCents(r), 0)
+          const paidR = ledger
+            .filter(isSettled)
+            .reduce((s, r) => s + effCents(r) + (r.status === "overpaid" ? (r.overpaidCents ?? 0) : 0), 0)
           const outR = ledger.reduce((s, r) => {
             if (r.status === "outstanding") return s + effCents(r)
             if (r.status === "partial") return s + Math.max(0, effCents(r) - (r.paidCents ?? 0))
@@ -409,7 +442,7 @@ function LedgerView({
       {/* Enrollment cards */}
       {filtered.map((group) => {
         const isExpanded = expandedId === group.enrollmentId
-        const paidCount = group.months.filter((m) => m.status === "paid").length
+        const paidCount = group.months.filter((m) => m.status === "paid" || m.status === "overpaid").length
         const totalCount = group.months.length
         const allPaid = paidCount === totalCount && totalCount > 0
         const hasOutstanding = group.months.some((m) => m.status === "outstanding")
@@ -447,8 +480,9 @@ function LedgerView({
                       title={`${MONTH_NAMES[m.month - 1]}: ${m.status}`}
                       className={`h-2 w-2 rounded-sm ${
                         m.status === "paid" ? "bg-lime" :
+                        m.status === "overpaid" ? "bg-navy" :
                         m.status === "outstanding" ? "bg-amber-400" :
-                        m.status === "partial" ? "bg-orange-400" :
+                        m.status === "partial" ? "bg-lime/40 ring-1 ring-lime" :
                         "bg-muted"
                       }`}
                     />
@@ -483,12 +517,17 @@ function LedgerView({
                       discountInputs[m.id] !== undefined ||
                       discountRandInputs[m.id] !== undefined ||
                       discountReasons[m.id] !== undefined ||
-                      partialInputs[m.id] !== undefined
+                      partialInputs[m.id] !== undefined ||
+                      overpaidInputs[m.id] !== undefined ||
+                      overpaidReasonInputs[m.id] !== undefined
+                    const overpaidVal = overpaidInputs[m.id] ?? (m.overpaidCents != null ? String((m.overpaidCents / 100).toFixed(2)) : "")
+                    const overpaidReasonVal = overpaidReasonInputs[m.id] ?? (m.overpaidReason ?? "")
 
                     return (
                       <div key={m.id} className={`rounded-lg border p-2.5 transition-colors ${
                         displayStatus === "paid" ? "border-lime/40 bg-lime/5" :
-                        displayStatus === "partial" ? "border-orange-200 bg-orange-50" :
+                        displayStatus === "overpaid" ? "border-navy/40 bg-navy/5" :
+                        displayStatus === "partial" ? "border-lime/50 bg-lime/10" :
                         "border-amber-200 bg-amber-50"
                       }`}>
                         <div className="flex items-center justify-between">
@@ -522,6 +561,7 @@ function LedgerView({
                           <option value="outstanding">Outstanding</option>
                           <option value="paid">Paid</option>
                           <option value="partial">Partial</option>
+                          <option value="overpaid">Overpaid</option>
                         </select>
 
                         {/* Discount % */}
@@ -572,10 +612,48 @@ function LedgerView({
                           </div>
                         )}
 
+                        {/* Overpayment — extra amount received above the amount due, with a reason */}
+                        {displayStatus === "overpaid" && (
+                          <div className="mt-1.5 space-y-1.5">
+                            <div>
+                              <label className="block text-[9px] font-semibold uppercase tracking-wide text-navy mb-0.5">
+                                Extra paid (R)
+                              </label>
+                              <input
+                                type="number"
+                                min={0}
+                                step={0.01}
+                                value={overpaidVal}
+                                onChange={(e) => setOverpaidInputs((p) => ({ ...p, [m.id]: e.target.value }))}
+                                placeholder="0.00"
+                                className="w-full rounded border border-navy/30 bg-background px-1.5 py-0.5 text-[10px] focus:outline-none focus:ring-1 focus:ring-navy/40"
+                              />
+                              <p className="mt-0.5 text-[9px] text-muted-foreground">
+                                Total received: {ZAR(effectiveCents + Math.round((parseFloat(overpaidVal) || 0) * 100))}
+                              </p>
+                            </div>
+                            <div>
+                              <label className="block text-[9px] font-semibold uppercase tracking-wide text-navy mb-0.5">
+                                Reason
+                              </label>
+                              <input
+                                type="text"
+                                value={overpaidReasonVal}
+                                onChange={(e) => setOverpaidReasonInputs((p) => ({ ...p, [m.id]: e.target.value }))}
+                                placeholder="e.g. Paid R1000 instead of R600"
+                                className="w-full rounded border border-navy/30 bg-background px-1.5 py-0.5 text-[10px] focus:outline-none focus:ring-1 focus:ring-navy/40"
+                              />
+                            </div>
+                            {applyError[m.id] && (
+                              <p className="text-[9px] font-semibold text-red-600">{applyError[m.id]}</p>
+                            )}
+                          </div>
+                        )}
+
                         {/* Partial amount — shown when draft or saved status is partial */}
                         {displayStatus === "partial" && (
                           <div className="mt-1.5">
-                            <label className="block text-[9px] font-semibold uppercase tracking-wide text-orange-700 mb-0.5">
+                            <label className="block text-[9px] font-semibold uppercase tracking-wide text-navy mb-0.5">
                               Paid (R)
                             </label>
                             <input
@@ -585,7 +663,7 @@ function LedgerView({
                               value={partialVal}
                               onChange={(e) => setPartialInputs((p) => ({ ...p, [m.id]: e.target.value }))}
                               placeholder="0.00"
-                              className="w-full rounded border border-orange-200 bg-background px-1.5 py-0.5 text-[10px] focus:outline-none focus:ring-1 focus:ring-orange-300"
+                              className="w-full rounded border border-lime/50 bg-background px-1.5 py-0.5 text-[10px] focus:outline-none focus:ring-1 focus:ring-lime"
                             />
                             {remainingCents > 0 && (
                               <p className="mt-0.5 text-[9px] font-semibold text-amber-700">

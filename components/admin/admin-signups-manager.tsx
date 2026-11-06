@@ -1504,6 +1504,9 @@ function InlineBillingPanel({ enrollmentId }: { enrollmentId: number }) {
   const [discountInputs, setDiscountInputs] = useState<Record<number, string>>({})
   const [discountReasons, setDiscountReasons] = useState<Record<number, string>>({})
   const [partialInputs, setPartialInputs] = useState<Record<number, string>>({})
+  const [overpaidInputs, setOverpaidInputs] = useState<Record<number, string>>({})
+  const [overpaidReasonInputs, setOverpaidReasonInputs] = useState<Record<number, string>>({})
+  const [applyError, setApplyError] = useState<Record<number, string>>({})
 
   useEffect(() => {
     getMonthsForEnrollment(enrollmentId)
@@ -1513,7 +1516,7 @@ function InlineBillingPanel({ enrollmentId }: { enrollmentId: number }) {
 
   function handleApply(id: number) {
     const dbRow = months?.find((m) => m.id === id)
-    const newStatus = (pendingStatus[id] ?? dbRow?.status ?? "outstanding") as "outstanding" | "paid" | "partial"
+    const newStatus = (pendingStatus[id] ?? dbRow?.status ?? "outstanding") as "outstanding" | "paid" | "partial" | "overpaid"
     const discountPct = discountInputs[id] !== undefined
       ? Math.min(100, Math.max(0, parseInt(discountInputs[id]) || 0))
       : (dbRow?.discountPct ?? 0)
@@ -1524,11 +1527,29 @@ function InlineBillingPanel({ enrollmentId }: { enrollmentId: number }) {
       ? parseFloat(partialInputs[id]) || 0
       : (dbRow?.paidCents != null ? dbRow.paidCents / 100 : 0)
     const paidCents = newStatus === "partial" ? Math.round(partialRaw * 100) : undefined
+    const overpaidRaw = overpaidInputs[id] !== undefined
+      ? parseFloat(overpaidInputs[id]) || 0
+      : (dbRow?.overpaidCents != null ? dbRow.overpaidCents / 100 : 0)
+    const overpaidCents = newStatus === "overpaid" ? Math.round(overpaidRaw * 100) : undefined
+    const overpaidReason = newStatus === "overpaid"
+      ? (overpaidReasonInputs[id] !== undefined ? overpaidReasonInputs[id] : (dbRow?.overpaidReason ?? "")).trim()
+      : undefined
+    if (newStatus === "overpaid" && (!overpaidCents || overpaidCents <= 0)) {
+      setApplyError((e) => ({ ...e, [id]: "Enter the extra amount overpaid." }))
+      return
+    }
+    if (newStatus === "overpaid" && !overpaidReason) {
+      setApplyError((e) => ({ ...e, [id]: "Add a reason for the overpayment." }))
+      return
+    }
+    setApplyError((e) => { const n = { ...e }; delete n[id]; return n })
     setUpdating(id)
     startTransition(async () => {
-      const res = await updateMonthStatus(id, newStatus, { discountPct, discountReason, paidCents })
+      const res = await updateMonthStatus(id, newStatus, { discountPct, discountReason, paidCents, overpaidCents, overpaidReason })
       setUpdating(null)
       if (res.ok) {
+        setOverpaidInputs((p) => { const n = { ...p }; delete n[id]; return n })
+        setOverpaidReasonInputs((p) => { const n = { ...p }; delete n[id]; return n })
         setPendingStatus((p) => { const n = { ...p }; delete n[id]; return n })
         setDiscountInputs((p) => { const n = { ...p }; delete n[id]; return n })
         setDiscountReasons((p) => { const n = { ...p }; delete n[id]; return n })
@@ -1537,7 +1558,7 @@ function InlineBillingPanel({ enrollmentId }: { enrollmentId: number }) {
           prev
             ? prev.map((m) =>
                 m.id === id
-                  ? { ...m, status: newStatus, discountPct, discountReason: discountReason ?? null, paidCents: paidCents ?? null, paidAt: newStatus === "paid" ? new Date() : null }
+                  ? { ...m, status: newStatus, discountPct, discountReason: discountReason ?? null, paidCents: paidCents ?? null, overpaidCents: overpaidCents ?? null, overpaidReason: overpaidReason ?? null, paidAt: newStatus === "paid" || newStatus === "overpaid" ? new Date() : null }
                   : m,
               )
             : prev,
@@ -1575,14 +1596,19 @@ function InlineBillingPanel({ enrollmentId }: { enrollmentId: number }) {
               (pendingStatus[m.id] !== undefined && pendingStatus[m.id] !== m.status) ||
               discountInputs[m.id] !== undefined ||
               discountReasons[m.id] !== undefined ||
-              partialInputs[m.id] !== undefined
+              partialInputs[m.id] !== undefined ||
+              overpaidInputs[m.id] !== undefined ||
+              overpaidReasonInputs[m.id] !== undefined
+            const overpaidVal = overpaidInputs[m.id] ?? (m.overpaidCents != null ? String((m.overpaidCents / 100).toFixed(2)) : "")
+            const overpaidReasonVal = overpaidReasonInputs[m.id] ?? (m.overpaidReason ?? "")
 
             return (
               <div
                 key={m.id}
                 className={`rounded-lg border p-2.5 transition-colors ${
                   displayStatus === "paid" ? "border-lime/40 bg-lime/5" :
-                  displayStatus === "partial" ? "border-orange-200 bg-orange-50" :
+                  displayStatus === "overpaid" ? "border-navy/40 bg-navy/5" :
+                  displayStatus === "partial" ? "border-lime/50 bg-lime/10" :
                   "border-amber-200 bg-amber-50"
                 }`}
               >
@@ -1599,7 +1625,8 @@ function InlineBillingPanel({ enrollmentId }: { enrollmentId: number }) {
                 <div className="mt-1">
                   <span className={`inline-block rounded-full px-1.5 py-0.5 text-[9px] font-semibold capitalize ${
                     displayStatus === "paid" ? "bg-lime/20 text-navy" :
-                    displayStatus === "partial" ? "bg-orange-100 text-orange-800" :
+                    displayStatus === "partial" ? "bg-lime/10 text-navy ring-1 ring-lime/50" :
+                    displayStatus === "overpaid" ? "bg-navy text-white" :
                     "bg-amber-100 text-amber-800"
                   }`}>
                     {displayStatus}
@@ -1616,6 +1643,7 @@ function InlineBillingPanel({ enrollmentId }: { enrollmentId: number }) {
                   <option value="outstanding">Outstanding</option>
                   <option value="paid">Paid</option>
                   <option value="partial">Partial</option>
+                  <option value="overpaid">Overpaid</option>
                 </select>
 
                 {/* Discount % */}
@@ -1650,10 +1678,45 @@ function InlineBillingPanel({ enrollmentId }: { enrollmentId: number }) {
                   </div>
                 )}
 
+                {/* Overpayment — extra amount received above the amount due, with a reason */}
+                {displayStatus === "overpaid" && (
+                  <div className="mt-1.5 space-y-1.5">
+                    <div>
+                      <label className="block text-[9px] font-semibold uppercase tracking-wide text-navy mb-0.5">
+                        Extra paid (R)
+                      </label>
+                      <input
+                        type="number"
+                        min={0}
+                        step={0.01}
+                        value={overpaidVal}
+                        onChange={(e) => setOverpaidInputs((p) => ({ ...p, [m.id]: e.target.value }))}
+                        placeholder="0.00"
+                        className="w-full rounded border border-navy/30 bg-background px-1.5 py-0.5 text-[10px] focus:outline-none focus:ring-1 focus:ring-navy/40"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[9px] font-semibold uppercase tracking-wide text-navy mb-0.5">
+                        Reason
+                      </label>
+                      <input
+                        type="text"
+                        value={overpaidReasonVal}
+                        onChange={(e) => setOverpaidReasonInputs((p) => ({ ...p, [m.id]: e.target.value }))}
+                        placeholder="e.g. Paid R1000 instead of R600"
+                        className="w-full rounded border border-navy/30 bg-background px-1.5 py-0.5 text-[10px] focus:outline-none focus:ring-1 focus:ring-navy/40"
+                      />
+                    </div>
+                    {applyError[m.id] && (
+                      <p className="text-[9px] font-semibold text-red-600">{applyError[m.id]}</p>
+                    )}
+                  </div>
+                )}
+
                 {/* Partial amount — shown when draft or saved status is partial */}
                 {displayStatus === "partial" && (
                   <div className="mt-1.5">
-                    <label className="block text-[9px] font-semibold uppercase tracking-wide text-orange-700 mb-0.5">
+                    <label className="block text-[9px] font-semibold uppercase tracking-wide text-navy mb-0.5">
                       Paid (R)
                     </label>
                     <input
@@ -1663,7 +1726,7 @@ function InlineBillingPanel({ enrollmentId }: { enrollmentId: number }) {
                       value={partialVal}
                       onChange={(e) => setPartialInputs((p) => ({ ...p, [m.id]: e.target.value }))}
                       placeholder="0.00"
-                      className="w-full rounded border border-orange-200 bg-background px-1.5 py-0.5 text-[10px] focus:outline-none focus:ring-1 focus:ring-orange-300"
+                      className="w-full rounded border border-lime/50 bg-background px-1.5 py-0.5 text-[10px] focus:outline-none focus:ring-1 focus:ring-lime"
                     />
                     {remainingCents > 0 && (
                       <p className="mt-0.5 text-[9px] font-semibold text-amber-700">

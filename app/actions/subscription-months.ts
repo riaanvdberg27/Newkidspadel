@@ -28,6 +28,9 @@ export type SubscriptionMonthRow = {
   discountRandCents: number
   discountReason: string | null
   paidCents: number | null
+  /** Extra amount received above the amount due (only when status === "overpaid"). */
+  overpaidCents: number | null
+  overpaidReason: string | null
   paymentReference: string | null
   notes: string | null
   paidAt: Date | null
@@ -328,6 +331,8 @@ export async function getBillingLedger(year = currentBillingYear()): Promise<Bil
       discountRandCents: subscriptionMonths.discountRandCents,
       discountReason: subscriptionMonths.discountReason,
       paidCents: subscriptionMonths.paidCents,
+      overpaidCents: subscriptionMonths.overpaidCents,
+      overpaidReason: subscriptionMonths.overpaidReason,
       paymentReference: subscriptionMonths.paymentReference,
       notes: subscriptionMonths.notes,
       paidAt: subscriptionMonths.paidAt,
@@ -480,7 +485,10 @@ export type RevenueMonthSummary = {
   year: number
   month: number
   label: string
+  /** Total collected, including any overpayments. */
   paidCents: number
+  /** Portion of paidCents that was received above the amount due. */
+  overpaidCents: number
   outstandingCents: number
   waivedCents: number
   totalCents: number
@@ -504,6 +512,7 @@ export async function getRevenueReport(year = currentBillingYear()): Promise<Rev
       discountPct: subscriptionMonths.discountPct,
       discountRandCents: subscriptionMonths.discountRandCents,
       paidCents: subscriptionMonths.paidCents,
+      overpaidCents: subscriptionMonths.overpaidCents,
     })
     .from(subscriptionMonths)
     .innerJoin(enrollments, eq(subscriptionMonths.enrollmentId, enrollments.id))
@@ -526,6 +535,7 @@ export async function getRevenueReport(year = currentBillingYear()): Promise<Rev
       month: m,
       label: formatMonth(year, m),
       paidCents: 0,
+      overpaidCents: 0,
       outstandingCents: 0,
       waivedCents: 0,
       totalCents: 0,
@@ -542,6 +552,12 @@ export async function getRevenueReport(year = currentBillingYear()): Promise<Rev
     summary.totalCents += discountedCents
     if (row.status === "paid") {
       summary.paidCents += discountedCents
+      summary.paidCount++
+    } else if (row.status === "overpaid") {
+      // Overpaid: the full amount due plus the extra received counts as collected
+      const extra = row.overpaidCents ?? 0
+      summary.paidCents += discountedCents + extra
+      summary.overpaidCents += extra
       summary.paidCount++
     } else if (row.status === "outstanding") {
       summary.outstandingCents += discountedCents
@@ -566,7 +582,7 @@ export async function getRevenueReport(year = currentBillingYear()): Promise<Rev
 
 export async function updateMonthStatus(
   id: number,
-  status: "outstanding" | "paid" | "partial",
+  status: "outstanding" | "paid" | "partial" | "overpaid",
   opts?: {
     paymentReference?: string
     notes?: string
@@ -574,10 +590,21 @@ export async function updateMonthStatus(
     discountRandCents?: number
     discountReason?: string
     paidCents?: number
+    overpaidCents?: number
+    overpaidReason?: string
   },
 ): Promise<{ ok: boolean; error?: string }> {
   try {
     await requireAdmin()
+
+    if (status === "overpaid") {
+      if (!opts?.overpaidCents || opts.overpaidCents <= 0) {
+        return { ok: false, error: "Enter the extra amount that was overpaid." }
+      }
+      if (!opts.overpaidReason?.trim()) {
+        return { ok: false, error: "Please give a reason for the overpayment." }
+      }
+    }
 
     const [existingRow] = await db
       .select()
@@ -589,7 +616,7 @@ export async function updateMonthStatus(
     // pulls its discount onto the billing rows.
     let current = existingRow
     let redeemed = false
-    if (status === "paid" && existingRow) {
+    if ((status === "paid" || status === "overpaid") && existingRow) {
       redeemed = await redeemPendingVoucherForEnrollment(existingRow.enrollmentId)
       if (redeemed) {
         const [fresh] = await db.select().from(subscriptionMonths).where(eq(subscriptionMonths.id, id)).limit(1)
@@ -607,7 +634,9 @@ export async function updateMonthStatus(
       .update(subscriptionMonths)
       .set({
         status,
-        paidAt: status === "paid" ? new Date() : null,
+        paidAt: status === "paid" || status === "overpaid" ? new Date() : null,
+        overpaidCents: status === "overpaid" ? (opts?.overpaidCents ?? null) : null,
+        overpaidReason: status === "overpaid" ? (opts?.overpaidReason?.trim() ?? null) : null,
         discountPct: useStoredDiscount ? (current?.discountPct ?? 0) : (opts?.discountPct ?? 0),
         discountRandCents: useStoredDiscount
           ? (current?.discountRandCents ?? 0)
