@@ -233,6 +233,7 @@ function LedgerView({
   const [discountRandInputs, setDiscountRandInputs] = useState<Record<number, string>>({})
   const [discountReasons, setDiscountReasons] = useState<Record<number, string>>({})
   const [partialInputs, setPartialInputs] = useState<Record<number, string>>({})
+  const [partialReasonInputs, setPartialReasonInputs] = useState<Record<number, string>>({})
   const [overpaidInputs, setOverpaidInputs] = useState<Record<number, string>>({})
   const [overpaidReasonInputs, setOverpaidReasonInputs] = useState<Record<number, string>>({})
   const [applyError, setApplyError] = useState<Record<number, string>>({})
@@ -318,6 +319,9 @@ function LedgerView({
       ? parseFloat(partialInputs[rowId]) || 0
       : (dbRow?.paidCents != null ? dbRow.paidCents / 100 : 0)
     const paidCents = newStatus === "partial" ? Math.round(partialRaw * 100) : undefined
+    const partialReason = newStatus === "partial"
+      ? (partialReasonInputs[rowId] !== undefined ? partialReasonInputs[rowId] : (dbRow?.partialReason ?? "")).trim()
+      : undefined
     const overpaidRaw = overpaidInputs[rowId] !== undefined
       ? parseFloat(overpaidInputs[rowId]) || 0
       : (dbRow?.overpaidCents != null ? dbRow.overpaidCents / 100 : 0)
@@ -326,6 +330,14 @@ function LedgerView({
       ? (overpaidReasonInputs[rowId] !== undefined ? overpaidReasonInputs[rowId] : (dbRow?.overpaidReason ?? "")).trim()
       : undefined
 
+    if (newStatus === "partial" && (!paidCents || paidCents <= 0)) {
+      setApplyError((e) => ({ ...e, [rowId]: "Enter the adjusted amount for this month." }))
+      return
+    }
+    if (newStatus === "partial" && !partialReason) {
+      setApplyError((e) => ({ ...e, [rowId]: "Add a reason for the partial amount." }))
+      return
+    }
     if (newStatus === "overpaid" && (!overpaidCents || overpaidCents <= 0)) {
       setApplyError((e) => ({ ...e, [rowId]: "Enter the extra amount overpaid." }))
       return
@@ -343,11 +355,16 @@ function LedgerView({
         discountRandCents,
         discountReason,
         paidCents,
+        partialReason,
         overpaidCents,
         overpaidReason,
       })
       setUpdating(null)
+      if (!res.ok && res.error) {
+        setApplyError((e) => ({ ...e, [rowId]: res.error! }))
+      }
       if (res.ok) {
+        setPartialReasonInputs((p) => { const n = { ...p }; delete n[rowId]; return n })
         setOverpaidInputs((p) => { const n = { ...p }; delete n[rowId]; return n })
         setOverpaidReasonInputs((p) => { const n = { ...p }; delete n[rowId]; return n })
         // Clear draft state — now committed to DB
@@ -359,7 +376,7 @@ function LedgerView({
         onLedgerChange(
           ledger.map((r) =>
             r.id === rowId
-              ? { ...r, status: newStatus, discountPct, discountRandCents, discountReason: discountReason ?? null, paidCents: paidCents ?? null, overpaidCents: overpaidCents ?? null, overpaidReason: overpaidReason ?? null, paidAt: newStatus === "paid" || newStatus === "overpaid" ? new Date() : null }
+              ? { ...r, status: newStatus, discountPct, discountRandCents, discountReason: discountReason ?? null, paidCents: paidCents ?? null, partialReason: partialReason ?? null, overpaidCents: overpaidCents ?? null, overpaidReason: overpaidReason ?? null, paidAt: newStatus === "paid" || newStatus === "overpaid" ? new Date() : null }
               : r,
           ),
         )
@@ -416,19 +433,17 @@ function LedgerView({
       <div className="grid grid-cols-3 gap-3">
         {(() => {
           const total = ledger.length
-          const isSettled = (r: BillingLedgerEntry) => r.status === "paid" || r.status === "overpaid"
+          const isSettled = (r: BillingLedgerEntry) =>
+            r.status === "paid" || r.status === "overpaid" || r.status === "partial"
           const paid = ledger.filter(isSettled).length
-          const outstanding = ledger.filter((r) => r.status === "outstanding" || r.status === "partial").length
+          const outstanding = ledger.filter((r) => r.status === "outstanding").length
           const effCents = (r: BillingLedgerEntry) =>
             Math.max(0, Math.round(r.amountCents * (1 - (r.discountPct ?? 0) / 100)) - (r.discountRandCents ?? 0))
-          const paidR = ledger
-            .filter(isSettled)
-            .reduce((s, r) => s + effCents(r) + (r.status === "overpaid" ? (r.overpaidCents ?? 0) : 0), 0)
-          const outR = ledger.reduce((s, r) => {
-            if (r.status === "outstanding") return s + effCents(r)
-            if (r.status === "partial") return s + Math.max(0, effCents(r) - (r.paidCents ?? 0))
-            return s
-          }, 0)
+          // Partial months are settled at their adjusted amount, with no balance left.
+          const settledCents = (r: BillingLedgerEntry) =>
+            r.status === "partial" ? (r.paidCents ?? 0) : effCents(r) + (r.status === "overpaid" ? (r.overpaidCents ?? 0) : 0)
+          const paidR = ledger.filter(isSettled).reduce((s, r) => s + settledCents(r), 0)
+          const outR = ledger.reduce((s, r) => (r.status === "outstanding" ? s + effCents(r) : s), 0)
           return (
             <>
               <StatCard label="Paid" value={`${paid} / ${total}`} sub={ZAR(paidR)} color="text-lime" />
@@ -442,7 +457,7 @@ function LedgerView({
       {/* Enrollment cards */}
       {filtered.map((group) => {
         const isExpanded = expandedId === group.enrollmentId
-        const paidCount = group.months.filter((m) => m.status === "paid" || m.status === "overpaid").length
+        const paidCount = group.months.filter((m) => m.status === "paid" || m.status === "overpaid" || m.status === "partial").length
         const totalCount = group.months.length
         const allPaid = paidCount === totalCount && totalCount > 0
         const hasOutstanding = group.months.some((m) => m.status === "outstanding")
@@ -482,7 +497,7 @@ function LedgerView({
                         m.status === "paid" ? "bg-lime" :
                         m.status === "overpaid" ? "bg-navy" :
                         m.status === "outstanding" ? "bg-amber-400" :
-                        m.status === "partial" ? "bg-lime/40 ring-1 ring-lime" :
+                        m.status === "partial" ? "bg-lime" :
                         "bg-muted"
                       }`}
                     />
@@ -511,8 +526,10 @@ function LedgerView({
                     const effectiveCents = Math.max(0, Math.round(m.amountCents * (1 - discountNum / 100)) - Math.round(discountRandNum * 100))
                     const partialVal = partialInputs[m.id] ?? (m.paidCents != null ? String((m.paidCents / 100).toFixed(2)) : "")
                     const partialPaid = parseFloat(partialVal) || 0
-                    const remainingCents = Math.max(0, effectiveCents - Math.round(partialPaid * 100))
+                    const partialAmountCents = Math.round(partialPaid * 100)
+                    const partialReasonVal = partialReasonInputs[m.id] ?? (m.partialReason ?? "")
                     const hasDraft =
+                      partialReasonInputs[m.id] !== undefined ||
                       (pendingStatus[m.id] !== undefined && pendingStatus[m.id] !== m.status) ||
                       discountInputs[m.id] !== undefined ||
                       discountRandInputs[m.id] !== undefined ||
@@ -536,7 +553,12 @@ function LedgerView({
                           {flashState === "err" && <X className="h-3.5 w-3.5 text-red-500" />}
                         </div>
                         <p className="text-[10px] text-muted-foreground">
-                          {discountNum > 0 || discountRandNum > 0 ? (
+                          {displayStatus === "partial" ? (
+                            <>
+                              <span className="line-through">{ZAR(m.amountCents)}</span>{" "}
+                              <span className="font-semibold text-navy">{ZAR(partialAmountCents)}</span>
+                            </>
+                          ) : discountNum > 0 || discountRandNum > 0 ? (
                             <>
                               <span className="line-through">{ZAR(m.amountCents)}</span>{" "}
                               <span className="font-semibold text-navy">{ZAR(effectiveCents)}</span>
@@ -650,25 +672,40 @@ function LedgerView({
                           </div>
                         )}
 
-                        {/* Partial amount — shown when draft or saved status is partial */}
+                        {/* Partial — adjusted amount replaces the month's full amount; no balance remains */}
                         {displayStatus === "partial" && (
-                          <div className="mt-1.5">
-                            <label className="block text-[9px] font-semibold uppercase tracking-wide text-navy mb-0.5">
-                              Paid (R)
-                            </label>
-                            <input
-                              type="number"
-                              min={0}
-                              step={0.01}
-                              value={partialVal}
-                              onChange={(e) => setPartialInputs((p) => ({ ...p, [m.id]: e.target.value }))}
-                              placeholder="0.00"
-                              className="w-full rounded border border-lime/50 bg-background px-1.5 py-0.5 text-[10px] focus:outline-none focus:ring-1 focus:ring-lime"
-                            />
-                            {remainingCents > 0 && (
-                              <p className="mt-0.5 text-[9px] font-semibold text-amber-700">
-                                Balance: {ZAR(remainingCents)}
+                          <div className="mt-1.5 space-y-1.5">
+                            <div>
+                              <label className="block text-[9px] font-semibold uppercase tracking-wide text-navy mb-0.5">
+                                Amount for month (R)
+                              </label>
+                              <input
+                                type="number"
+                                min={0}
+                                step={0.01}
+                                value={partialVal}
+                                onChange={(e) => setPartialInputs((p) => ({ ...p, [m.id]: e.target.value }))}
+                                placeholder="0.00"
+                                className="w-full rounded border border-lime/50 bg-background px-1.5 py-0.5 text-[10px] focus:outline-none focus:ring-1 focus:ring-lime"
+                              />
+                              <p className="mt-0.5 text-[9px] text-muted-foreground">
+                                Replaces {ZAR(m.amountCents)} — no balance carried
                               </p>
+                            </div>
+                            <div>
+                              <label className="block text-[9px] font-semibold uppercase tracking-wide text-navy mb-0.5">
+                                Reason
+                              </label>
+                              <input
+                                type="text"
+                                value={partialReasonVal}
+                                onChange={(e) => setPartialReasonInputs((p) => ({ ...p, [m.id]: e.target.value }))}
+                                placeholder="e.g. Started mid-month"
+                                className="w-full rounded border border-lime/50 bg-background px-1.5 py-0.5 text-[10px] focus:outline-none focus:ring-1 focus:ring-lime"
+                              />
+                            </div>
+                            {applyError[m.id] && (
+                              <p className="text-[9px] font-semibold text-red-600">{applyError[m.id]}</p>
                             )}
                           </div>
                         )}
@@ -811,14 +848,9 @@ function OutstandingView({
               {entry.outstandingMonths.map((m) => (
                 <span
                   key={m.id}
-                  className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                    m.status === "partial"
-                      ? "bg-orange-100 text-orange-800"
-                      : "bg-amber-100 text-amber-800"
-                  }`}
+                  className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800"
                 >
-                  {m.label}
-                  {m.status === "partial" ? ` — balance ${ZAR(m.remainingCents)}` : ` — ${ZAR(m.remainingCents)}`}
+                  {m.label} — {ZAR(m.remainingCents)}
                 </span>
               ))}
             </div>

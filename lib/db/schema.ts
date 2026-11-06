@@ -679,8 +679,11 @@ export const subscriptionMonths = pgTable(
     discountRandCents: integer("discountRandCents").notNull().default(0),
     // Human-readable reason for the discount, e.g. "Sibling discount", "Bursary"
     discountReason: text("discountReason"),
-    // For partial payments: amount actually received in cents
+    // For 'partial' months: the adjusted amount due for the month in cents
+  // (e.g. child joined mid-month). It replaces the full amount — no balance remains.
   paidCents: integer("paidCents"),
+  // Why the month was adjusted, e.g. "Started mid-month"
+  partialReason: text("partialReason"),
   // For overpayments (status 'overpaid'): extra amount received above what was due, in cents
   overpaidCents: integer("overpaidCents"),
   // Why the client overpaid, e.g. "Paid ahead", "Rounded up", "Credit for next month"
